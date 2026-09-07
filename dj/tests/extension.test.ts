@@ -8,12 +8,20 @@ import dj from "../index.ts";
 import { DEFAULTS, type Playback, type Settings } from "../src/types.ts";
 
 const cleanups: (() => void)[] = [];
-afterEach(() => { for (const cleanup of cleanups.splice(0)) cleanup(); });
-const playing: Playback = { status: "playing", sampledAt: Date.now(), track: { artists: "Artist", name: "Track", progressMs: 1000, durationMs: 90000 } };
+afterEach(() => {
+  for (const cleanup of cleanups.splice(0)) cleanup();
+});
+const playing: Playback = {
+  status: "playing",
+  sampledAt: Date.now(),
+  track: { artists: "Artist", name: "Track", progressMs: 1000, durationMs: 90000 },
+};
 
 function harness(poll: (signal: AbortSignal) => Promise<Playback> = async () => playing) {
   const events = new Map<string, Function>();
-  const widgets = new Map<string, { render(width: number): string[] }>([["powerline-last-prompt", { render: () => ["untouched"] }]]);
+  const widgets = new Map<string, { render(width: number): string[] }>([
+    ["powerline-last-prompt", { render: () => ["untouched"] }],
+  ]);
   const placements: string[] = [];
   const messages: string[] = [];
   let registered: any;
@@ -22,9 +30,12 @@ function harness(poll: (signal: AbortSignal) => Promise<Playback> = async () => 
   let polls = 0;
   let lastSignal: AbortSignal | undefined;
   const ctx = {
-    mode: "tui", hasUI: true,
+    mode: "tui",
+    hasUI: true,
     ui: {
-      notify(message: string) { messages.push(message); },
+      notify(message: string) {
+        messages.push(message);
+      },
       setWidget(id: string, factory: any, options?: { placement: string }) {
         expect(id).toBe("dj");
         if (factory) {
@@ -36,28 +47,55 @@ function harness(poll: (signal: AbortSignal) => Promise<Playback> = async () => 
       input: async () => undefined,
     },
   };
-  dj({
-    on(name: string, handler: Function) { events.set(name, handler); },
-    registerCommand(name: string, command: unknown) { expect(name).toBe("dj"); registered = command; },
-  } as never, {
-    initialize: async () => { initialized++; },
-    readSettings: () => prefs,
-    updateSettings: async (patch: Partial<Settings>) => (prefs = { ...prefs, ...patch }),
-    getClientId: () => undefined,
-  } as never, {
-    poll: async (signal: AbortSignal) => { polls++; lastSignal = signal; return poll(signal); },
-    authorize: async () => {},
-  } as never);
+  dj(
+    {
+      on(name: string, handler: Function) {
+        events.set(name, handler);
+      },
+      registerCommand(name: string, command: unknown) {
+        expect(name).toBe("dj");
+        registered = command;
+      },
+    } as never,
+    {
+      initialize: async () => {
+        initialized++;
+      },
+      readSettings: () => prefs,
+      updateSettings: async (patch: Partial<Settings>) => (prefs = { ...prefs, ...patch }),
+      getClientId: () => undefined,
+    } as never,
+    {
+      poll: async (signal: AbortSignal) => {
+        polls++;
+        lastSignal = signal;
+        return poll(signal);
+      },
+      authorize: async () => {},
+    } as never,
+  );
   cleanups.push(() => events.get("session_shutdown")!({}, ctx));
   return {
-    ctx, events, widgets, placements, messages,
+    ctx,
+    events,
+    widgets,
+    placements,
+    messages,
     command: (args: string) => registered.handler(args, ctx),
     completions: (prefix: string) => registered.getArgumentCompletions(prefix),
     start: () => events.get("session_start")!({}, ctx),
-    get prefs() { return prefs; },
-    get initialized() { return initialized; },
-    get polls() { return polls; },
-    get signal() { return lastSignal; },
+    get prefs() {
+      return prefs;
+    },
+    get initialized() {
+      return initialized;
+    },
+    get polls() {
+      return polls;
+    },
+    get signal() {
+      return lastSignal;
+    },
   };
 }
 
@@ -87,7 +125,12 @@ test("DJ owns only its widget; commands match powerline toggles without remounti
 
 test("a late Spotify result after shutdown never resurrects the widget", async () => {
   let finish!: (value: Playback) => void;
-  const app = harness(() => new Promise((resolve) => { finish = resolve; }));
+  const app = harness(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
   await app.start();
   app.events.get("session_shutdown")!({}, app.ctx);
   finish(playing);
@@ -113,9 +156,14 @@ test("Pi discovers and loads the standalone DJ package without initializing Spot
   const directory = mkdtempSync(join(tmpdir(), "dj-loader-"));
   cleanups.push(() => rmSync(directory, { recursive: true, force: true }));
   const loader = new DefaultResourceLoader({
-    cwd: directory, agentDir: directory,
-    noSkills: true, noPromptTemplates: true, noThemes: true,
-    settingsManager: SettingsManager.inMemory({ packages: [fileURLToPath(new URL("../", import.meta.url))] }),
+    cwd: directory,
+    agentDir: directory,
+    noSkills: true,
+    noPromptTemplates: true,
+    noThemes: true,
+    settingsManager: SettingsManager.inMemory({
+      packages: [fileURLToPath(new URL("../", import.meta.url))],
+    }),
   });
   await loader.reload();
   const result = loader.getExtensions();
@@ -126,7 +174,11 @@ test("Pi discovers and loads the standalone DJ package without initializing Spot
 
 test("commands are discoverable and invalid input doesn't alter preferences", async () => {
   const app = harness();
-  expect(app.completions("placement ").map((item: any) => item.value)).toEqual(["placement above", "placement below", "placement toggle"]);
+  expect(app.completions("placement ").map((item: any) => item.value)).toEqual([
+    "placement above",
+    "placement below",
+    "placement toggle",
+  ]);
   await app.command("nonsense");
   expect(app.prefs).toEqual(DEFAULTS);
   expect(app.messages.at(-1)).toContain("Usage:");
