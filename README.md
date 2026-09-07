@@ -7,6 +7,14 @@ Each extension lives in its own top-level folder, with its own manifest, documen
 | [inline-skills](inline-skills/) | Complete and apply skills anywhere in a prompt |
 | [dj](dj/) | Spotify now playing, with layout presets and pastel themes |
 
+## npm installation
+
+Install DJ on its own:
+
+```sh
+pi install npm:@0xaban/pi-dj
+```
+
 ## Local installation
 
 ```sh

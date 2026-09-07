@@ -1,13 +1,23 @@
 {
-  "name": "pi-dj",
+  "name": "@0xaban/pi-dj",
   "version": "0.1.0",
-  "private": true,
+  "publishConfig": { "access": "public" },
   "license": "Apache-2.0",
   "type": "module",
   "description": "Spotify now playing for Pi, with pastel themes and configurable layouts.",
   "keywords": ["pi-package"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xABAN/pi-extensions.git",
+    "directory": "dj"
+  },
+  "homepage": "https://github.com/0xABAN/pi-extensions/tree/main/dj",
+  "bugs": "https://github.com/0xABAN/pi-extensions/issues",
   "files": ["index.ts", "src", "README.md", "LICENSE"],
-  "pi": { "extensions": ["./index.ts"] },
+  "pi": {
+    "extensions": ["./index.ts"],
+    "image": "https://raw.githubusercontent.com/0xABAN/pi-extensions/main/dj/assets/full.png"
+  },
   "dependencies": { "proper-lockfile": "4.1.2" },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

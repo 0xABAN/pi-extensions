@@ -2,7 +2,7 @@
 
 Spotify now playing for [Pi](https://github.com/earendil-works/pi), with pastel colors and live previews.
 
-![DJ demo](assets/demo.gif)
+![DJ demo](https://raw.githubusercontent.com/0xABAN/pi-extensions/main/dj/assets/demo.gif)
 *Spotify while you work.*
 
 - `/dj`: toggle
@@ -13,20 +13,18 @@ Spotify now playing for [Pi](https://github.com/earendil-works/pi), with pastel 
 
 <table>
   <tr>
-    <td colspan="2"><img src="assets/full.png" width="800" alt="Full layout showing a paused Radiohead track and elapsed time"/><br/><em>Full layout, paused.</em></td>
+    <td colspan="2"><img src="https://raw.githubusercontent.com/0xABAN/pi-extensions/main/dj/assets/full.png" width="800" alt="Full layout showing a paused Radiohead track and elapsed time"/><br/><em>Full layout, paused.</em></td>
   </tr>
   <tr>
-    <td><img src="assets/minimal.png" width="400" alt="Minimal layout showing only the track title below the editor"/><br/><em>Minimal: title only.</em></td>
-    <td><img src="assets/above.png" width="400" alt="Spotify artist, title, and elapsed time above the editor"/><br/><em>Above the editor.</em></td>
+    <td><img src="https://raw.githubusercontent.com/0xABAN/pi-extensions/main/dj/assets/minimal.png" width="400" alt="Minimal layout showing only the track title below the editor"/><br/><em>Minimal: title only.</em></td>
+    <td><img src="https://raw.githubusercontent.com/0xABAN/pi-extensions/main/dj/assets/above.png" width="400" alt="Spotify artist, title, and elapsed time above the editor"/><br/><em>Above the editor.</em></td>
   </tr>
 </table>
 
 ## Install
 
 ```sh
-git clone https://github.com/0xABAN/pi-extensions.git
-cd pi-extensions && bun install --ignore-scripts
-pi install ./dj
+pi install npm:@0xaban/pi-dj
 ```
 
 Install DJ individually or through the collection, not both. Run `/reload`.
@@ -39,6 +37,6 @@ DJ stores preferences and credentials in `~/.pi/agent/dj/` and imports legacy Ag
 
 For **powerline → DJ → last prompt** ordering, apply the optional [powerline patch](https://github.com/0xABAN/configs/blob/main/pi/agent/patches/powerline-dj.py). Reapply after powerline updates, then `/reload`.
 
-Development: `bun test ./dj` and `bun run typecheck` from the repository root.
+Local development: clone this repo, run `bun install --ignore-scripts`, then `pi install ./dj`. Check with `bun test ./dj` and `bun run typecheck`.
 
 Based on [Agent DJ](https://github.com/AdamPSU/agent-dj) · [Apache-2.0](LICENSE)
