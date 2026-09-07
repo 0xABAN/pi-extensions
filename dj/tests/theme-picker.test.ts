@@ -40,7 +40,7 @@ function ui(steps: Step[]) {
     });
     const dialog = (await factory(
       { requestRender() {} } as TUI,
-      { fg: (_color: string, value: string) => value } as PiTheme,
+      { fg: (_color: string, value: string) => `\x1b[38;2;255;255;255m${value}\x1b[0m` } as PiTheme,
       {} as Parameters<typeof factory>[2],
       close,
     )) as Dialog;
@@ -49,6 +49,16 @@ function ui(steps: Step[]) {
       for (const width of [0, 1, 2, 4, 20, 64]) {
         for (const line of dialog.render(width))
           expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+      }
+      const framed = dialog.render(64);
+      expect(stripVTControlCharacters(framed[0])).toBe("╭" + "─".repeat(62) + "╮");
+      expect(stripVTControlCharacters(framed.at(-1)!)).toBe("╰" + "─".repeat(62) + "╯");
+      for (const line of framed) {
+        expect(visibleWidth(line)).toBe(64);
+        expect(line).toStartWith("\x1b[48;2;0;0;0m");
+        expect(line).toEndWith("\x1b[49m");
+        expect(line).toContain("\x1b[38;2;255;255;255m");
+        expect(line).not.toMatch(/\x1b\[0m(?!\x1b\[48;2;0;0;0m)/);
       }
       const step = steps[count++];
       if (!step) throw new Error(`Unexpected dialog: ${text(dialog)}`);
@@ -131,6 +141,9 @@ test("custom solid prefills saved values, retains invalid input and saves normal
     (dialog) => {
       expect(text(dialog)).toContain("#AABBCC");
       expect(dialog.focused).toBe(true);
+      const cursorLine = dialog.render(64).find((line) => line.includes(CURSOR_MARKER))!;
+      expect(cursorLine).toBeDefined();
+      expect(visibleWidth(cursorLine.split(CURSOR_MARKER)[0])).toBeGreaterThanOrEqual(2);
       // Native Input starts at column zero; Ctrl+E/Ctrl+U replaces the saved value.
       keys("\x05", "\x15", "#nope", enter)(dialog);
       expect(text(dialog)).toContain("#nope");
@@ -199,18 +212,24 @@ test("native list and input honor customized keybindings", async () => {
     "tui.input.submit": "ctrl+t",
   });
   try {
-    const fake = ui([keys("\x0e", "\x19"), keys(up, "\x19"), keys("\x05", "\x15", "#abc", "\x14")]);
+    const fake = ui([
+      keys("\x0e", "\x19"),
+      keys(up, "\x19"),
+      keys("\x05", "\x15", "#abc", "\x14"),
+      keys("\x0e", "\x19"),
+    ]);
     expect(await pickTheme(fake.ctx, DEFAULTS, () => {})).toEqual({
       theme: { mode: "solid", colors: ["#AABBCC"] },
       customSolid: ["#AABBCC"],
     });
+    expect(await pickLayout(fake.ctx, "full")).toBe("minimal");
     fake.verify();
   } finally {
     bindings.setUserBindings(original);
   }
 });
 
-test("preview clears even when a dialog fails, and layout picker uses native selection", async () => {
+test("preview clears even when a dialog fails", async () => {
   const previews: (Theme | undefined)[] = [];
   const fake = ui([
     () => {
@@ -222,14 +241,18 @@ test("preview clears even when a dialog fails, and layout picker uses native sel
   );
   expect(previews.at(-1)).toBeUndefined();
   fake.verify();
-  const ctx = {
-    ui: {
-      select: async (_title: string, options: string[]) => {
-        expect(options[0]).toStartWith("full ✓");
-        expect(options[0]).toContain("1:24 / 3:42");
-        return options[1];
-      },
+});
+
+test("layout uses the same frame and native selection, with the active layout first", async () => {
+  const fake = ui([
+    (dialog) => {
+      expect(text(dialog)).toContain("→ full ✓");
+      expect(text(dialog)).toContain("1:24 / 3:42");
+      keys(down, enter)(dialog);
     },
-  } as unknown as ExtensionCommandContext;
-  expect(await pickLayout(ctx, "full")).toBe("minimal");
+    keys(escape),
+  ]);
+  expect(await pickLayout(fake.ctx, "full")).toBe("minimal");
+  expect(await pickLayout(fake.ctx, "medium")).toBeUndefined();
+  fake.verify();
 });
