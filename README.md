@@ -1,18 +1,20 @@
 # pi-extensions
 
-A monorepo for our Pi extensions. Each extension lives in its own package under `packages/` and can be installed independently.
+A monorepo for our Pi extensions. Each extension has its own top-level folder and can be installed independently.
 
 | Package | Purpose |
 | --- | --- |
-| [inline-skills](packages/inline-skills) | Complete and apply skills anywhere in a prompt |
+| [inline-skills](inline-skills) | Complete and apply skills anywhere in a prompt |
 
 ## Install inline skills
 
 ```sh
-pi install ~/dev/pi-extensions/packages/inline-skills
+pi install ~/dev/pi-extensions/inline-skills
 ```
 
 Run `/reload` in Pi after installation or source changes. Local installs load directly from this checkout.
+
+[configs](https://github.com/0xABAN/configs) references this checkout in its Pi settings; its installer clones it to `~/dev/pi-extensions` when missing. Extension code lives here only. Edit it here, then `/reload`—there is no second copy to synchronize. On another machine, pull both repositories before reloading Pi.
 
 ## Inline skills
 
@@ -35,7 +37,7 @@ Only installed skills are suggested inline. Selected skills are loaded once per 
 
 ### Compatibility
 
-Tested against **Pi 0.84.2**. That version excludes `/` from custom autocomplete trigger characters. `packages/inline-skills/editor.ts` wraps the existing editor's input handler and calls its private `tryTriggerAutocomplete()` method. The rest uses public extension APIs. A Pi update or a custom editor without the required methods may need an adapter update; unsupported editors report an error rather than being silently replaced.
+Tested against **Pi 0.84.2**. That version excludes `/` from custom autocomplete trigger characters. `inline-skills/editor.ts` wraps the existing editor's input handler and calls its private `tryTriggerAutocomplete()` method. The rest uses public extension APIs. A Pi update or a custom editor without the required methods may need an adapter update; unsupported editors report an error rather than being silently replaced.
 
 ## Development
 

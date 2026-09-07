@@ -2,7 +2,7 @@
   "name": "pi-extensions",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": ["inline-skills"],
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"
