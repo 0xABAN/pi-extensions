@@ -107,7 +107,7 @@ export async function pickTheme(
             "",
             ...list.render(inner),
             "",
-            theme.fg("dim", "Choose to continue · Cancel to go back"),
+            theme.fg("dim", "Choose to continue · esc to go back"),
           ], width);
         },
         handleInput(data) {
@@ -163,7 +163,7 @@ export async function pickTheme(
             ...input.render(inner),
             theme.fg("error", error),
             sample(inner),
-            theme.fg("dim", "Submit to save · Cancel to go back"),
+            theme.fg("dim", "Submit to save · esc to go back"),
           ], width);
         },
         handleInput(data) {
@@ -284,7 +284,7 @@ export async function pickLayout(
           "",
           ...list.render(Math.max(4, width - 4)),
           "",
-          theme.fg("dim", "Choose to save · Cancel to go back"),
+          theme.fg("dim", "Choose to save · esc to go back"),
         ], width);
       },
       handleInput(data) {
