@@ -227,7 +227,7 @@ export default function dj(
     stop();
   });
   pi.registerCommand("dj", {
-    description: "Toggle Spotify; configure layout, placement, theme, or auth",
+    description: "minimal, medium, full, layout, placement, theme, auth",
     getArgumentCompletions: (prefix) =>
       ARGUMENTS.filter((value) => value.startsWith(prefix.toLowerCase())).map((value) => ({
         value,
