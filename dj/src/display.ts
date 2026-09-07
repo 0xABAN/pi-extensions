@@ -57,6 +57,7 @@ export function renderLine(
   const available = Math.floor(width) - 1;
   const { track, status } = playback;
   let text = status === "auth" ? "♪ Spotify: /dj auth" : `♪ Spotify ${status}`;
+  if (status === "idle") text = "♪ spotify idle";
 
   if (track && (status === "playing" || status === "paused" || status === "offline")) {
     const prefix = status === "playing" ? "♪ " : `♪ ${status} · `;

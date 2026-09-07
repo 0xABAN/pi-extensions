@@ -51,6 +51,12 @@ test("three layouts preserve the original pastel cycle while only full includes 
   );
 });
 
+test("idle preserves the lowercase label", () => {
+  expect(plain(renderLine({ status: "idle", sampledAt: 0 }, solid, 80, 0))).toBe(
+    " ♪ spotify idle",
+  );
+});
+
 test("playing progress interpolates and clamps; paused and stale offline tracks stay frozen", () => {
   expect(plain(renderLine(playback, solid, 80, 11000))).toContain("1:34 / 3:42");
   expect(plain(renderLine(playback, solid, 80, 999999))).toContain("3:42 / 3:42");
