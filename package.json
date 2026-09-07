@@ -2,6 +2,9 @@
   "name": "pi-extensions",
   "private": true,
   "type": "module",
+  "description": "Independently installable Pi extensions.",
+  "keywords": ["pi-package"],
+  "pi": { "extensions": ["inline-skills/index.ts", "dj/index.ts"] },
   "workspaces": ["inline-skills", "dj"],
   "scripts": {
     "test": "bun test",

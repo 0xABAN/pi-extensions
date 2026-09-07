@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["inline-skills/**/*.ts", "dj/**/*.ts"]
+  "include": ["inline-skills/**/*.ts", "dj/**/*.ts", "tests/**/*.ts"]
 }

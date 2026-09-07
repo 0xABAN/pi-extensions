@@ -1,50 +1,48 @@
 # pi-extensions
 
-A monorepo for our Pi extensions. Each extension has its own top-level folder and can be installed independently.
+Each extension lives in its own top-level folder, with its own manifest, documentation, and tests. The root manifest explicitly lists the collection's entry points, following [tmustier/pi-extensions](https://github.com/tmustier/pi-extensions).
 
-| Package | Purpose |
+| Extension | Purpose |
 | --- | --- |
-| [inline-skills](inline-skills) | Complete and apply skills anywhere in a prompt |
+| [inline-skills](inline-skills/) | Complete and apply skills anywhere in a prompt |
+| [dj](dj/) | Spotify now playing, with layout presets and pastel themes |
 
-## Install inline skills
+## Local installation
 
 ```sh
-pi install ~/dev/pi-extensions/inline-skills
+git clone https://github.com/0xABAN/pi-extensions.git ~/dev/pi-extensions
+cd ~/dev/pi-extensions
+bun install --frozen-lockfile --ignore-scripts
+
+# Install just the extensions you want:
+pi install ./inline-skills
+pi install ./dj
 ```
 
-Run `/reload` in Pi after installation or source changes. Local installs load directly from this checkout.
+Alternatively, install the collection with `pi install ~/dev/pi-extensions`. Use individual packages **or** the collection, not both. Helpers and tests aren't extension entry points.
 
-[configs](https://github.com/0xABAN/configs) references this checkout in its Pi settings; its installer clones it to `~/dev/pi-extensions` when missing. Extension code lives here only. Edit it here, then `/reload`—there is no second copy to synchronize. On another machine, pull both repositories before reloading Pi.
+Run `/reload` in Pi after installation or source changes. Local installations load this checkout directly; nothing is copied into Pi's extension directory.
 
-## Inline skills
+## Git installation
 
-Type `/` after whitespace in your prompt to see skill suggestions. Filter with `/sim` or `/skill:sim`, then select a suggestion with Tab or Enter.
-
-```text
-Review this diff using /skill:simplify
-Prepare a PR using /skill:simplify and /skill:writing-pull-requests
+```sh
+pi install https://github.com/0xABAN/pi-extensions
 ```
 
-Only installed skills are suggested inline. Selected skills are loaded once per submitted prompt, with their reference directories, ahead of the complete original prompt. The extension does not run skill scripts itself.
+Pi installs dependencies automatically for Git packages. Use `pi config` to choose which extensions to enable.
 
-- Pi's leading command menu and single leading skill invocation remain unchanged.
-- Multiple references and multiline prompts work, including ordinary streaming queues. Editing and resubmitting expanded queue text does not load the same skill again.
-- Pi 0.84.2 can bypass input hooks for messages buffered during compaction. Wait for compaction to finish before submitting inline skills.
-- References must be standalone whitespace-delimited `/skill:name` tokens. Unknown names, paths, URLs, escaped references, and backtick/tilde literals remain unchanged.
-- Literal detection is lightweight, not a complete Markdown parser.
-- RPC and extension-generated messages are not expanded by this extension.
-- If a skill cannot be read, submission is stopped with an error. The prompt is restored if the editor is empty.
+## Relationship to configs
 
-### Compatibility
+[configs](https://github.com/0xABAN/configs) references the individual packages in `~/dev/pi-extensions`. Its installer provisions that checkout and its dependencies without pulling over local work.
 
-Tested against **Pi 0.84.2**. That version excludes `/` from custom autocomplete trigger characters. `inline-skills/editor.ts` wraps the existing editor's input handler and calls its private `tryTriggerAutocomplete()` method. The rest uses public extension APIs. A Pi update or a custom editor without the required methods may need an adapter update; unsupported editors report an error rather than being silently replaced.
+Extension code lives here only. On another machine, pull both repositories, rerun the configs installer when dependencies or paths change, then `/reload`. Push extension changes before configs changes that reference new paths.
 
 ## Development
 
 ```sh
-bun install --ignore-scripts
+bun install --frozen-lockfile --ignore-scripts
 bun test
 bun run typecheck
 ```
 
-Tests cover completion, skill expansion, input handling, and the real Pi editor. No build step is required: Pi loads TypeScript directly.
+No build step or shared extension framework. Keep implementation helpers inside the package that owns them. Pi loads TypeScript directly.
