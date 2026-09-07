@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +20,7 @@ const playing: Playback = {
 
 function harness(poll: (signal: AbortSignal) => Promise<Playback> = async () => playing) {
   const events = new Map<string, Function>();
+  const bus = new EventEmitter();
   const widgets = new Map<string, { render(width: number): string[] }>([
     ["powerline-last-prompt", { render: () => ["untouched"] }],
   ]);
@@ -38,10 +40,12 @@ function harness(poll: (signal: AbortSignal) => Promise<Playback> = async () => 
       },
       setWidget(id: string, factory: any, options?: { placement: string }) {
         expect(id).toBe("dj");
+        // Pi deletes before setting, so updates move a widget to the end of its group.
+        widgets.delete(id);
         if (factory) {
           placements.push(options!.placement);
           widgets.set(id, factory({ requestRender() {} }));
-        } else widgets.delete(id);
+        }
       },
       select: async () => undefined,
       input: async () => undefined,
@@ -49,6 +53,7 @@ function harness(poll: (signal: AbortSignal) => Promise<Playback> = async () => 
   };
   dj(
     {
+      events: bus,
       on(name: string, handler: Function) {
         events.set(name, handler);
       },
@@ -78,6 +83,7 @@ function harness(poll: (signal: AbortSignal) => Promise<Playback> = async () => 
   return {
     ctx,
     events,
+    bus,
     widgets,
     placements,
     messages,
@@ -121,6 +127,62 @@ test("DJ owns only its widget; commands match powerline toggles without remounti
   expect(app.widgets.has("dj")).toBe(true);
   expect(app.placements.at(-1)).toBe("belowEditor");
   expect(app.widgets.get("powerline-last-prompt")!.render(100)).toEqual(["untouched"]);
+});
+
+test("powerline coordination keeps its own prompt after DJ across rebuilds and toggles", async () => {
+  const app = harness();
+  const prompt = app.widgets.get("powerline-last-prompt")!;
+  let powerlineEnabled = true;
+  const appendPrompt = () => {
+    if (!powerlineEnabled) return;
+    app.widgets.delete("powerline-last-prompt");
+    app.widgets.set("powerline-last-prompt", prompt);
+  };
+  app.bus.on("dj:mounted", appendPrompt);
+  const rebuild = () => {
+    app.widgets.delete("powerline-top");
+    app.widgets.set("powerline-top", { render: () => ["powerline"] });
+    appendPrompt();
+    app.bus.emit("powerline:widgets-installed");
+  };
+  const below = () =>
+    [...app.widgets.keys()].filter((id) => id !== "dj" || app.prefs.placement === "below");
+  const expected = ["powerline-top", "dj", "powerline-last-prompt"];
+
+  // Powerline first, then DJ; the reverse order is exercised by each rebuild.
+  rebuild();
+  await app.start();
+  expect(below()).toEqual(expected);
+  rebuild();
+  expect(below()).toEqual(expected);
+  await app.command("");
+  rebuild();
+  expect(below()).toEqual(["powerline-top", "powerline-last-prompt"]);
+  await app.command("");
+  expect(below()).toEqual(expected);
+
+  await app.command("placement above");
+  const mounts = app.placements.length;
+  rebuild();
+  expect(app.placements).toHaveLength(mounts);
+  expect(below()).toEqual(["powerline-top", "powerline-last-prompt"]);
+  await app.command("placement below");
+  expect(below()).toEqual(expected);
+
+  powerlineEnabled = false;
+  app.widgets.delete("powerline-top");
+  app.widgets.delete("powerline-last-prompt");
+  await app.command("");
+  await app.command("");
+  expect(below()).toEqual(["dj"]);
+  powerlineEnabled = true;
+  rebuild();
+  expect(below()).toEqual(expected);
+  expect(app.widgets.get("powerline-last-prompt")).toBe(prompt);
+
+  app.events.get("session_shutdown")!({}, app.ctx);
+  rebuild();
+  expect(app.widgets.has("dj")).toBe(false);
 });
 
 test("a late Spotify result after shutdown never resurrects the widget", async () => {

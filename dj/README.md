@@ -32,7 +32,7 @@ Run `/reload` in Pi. Install DJ individually **or** through the collection, not 
 | `/dj theme` | Choose Animated or Solid, then colors |
 | `/dj auth` | Connect or reconnect Spotify |
 
-Preferences are saved; changing one doesn't enable a disabled widget. Default placement is below the editor. DJ owns only its own widget and does not change powerline's rows or global shortcuts. Pi controls ordering among neighboring widgets.
+Preferences are saved; changing one doesn't enable a disabled widget. Default placement is below the editor. DJ owns only its own widget: it does not replace powerline's rows or register global shortcuts. Pi controls ordering among neighboring widgets. With the [configs powerline compatibility patch](https://github.com/0xABAN/configs/blob/main/pi/agent/patches/powerline-dj.py), below-editor rows stay **powerline → DJ → last prompt**, including after either extension is toggled. Above-editor placement remains independent.
 
 ### Themes
 
@@ -67,6 +67,15 @@ DJ uses PKCE and the read-only `user-read-playback-state` scope. No client secre
 - Settings, credentials, and cache live in `~/.pi/agent/dj/` (or under `PI_CODING_AGENT_DIR`). Credentials stay out of the repository, Pi's model credentials, and model/chat context.
 
 Don't use the legacy Agent DJ installer to enable Pi again: it can recreate `~/.pi/agent/extensions/agent-dj.ts`, resulting in duplicate `/dj` registration. Existing Claude Code/OpenCode installations are otherwise unaffected.
+
+## Powerline coordination
+
+The optional patch uses Pi's shared event bus, not private UI internals:
+
+- After mounting below the editor, DJ emits `dj:mounted`; powerline re-appends its own last-prompt widget.
+- After rebuilding its rows, powerline emits `powerline:widgets-installed`; an already-mounted, below-editor DJ remounts and emits `dj:mounted` again.
+
+Appending the prompt does not emit a rebuild event, avoiding recursion. Disabled extensions ignore requests. Without the patch/listeners, DJ runs normally with Pi's insertion ordering. Reapply the patch after updating powerline, then `/reload`.
 
 ## Development
 

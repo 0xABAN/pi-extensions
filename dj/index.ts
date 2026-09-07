@@ -63,7 +63,7 @@ export default function dj(
     repaint?.();
   }
 
-  // Mount only on startup or relocation. Replacing neighboring widgets would break powerline.
+  // Mount only on startup, relocation, or a powerline rebuild; never replace a neighbor.
   function mount() {
     run?.ctx.ui.setWidget(
       "dj",
@@ -79,7 +79,15 @@ export default function dj(
       { placement: settings.placement === "above" ? "aboveEditor" : "belowEditor" },
     );
     paint();
+
+    // Pi orders widgets by insertion. A cooperating powerline re-appends its own prompt.
+    if (run && settings.placement === "below") pi.events.emit("dj:mounted", undefined);
   }
+
+  pi.events.on("powerline:widgets-installed", () => {
+    // Ignore startup I/O, disabled DJ, and above-editor placement. No polling is restarted.
+    if (run && repaint && settings.placement === "below") mount();
+  });
 
   /** Retire this run before allowing pending I/O to complete. Saved preferences survive. */
   function stop() {
