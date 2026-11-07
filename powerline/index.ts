@@ -930,27 +930,28 @@ function renderSegmentWithWidth(
   return { content: rendered.content, width: visibleWidth(rendered.content), visible: true };
 }
 
+function joinParts(parts: string[], separatorStyle: StatusLineSeparatorStyle): string {
+  return parts.join(` ${getFgAnsiCode("sep")}${getSeparator(separatorStyle).left}${ansi.reset} `);
+}
+
 /** Build content string from pre-rendered parts */
-function buildContentFromParts(
-  parts: string[],
-  separatorStyle: StatusLineSeparatorStyle,
-  joiner = ` ${getFgAnsiCode("sep")}${getSeparator(separatorStyle).left}${ansi.reset} `,
-): string {
+function buildContentFromParts(parts: string[], separatorStyle: StatusLineSeparatorStyle): string {
   if (parts.length === 0) return "";
   const padding = " ".repeat(config.padding);
-  return padding + parts.join(joiner) + ansi.reset + padding;
+  return padding + joinParts(parts, separatorStyle) + ansi.reset + padding;
 }
 
 type RenderedPart = { content: string; right: boolean };
 
 function buildAlignedContent(parts: RenderedPart[], separatorStyle: StatusLineSeparatorStyle, width: number): string {
-  const left = buildContentFromParts(parts.filter((part) => !part.right).map((part) => part.content), separatorStyle);
-  const right = buildContentFromParts(parts.filter((part) => part.right).map((part) => part.content), separatorStyle, " ");
-  if (!right) return left;
+  const left = parts.filter((part) => !part.right).map((part) => part.content);
+  const right = parts.filter((part) => part.right).map((part) => part.content).join(" ");
+  if (!right) return buildContentFromParts(left, separatorStyle);
 
-  const gap = width - visibleWidth(left) - visibleWidth(right);
-  if (gap < 0) return buildContentFromParts(parts.map((part) => part.content), separatorStyle);
-  return left + " ".repeat(gap) + right;
+  const leftText = joinParts(left, separatorStyle);
+  const padding = " ".repeat(config.padding);
+  const gap = width - visibleWidth(leftText) - visibleWidth(right) - 2 * config.padding;
+  return padding + leftText + ansi.reset + " ".repeat(gap) + right + ansi.reset + padding;
 }
 
 type ResponsiveLayout = { topContent: string; secondaryLines: string[] };
@@ -966,7 +967,8 @@ function computeCompactLayout(
   const separatorStyle = config.separator ?? presetDef.separator;
   const ids = [...segments.leftSegments, ...segments.rightSegments, ...segments.secondarySegments];
   const rendered = new Map(ids.map((id) => [id, renderSegmentWithWidth(id, ctx)]));
-  const minimumWidth = (parts: RenderedPart[]) => visibleWidth(buildAlignedContent(parts, separatorStyle, 0));
+  const minimumWidth = (parts: RenderedPart[]) =>
+    visibleWidth(buildContentFromParts(parts.map((part) => part.content), separatorStyle));
   const parts: RenderedPart[] = [];
 
   const context = rendered.get("context_pct");
