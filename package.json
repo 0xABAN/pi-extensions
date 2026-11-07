@@ -15,7 +15,20 @@
       "whimsical/index.ts"
     ]
   },
-  "workspaces": ["inline-skills", "dj", "commit-policy", "gray-thinking", "modes", "response-time", "whimsical"],
+  "workspaces": [
+    "inline-skills",
+    "dj",
+    "commit-policy",
+    "gray-thinking",
+    "modes",
+    "response-time",
+    "whimsical",
+    "powerline",
+    "todo",
+    "ask-user-question",
+    "intercom",
+    "claude-bridge"
+  ],
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"
