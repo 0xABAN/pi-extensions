@@ -19,8 +19,7 @@
     "todo",
     "ask-user-question",
     "intercom",
-    "claude-bridge",
-    "ponytail"
+    "claude-bridge"
   ],
   "scripts": {
     "test": "bun test",
