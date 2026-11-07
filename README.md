@@ -21,6 +21,7 @@ These are our versions of third-party extensions, changed for the [Pi fork](http
 | [ask-user-question](ask-user-question/) | [@juicesharp/rpiv-ask-user-question](https://github.com/juicesharp/rpiv-mono) 2.15.0 | Transcript row summary |
 | [intercom](intercom/) | pi-intercom 0.18.1 | Messages and calls as transcript rows |
 | [claude-bridge](claude-bridge/) | [pi-claude-bridge](https://github.com/elidickinson/pi-claude-bridge) 0.11.0 | Sends Pi's current system prompt on every resumed query |
+| [skill-palette](skill-palette/) | [pi-skill-palette](https://github.com/nicobailon/pi-skill-palette) 2.2.0 | No `/skill:` multi-skill syntax; Pi loads skills typed as `/name` itself |
 
 Their tests run against the fork's source, which must be checked out at `../pi`.
 

@@ -1,7 +1,3 @@
-<p>
-  <img src="banner.png" alt="pi-skill-palette" width="1100">
-</p>
-
 # Pi Skill Palette
 
 A command palette for [Pi coding agent](https://github.com/earendil-works/pi) that lets you explicitly select skills to inject with your next message or pin as standing instructions.
@@ -24,10 +20,6 @@ pi install npm:pi-skill-palette
 
 Restart pi to load the extension.
 
-## Compatibility
-
-This package includes an [Agent Plugins](https://agent-plugins.org/) v1.0.0 `plugin.json` manifest for portable package metadata. Runtime behavior remains Pi-specific through `package.json` and `index.ts`. The package does not expose portable `skills/` or `mcp.json` components.
-
 ## Quick Start
 
 1. Type `/skill` and press Enter
@@ -49,18 +41,7 @@ pinned: true
 ---
 ```
 
-Selecting that skill in `/skill` pins it until you remove it from the palette. Pinned skills are appended to the system prompt on each turn. The `/skill:name` slash-command path still loads skills one time ahead of the next prompt, even when `pinned: true` is present.
-
-## Multi-skill Commands
-
-You can also load multiple skills with Pi's `/skill:` syntax:
-
-```bash
-/skill:typescript-code,/skill:react-best-practices build this component
-/skill:typescript-code,react-best-practices,frontend-design build this component
-```
-
-The extension accepts up to three different skills. If you omit the prompt, the skills are queued for your next message. Autocomplete works as you type each `/skill:` segment, including comma-separated and repeated-prefix forms.
+Selecting that skill in `/skill` pins it until you remove it from the palette. Pinned skills are appended to the system prompt on each turn. Typing `/name` in a prompt still loads a skill one time ahead of that prompt, even when `pinned: true` is present.
 
 ## Keyboard Shortcuts
 

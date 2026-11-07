@@ -11,7 +11,7 @@
  */
 
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { matchesKey, Text, truncateToWidth, visibleWidth, type AutocompleteProvider } from "@earendil-works/pi-tui";
+import { matchesKey, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -126,7 +126,6 @@ const paletteTheme = loadTheme();
 // array) on reload, so an identity change is exactly when re-indexing is needed.
 let loadedSkillsSource: ReturnType<ExtensionCommandContext["getSystemPromptOptions"]>["skills"];
 let loadedSkillsCache: Skill[] = [];
-let commandSkillsCache: Skill[] | null = null;
 
 function getSkillFrontmatter(filePath: string): string | null {
 	try {
@@ -171,21 +170,6 @@ function getLoadedSkills(ctx: ExtensionCommandContext): Skill[] {
 		baseDir: skill.baseDir,
 	})));
 	return loadedSkillsCache;
-}
-
-function getCommandSkills(pi: ExtensionAPI): Skill[] {
-	commandSkillsCache ??= indexSkills(pi.getCommands()
-		.filter((command) => command.source === "skill" && command.name.startsWith("skill:") && command.sourceInfo.path)
-		.map((command) => {
-			const name = command.name.slice("skill:".length);
-			return {
-				name,
-				description: command.description ?? "",
-				filePath: command.sourceInfo.path,
-				baseDir: command.sourceInfo.baseDir ?? path.dirname(command.sourceInfo.path),
-			};
-		}));
-	return commandSkillsCache;
 }
 
 function getQueuedSkillNames(): Set<string> {
@@ -334,134 +318,6 @@ function filterSkills(skills: Skill[], query: string): Skill[] {
 	}
 	scored.sort((a, b) => b.score - a.score || a.skill.sortIndex - b.skill.sortIndex);
 	return scored.map((item) => item.skill);
-}
-
-interface ParsedSkillCommands {
-	skills: Skill[];
-	prompt: string;
-}
-
-interface SkillCompletionToken {
-	prefix: string;
-	selectedNames: Set<string>;
-}
-
-const SKILL_COMMAND_PREFIX = "/skill:";
-
-function isCommandBoundary(char: string | undefined): boolean {
-	return char === undefined || /[\s,]/.test(char);
-}
-
-function matchSkillAt(text: string, index: number, skills: Skill[]): Skill | null {
-	for (const skill of skills) {
-		if (text.startsWith(skill.name, index) && isCommandBoundary(text[index + skill.name.length])) {
-			return skill;
-		}
-	}
-	return null;
-}
-
-function parseSkillCommands(text: string, skills: Skill[]): ParsedSkillCommands | null {
-	let index = 0;
-	let first = true;
-	const selected: Skill[] = [];
-	const sortedSkills = [...skills].sort((a, b) => b.name.length - a.name.length);
-
-	while (index < text.length) {
-		while (/\s/.test(text[index] ?? "")) index++;
-
-		if (first) {
-			if (!text.startsWith(SKILL_COMMAND_PREFIX, index)) return null;
-			index += SKILL_COMMAND_PREFIX.length;
-		} else if (text.startsWith(SKILL_COMMAND_PREFIX, index)) {
-			index += SKILL_COMMAND_PREFIX.length;
-		} else if (text[index] === ",") {
-			index++;
-			while (/\s/.test(text[index] ?? "")) index++;
-			if (text.startsWith(SKILL_COMMAND_PREFIX, index)) {
-				index += SKILL_COMMAND_PREFIX.length;
-			}
-		} else {
-			break;
-		}
-
-		const skill = matchSkillAt(text, index, sortedSkills);
-		if (!skill) return null;
-		selected.push(skill);
-		index += skill.name.length;
-		first = false;
-	}
-
-	return selected.length > 0 ? { skills: selected, prompt: text.slice(index).trimStart() } : null;
-}
-
-function findSkillCompletionToken(textBeforeCursor: string): SkillCompletionToken | null {
-	const commandStart = textBeforeCursor.search(/\S/);
-	if (commandStart === -1 || !textBeforeCursor.startsWith(SKILL_COMMAND_PREFIX, commandStart)) return null;
-
-	let index = commandStart + SKILL_COMMAND_PREFIX.length;
-	const selectedNames = new Set<string>();
-
-	while (index <= textBeforeCursor.length) {
-		const tokenStart = index;
-		while (index < textBeforeCursor.length && !/[\s,]/.test(textBeforeCursor[index] ?? "")) index++;
-
-		const token = textBeforeCursor.slice(tokenStart, index);
-		if (index === textBeforeCursor.length) return { prefix: token, selectedNames };
-
-		if (token) selectedNames.add(token);
-
-		if (textBeforeCursor[index] === ",") {
-			index++;
-			while (/[\t ]/.test(textBeforeCursor[index] ?? "")) index++;
-			if (textBeforeCursor.startsWith(SKILL_COMMAND_PREFIX, index)) {
-				index += SKILL_COMMAND_PREFIX.length;
-			}
-			if (index === textBeforeCursor.length) return { prefix: "", selectedNames };
-			continue;
-		}
-
-		while (/\s/.test(textBeforeCursor[index] ?? "")) index++;
-		if (!textBeforeCursor.startsWith(SKILL_COMMAND_PREFIX, index)) return null;
-		index += SKILL_COMMAND_PREFIX.length;
-		if (index === textBeforeCursor.length) return { prefix: "", selectedNames };
-	}
-
-	return null;
-}
-
-function createSkillAutocompleteProvider(current: AutocompleteProvider, pi: ExtensionAPI): AutocompleteProvider {
-	return {
-		triggerCharacters: [":", ","],
-		async getSuggestions(lines, cursorLine, cursorCol, options) {
-			const line = lines[cursorLine] ?? "";
-			const token = findSkillCompletionToken(line.slice(0, cursorCol));
-			if (!token) return current.getSuggestions(lines, cursorLine, cursorCol, options);
-
-			const blockedNames = new Set([
-				...token.selectedNames,
-				...state.queuedSkills.map((skill) => skill.name),
-			]);
-			if (blockedNames.size >= MAX_QUEUED_SKILLS) return null;
-
-			const suggestions = filterSkills(getCommandSkills(pi), token.prefix)
-				.filter((skill) => !blockedNames.has(skill.name))
-				.map((skill) => ({
-					value: skill.name,
-					label: skill.name,
-					description: skill.description,
-				}));
-			if (suggestions.length === 0) return null;
-
-			return { prefix: token.prefix, items: suggestions };
-		},
-		applyCompletion(lines, cursorLine, cursorCol, item, prefix) {
-			return current.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
-		},
-		shouldTriggerFileCompletion(lines, cursorLine, cursorCol) {
-			return current.shouldTriggerFileCompletion?.(lines, cursorLine, cursorCol) ?? true;
-		},
-	};
 }
 
 /**
@@ -963,42 +819,6 @@ export default function skillPaletteExtension(pi: ExtensionAPI): void {
 				}
 			}
 		},
-	});
-
-	pi.on("session_start", (_event, ctx) => {
-		ctx.ui.addAutocompleteProvider((current) => createSkillAutocompleteProvider(current, pi));
-	});
-
-	pi.on("input", (event, ctx) => {
-		if (event.source === "extension" || !event.text.startsWith(SKILL_COMMAND_PREFIX)) {
-			return { action: "continue" as const };
-		}
-
-		const parsed = parseSkillCommands(event.text, getCommandSkills(pi));
-		if (!parsed || parsed.skills.length <= 1) {
-			return { action: "continue" as const };
-		}
-
-		const uniqueSkills = parsed.skills.filter((skill, index, skills) =>
-			skills.findIndex((candidate) => candidate.name === skill.name) === index
-		);
-		// Slash-loaded skills stay one-shot, even if a skill declares pinned: true.
-		const queueResult = queueSkills(uniqueSkills);
-		if (queueResult.status === "full") {
-			if (ctx.hasUI) {
-				ctx.ui.notify(`You can load up to ${MAX_QUEUED_SKILLS} different skills at once.`, "warning");
-			}
-			return { action: "handled" as const };
-		}
-		if (ctx.hasUI) {
-			updateSkillIndicators(ctx);
-			ctx.ui.notify(`Queued ${state.queuedSkills.length}/${MAX_QUEUED_SKILLS} skills: ${formatSkillList(state.queuedSkills)}`, "info");
-		}
-
-		if (!parsed.prompt) {
-			return { action: "handled" as const };
-		}
-		return { action: "transform" as const, text: parsed.prompt };
 	});
 
 	// Handle the before_agent_start event to send queued skills once and pinned skills as instructions.
