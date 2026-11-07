@@ -38,7 +38,7 @@ Then restart Pi. The extension auto-connects to the broker on startup and regist
 
 ```xml
 <pi-intercom>
-Coordinate with other local pi sessions on related codebases. Use `/skill:pi-intercom` for patterns.
+Coordinate with other local pi sessions on related codebases. Use `/pi-intercom` for patterns.
 
 **When:** Same codebase (parallel work), reference codebase (consulting patterns), related repos (shared libraries).
 
