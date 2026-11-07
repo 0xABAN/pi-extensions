@@ -1,0 +1,21 @@
+{
+  "colors": {
+    "model": "text",
+    "shellMode": "bashMode",
+    "path": "mdHeading",
+    "gitDirty": "mdHeading",
+    "gitClean": "mdHeading",
+    "thinking": "dim",
+    "thinkingMinimal": "muted",
+    "thinkingLow": "accent",
+    "thinkingMedium": "accent",
+    "context": "accent",
+    "contextWarn": "warning",
+    "contextError": "error",
+    "cost": "muted",
+    "tokens": "muted",
+    "queue": "accent",
+    "separator": "dim",
+    "border": "borderMuted"
+  }
+}
