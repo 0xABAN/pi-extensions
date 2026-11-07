@@ -22,6 +22,16 @@ The mode follows the active session branch and survives `/reload` and resume.
 Returning to Build restores the tools active before entering Plan or Learn.
 Use Pi's `/thinking` command to select the thinking level.
 
+## Read-only tools
+
+Plan and Learn share one tool set: `read`, `grep`, `find`, `ls`, `bash` through
+the allowlist, `codemode`, `web_search`, `fetch_content`, `get_search_content`,
+`ask_user_question`, and `intercom`. The tool-call guard blocks every other tool,
+including inactive ones and calls made from inside codemode. Web tools only read
+remote content, though they may cache pages or clone repositories outside the
+project. `intercom` can still message other sessions. The guard is not a sandbox
+for other extensions or arbitrary shell syntax.
+
 ## Learn
 
 The agent helps you reason through a task without doing it for you. It tracks
@@ -45,13 +55,9 @@ For documentation-heavy topics, such as Node.js sockets, the agent teaches from
 primary docs. It fetches a page before linking it, then tells you where to look:
 the heading, the passage that addresses your current gap, and what to skip.
 
-Learn reads local files (`read`, `grep`, `find`, `ls`) and the web (`web_search`,
-`fetch_content`, `get_search_content`). The tool-call guard blocks every other
-tool, including inactive and nested ones: shell execution, codemode, delegation,
-edits, and Todo updates. Web tools only read remote content, though they may cache
-pages or clone repositories outside the project. You write the code and run
-experiments yourself. Existing source files and tool results remain visible;
-Learn does not redact them.
+Learn uses the read-only tools. The agent may run read-only commands but not
+programs; you write the code and run experiments yourself. Existing source files
+and tool results remain visible; Learn does not redact them.
 
 The controller injects the teaching policy each turn through `appendSystemPrompt`,
 which the Claude bridge forwards. Leaving Learn removes only that policy and
@@ -79,11 +85,8 @@ its response-rewriting pipeline.
 
 ## Plan
 
-Plan disables built-in `edit` and `write`, preserves other active tools including
-`todo`, and filters Bash commands through the existing allowlist. It is not a
-sandbox for other extensions or arbitrary shell syntax.
-
-Ask the agent to explore the code and produce numbered steps under `Plan:`:
+Plan uses the read-only tools. Ask the agent to explore the code and produce
+numbered steps under `Plan:`:
 
 ```text
 Plan:
@@ -92,8 +95,8 @@ Plan:
 ```
 
 After a plan, choose Execute, Stay, or Refine. Execute returns to Build and reminds
-the agent to seed the steps into an rpiv-todo list before working through them.
-The reminder is not a tool gate.
+the agent to seed the steps as todos before working through them. The reminder is
+not a tool gate.
 
 ## Structure
 

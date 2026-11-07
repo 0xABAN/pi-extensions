@@ -1,16 +1,16 @@
 /**
  * Build, Plan, and Learn share one mode controller and tool checkpoint.
- * Shift+Tab cycles modes.
+ * Shift+Tab cycles modes. Plan and Learn share one read-only tool set.
  * Plan preserves the existing exploration/execute flow. Learn teaches without
- * doing the task and permits only local file inspection and web reading.
+ * doing the task.
  */
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, TextContent } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type AgentMode, extractPlanSteps, isSafeCommand } from "./utils.ts";
+import { type AgentMode, extractPlanSteps, isSafeCommand, READ_ONLY_TOOLS } from "./utils.ts";
 import { formatModeStatus } from "./status.ts";
-import { LEARN_MODE_PROMPT, LEARN_MODE_TOOLS } from "./learn.ts";
+import { LEARN_MODE_PROMPT } from "./learn.ts";
 
 function isAssistantMessage(m: AgentMessage): m is AssistantMessage {
 	return m.role === "assistant" && Array.isArray(m.content);
@@ -23,9 +23,6 @@ function getTextContent(message: AssistantMessage): string {
 		.join("\n");
 }
 
-// Tools
-const PLAN_MODE_TOOLS = ["read", "bash", "grep", "find", "ls", "questionnaire"];
-const PLAN_MODE_DISABLED_TOOLS = new Set<string>(["edit", "write"]);
 const LEARN_MODE_APPENDIX = `\n\n<learn_mode>\n${LEARN_MODE_PROMPT}</learn_mode>`;
 
 interface ModeState {
@@ -55,26 +52,8 @@ export default function modesExtension(pi: ExtensionAPI): void {
 		ctx.ui.setStatus("agent-thinking", status.thinking);
 	}
 
-	function withTodo(toolNames: string[]): string[] {
-		// Keep rpiv-todo available while planning, never in Learn.
-		return [...new Set([...toolNames, "todo"])];
-	}
-
-	function getPlanModeTools(activeToolNames: string[]): string[] {
-		return withTodo([
-			...activeToolNames.filter((name) => !PLAN_MODE_DISABLED_TOOLS.has(name)),
-			...PLAN_MODE_TOOLS,
-		]);
-	}
-
 	function applyModeTools(): void {
-		if (mode === "learn") {
-			pi.setActiveTools([...LEARN_MODE_TOOLS]);
-		} else if (mode === "plan") {
-			pi.setActiveTools(getPlanModeTools(buildTools));
-		} else {
-			pi.setActiveTools(buildTools);
-		}
+		pi.setActiveTools(mode === "build" ? buildTools : [...READ_ONLY_TOOLS]);
 	}
 
 	function persistState(): void {
@@ -124,19 +103,23 @@ export default function modesExtension(pi: ExtensionAPI): void {
 
 	// Exposure alone is not a permission boundary: also block nested/inactive calls.
 	pi.on("tool_call", async (event, _ctx) => {
-		if (mode === "learn" && !LEARN_MODE_TOOLS.has(event.toolName)) {
+		if (mode === "build") return;
+
+		const leave = "Ask the user to press Shift+Tab to return to build mode.";
+
+		if (!READ_ONLY_TOOLS.has(event.toolName)) {
 			return {
 				block: true,
-				reason: `Learn mode permits only ${[...LEARN_MODE_TOOLS].join(", ")}. Guide the learner; do not execute their task.`,
+				reason: `${mode} mode permits only ${[...READ_ONLY_TOOLS].join(", ")}. ${leave}`,
 			};
 		}
 
-		if (mode === "plan" && event.toolName === "bash") {
+		if (event.toolName === "bash") {
 			const command = event.input.command as string;
 			if (!isSafeCommand(command)) {
 				return {
 					block: true,
-					reason: `${mode} mode: command blocked (not allowlisted). Ask the user to press Shift+Tab to return to build mode.\nCommand: ${command}`,
+					reason: `${mode} mode: command blocked (not allowlisted). ${leave}\nCommand: ${command}`,
 				};
 			}
 		}

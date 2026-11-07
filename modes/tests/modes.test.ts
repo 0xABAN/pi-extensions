@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import modesExtension from "../index.ts";
-import { LEARN_MODE_PROMPT, LEARN_MODE_TOOLS } from "../learn.ts";
+import { LEARN_MODE_PROMPT } from "../learn.ts";
 import { formatModeStatus } from "../status.ts";
+import { READ_ONLY_TOOLS } from "../utils.ts";
 
 const BUILD_TOOLS = ["read", "bash", "edit", "write", "codemode", "todo", "Agent", "intercom", "custom_tool"];
 const LEARN_LABEL = "\uF19D  learn mode";
@@ -108,47 +109,52 @@ test("shift+tab is the only mode control", async () => {
 	expect([...h.shortcuts.keys()]).toEqual(["shift+tab"]);
 });
 
-test("plan hides edits, keeps other tools, and filters bash", async () => {
+test("plan and learn share one read-only tool set", async () => {
 	const h = await harness();
-	expect(h.mode()).toMatch(/build mode$/);
+	const readOnly = [
+		"read", "grep", "find", "ls", "bash",
+		"codemode",
+		"web_search", "fetch_content", "get_search_content",
+		"ask_user_question", "intercom",
+	];
 
 	await h.shiftTab();
 	expect(h.mode()).toMatch(/plan mode$/);
-	expect(h.tools()).not.toContain("edit");
-	expect(h.tools()).toContain("custom_tool");
-	expect(h.tools()).toContain("todo");
+	expect(h.tools()).toEqual(readOnly);
 
-	const blocked = await h.emit("tool_call", { toolName: "bash", input: { command: "rm file" } });
-	expect(blocked.block).toBe(true);
-	expect(blocked.reason).toStartWith("plan mode: command blocked");
-	expect(blocked.reason).toContain("press Shift+Tab");
-
-	expect(await h.emit("tool_call", { toolName: "bash", input: { command: "git status" } })).toBeUndefined();
-});
-
-test("learn blocks every tool outside its list, including nested calls", async () => {
-	const h = await harness();
-	await h.shiftTab();
 	await h.shiftTab();
 	expect(h.mode()).toBe(LEARN_LABEL);
-	expect(h.tools()).toEqual([...LEARN_MODE_TOOLS]);
-
-	const blocked = ["bash", "powershell", "edit", "write", "codemode", "tool_search", "todo", "Agent", "SubagentWorkflow", "intercom", "source_check", "custom_tool", "mcp_write"];
-	for (const toolName of blocked) {
-		for (const parentToolCallId of [undefined, "outer-tool"]) {
-			const result = await h.emit("tool_call", { toolName, input: {}, parentToolCallId });
-			expect({ toolName, block: result?.block }).toEqual({ toolName, block: true });
-		}
-	}
-
-	for (const toolName of LEARN_MODE_TOOLS) {
-		expect(await h.emit("tool_call", { toolName, input: {} })).toBeUndefined();
-	}
-
-	for (const toolName of ["web_search", "fetch_content", "get_search_content"]) {
-		expect([...LEARN_MODE_TOOLS]).toContain(toolName);
-	}
+	expect(h.tools()).toEqual(readOnly);
 });
+
+for (const [mode, presses] of [["plan", 1], ["learn", 2]] as const) {
+	test(`${mode} blocks every other tool and unsafe bash, including nested calls`, async () => {
+		const h = await harness();
+		for (let i = 0; i < presses; i++) await h.shiftTab();
+
+		const blocked = ["powershell", "edit", "write", "tool_search", "todo", "Agent", "SubagentWorkflow", "source_check", "custom_tool", "mcp_write"];
+		for (const toolName of blocked) {
+			for (const parentToolCallId of [undefined, "outer-tool"]) {
+				const result = await h.emit("tool_call", { toolName, input: {}, parentToolCallId });
+				expect({ toolName, block: result?.block }).toEqual({ toolName, block: true });
+				expect(result.reason).toStartWith(`${mode} mode permits only read, grep`);
+			}
+		}
+
+		for (const toolName of READ_ONLY_TOOLS) {
+			for (const parentToolCallId of [undefined, "outer-tool"]) {
+				expect(await h.emit("tool_call", { toolName, input: { command: "git status" }, parentToolCallId })).toBeUndefined();
+			}
+		}
+
+		for (const parentToolCallId of [undefined, "outer-tool"]) {
+			const result = await h.emit("tool_call", { toolName: "bash", input: { command: "rm file" }, parentToolCallId });
+			expect(result.block).toBe(true);
+			expect(result.reason).toStartWith(`${mode} mode: command blocked`);
+			expect(result.reason).toContain("press Shift+Tab");
+		}
+	});
+}
 
 test("learn appends its policy once, and leaving removes only that policy", async () => {
 	const h = await harness();
@@ -231,7 +237,7 @@ test("refuses to change modes while a turn is running", async () => {
 
 test("reload restores learn from the saved build tools, and the tree follows the branch", async () => {
 	const saved = await savedLearn();
-	const resumed = await harness({ entries: saved, tools: [...LEARN_MODE_TOOLS], reason: "reload" });
+	const resumed = await harness({ entries: saved, tools: [...READ_ONLY_TOOLS], reason: "reload" });
 	expect(resumed.mode()).toBe(LEARN_LABEL);
 
 	await resumed.shiftTab();

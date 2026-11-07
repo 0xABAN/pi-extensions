@@ -4,6 +4,13 @@
 
 export type AgentMode = "build" | "plan" | "learn";
 
+export const READ_ONLY_TOOLS = new Set([
+	"read", "grep", "find", "ls", "bash",
+	"codemode",
+	"web_search", "fetch_content", "get_search_content",
+	"ask_user_question", "intercom",
+]);
+
 // Destructive commands blocked in plan mode
 const DESTRUCTIVE_PATTERNS = [
 	/\brm\b/i,
