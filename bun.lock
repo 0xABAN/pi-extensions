@@ -97,6 +97,10 @@
         "@earendil-works/pi-coding-agent": "*",
       },
     },
+    "ponytail": {
+      "name": "@dietrichgebert/ponytail",
+      "version": "5.3.3",
+    },
     "powerline": {
       "name": "pi-powerline-footer",
       "version": "0.22.0",
@@ -218,6 +222,8 @@
     "@aws/lambda-invoke-store": ["@aws/lambda-invoke-store@0.3.0", "", {}, "sha512-sl4Bm6yiMNYrZKkqqDFWN0UfnWhlS8ivKxrYl+6t0gCLrqr8y3B2IqZZbFRkfaVVp7C/baApyh71P+LeE1A2sQ=="],
 
     "@babel/runtime": ["@babel/runtime@7.29.7", "", {}, "sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw=="],
+
+    "@dietrichgebert/ponytail": ["@dietrichgebert/ponytail@workspace:ponytail"],
 
     "@earendil-works/chord": ["@earendil-works/chord@1.1.0", "", { "dependencies": { "esbuild": "0.28.2" } }, "sha512-gsHzKfyQ3t0ZIQ3cLBjJ5Vqy1TYnFyruHIV3g3BwmulCDYe5BW4yT9vaJk9QzN6YANILIO75uzuq+Gdxtzz1og=="],
 

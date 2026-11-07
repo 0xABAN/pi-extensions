@@ -20,7 +20,8 @@
     "ask-user-question",
     "intercom",
     "claude-bridge",
-    "skill-palette"
+    "skill-palette",
+    "ponytail"
   ],
   "scripts": {
     "test": "bun test",
