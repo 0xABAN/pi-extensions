@@ -1,7 +1,8 @@
 import { fileURLToPath } from "node:url";
-import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
-import { isKeyRelease, matchesKey, renderFakeCursor, visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
+import { CustomEditor, type KeybindingsManager, type Theme } from "@earendil-works/pi-coding-agent";
+import { isKeyRelease, matchesKey, renderFakeCursor, stripTerminalSequences, visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
 import type { AutocompleteProvider } from "@earendil-works/pi-tui";
+import { ansi } from "../colors.ts";
 import { matchesConfiguredShortcut } from "../shortcuts.ts";
 import type { GhostSuggestion } from "./types.ts";
 
@@ -10,9 +11,15 @@ interface EditorBoundaryShortcuts {
   end: string | null;
 }
 
+interface EditorFrame {
+  theme: Theme;
+  renderBadges: (budget: number) => string;
+}
+
 interface BashModeEditorOptions {
   keybindings: KeybindingsManager;
   embedWorkingStatus?: boolean;
+  frame?: EditorFrame;
   isBashModeActive: () => boolean;
   isShellRunning: () => boolean;
   onExitBashMode: () => void;
@@ -131,10 +138,6 @@ export class BashModeEditor extends CustomEditor {
     this.optionsRef = options;
   }
 
-  get visibleLineCount(): number {
-    return this.renderedVisibleLineCount;
-  }
-
   protected override maxVisibleLines(): number {
     return Math.max(5, Math.floor(this.tui.terminal.rows * 0.4));
   }
@@ -144,7 +147,16 @@ export class BashModeEditor extends CustomEditor {
       return super.renderTopBorder(width, hiddenLineCount);
     }
     const label = ` ↑ ${hiddenLineCount} more `;
-    return this.borderColor(`───${label}${"─".repeat(width - 3 - visibleWidth(label))}`);
+    return this.borderStyle(`───${label}${"─".repeat(width - 3 - visibleWidth(label))}`);
+  }
+
+  protected override borderStyle(text: string): string {
+    const frame = this.optionsRef.frame;
+    if (!frame) return super.borderStyle(text);
+    return text
+      .split(/(─+)/)
+      .map((part) => (part.startsWith("─") ? frame.theme.fg("text", part) : this.borderColor(part)))
+      .join("");
   }
 
   setAutocompleteProvider(provider: AutocompleteProvider): void {
@@ -553,6 +565,30 @@ export class BashModeEditor extends CustomEditor {
   }
 
   render(width: number): string[] {
+    const frame = this.optionsRef.frame;
+    if (!frame) return this.renderContent(width);
+
+    const outline = (text: string) => frame.theme.fg("text", text);
+    const lines = this.renderContent(width - 5);
+    const bottom = this.renderedVisibleLineCount + 1;
+    const hintWidth = visibleWidth(stripTerminalSequences(lines[0]!).replace(/─+$/, ""));
+    const badges = frame.renderBadges(width - hintWidth - 8);
+    const top = badges
+      ? `${truncateToWidth(outline("╭───") + lines[0], width - visibleWidth(badges) - 5, "")} ${badges} ${outline("──╮")}`
+      : outline("╭───") + lines[0] + outline("╮");
+    const prompt = this.optionsRef.isBashModeActive()
+      ? `${ansi.getFgAnsi(200, 200, 200)}$${ansi.reset}`
+      : frame.theme.fg("accent", "◆");
+
+    return [
+      top,
+      ...lines.slice(1, bottom).map((line, index) => outline("│") + (index === 0 ? ` ${prompt} ` : "   ") + line + outline("│")),
+      outline("╰───") + lines[bottom] + outline("╯"),
+      ...lines.slice(bottom + 1).map((line) => `    ${line}`),
+    ];
+  }
+
+  private renderContent(width: number): string[] {
     const lines = super.render(width);
     if (!this.isShellCompletionContext()) return lines;
     if (!this.ghost) return lines;

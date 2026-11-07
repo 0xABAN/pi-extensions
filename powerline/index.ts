@@ -5,7 +5,7 @@ import {
   type Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { isKeyRelease, type AutocompleteProvider, type SelectItem, SelectList, stripTerminalSequences, truncateToWidth, TUI_KEYBINDINGS, visibleWidth } from "@earendil-works/pi-tui";
+import { isKeyRelease, type AutocompleteProvider, type SelectItem, SelectList, truncateToWidth, TUI_KEYBINDINGS, visibleWidth } from "@earendil-works/pi-tui";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 
@@ -3186,6 +3186,9 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       const editor = new BashModeEditor(tui, editorTheme, keybindings, {
         keybindings,
         embedWorkingStatus: config.workingIndicatorPlacement === "editor-border",
+        frame: editorPerf.options.editorChrome
+          ? { theme: ctx.ui.theme, renderBadges: (budget) => renderEditorBadges(ctx.ui.theme, budget) }
+          : undefined,
         isBashModeActive: () => bashModeActive,
         isShellRunning: () => shellSession?.state.running ?? false,
         onExitBashMode: () => {
@@ -3370,42 +3373,6 @@ export default function powerlineFooter(pi: ExtensionAPI) {
             if (Array.isArray(lines)) editorPerf.observeDraft(lines);
           }
         : handlePowerlineEditorInput;
-
-      const originalRender = editor.render.bind(editor);
-      const theme: Theme = ctx.ui.theme;
-      const outline = (text: string) => theme.fg("text", text);
-
-      const renderEditorBox = (width: number): string[] => {
-        const borderColor = editor.borderColor;
-        editor.borderColor = (text: string) =>
-          text.split(/(─+)/).map((part) => (part.startsWith("─") ? outline(part) : borderColor(part))).join("");
-        let lines: string[];
-        try {
-          lines = originalRender(width - 5);
-        } finally {
-          editor.borderColor = borderColor;
-        }
-
-        const bottom = editor.visibleLineCount + 1;
-        const hintWidth = visibleWidth(stripTerminalSequences(lines[0]!).replace(/─+$/, ""));
-        const badges = renderEditorBadges(theme, width - hintWidth - 8);
-        const top = badges
-          ? `${truncateToWidth(outline("╭───") + lines[0], width - visibleWidth(badges) - 5, "")} ${badges} ${outline("──╮")}`
-          : outline("╭───") + lines[0] + outline("╮");
-        const prompt = bashModeActive ? `${ansi.getFgAnsi(200, 200, 200)}$${ansi.reset}` : theme.fg("accent", "◆");
-
-        return [
-          top,
-          ...lines.slice(1, bottom).map((line, index) => outline("│") + (index === 0 ? ` ${prompt} ` : "   ") + line + outline("│")),
-          outline("╰───") + lines[bottom] + outline("╯"),
-          ...lines.slice(bottom + 1).map((line) => `    ${line}`),
-        ];
-      };
-
-      editor.render = (width: number): string[] => {
-        const render = () => (editorPerf.options.editorChrome ? renderEditorBox(width) : originalRender(width));
-        return editorPerf.options.enabled ? editorPerf.measure("editor.render.total", render) : render();
-      };
 
       return editor;
     };
