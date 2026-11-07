@@ -131,16 +131,20 @@ export class BashModeEditor extends CustomEditor {
     this.optionsRef = options;
   }
 
-  /**
-   * The editor's own top border at `width` columns when Pi has embedded a
-   * status into it, otherwise null. Pi only ever draws an embedded status into
-   * that one line, so the Powerline frame has to reuse it rather than lay a
-   * plain rule over it.
-   */
-  renderEmbeddedTopBorder(width: number): string | null {
-    if (!this.embedWorkingStatus || Reflect.get(this, "workingStatusIndicator") == null) return null;
-    const scrollOffset = Reflect.get(this, "scrollOffset");
-    return this.renderTopBorder(width, typeof scrollOffset === "number" ? scrollOffset : 0);
+  get visibleLineCount(): number {
+    return this.renderedVisibleLineCount;
+  }
+
+  protected override maxVisibleLines(): number {
+    return Math.max(5, Math.floor(this.tui.terminal.rows * 0.4));
+  }
+
+  protected override renderTopBorder(width: number, hiddenLineCount: number): string {
+    if (hiddenLineCount === 0 || this.embedWorkingStatus) {
+      return super.renderTopBorder(width, hiddenLineCount);
+    }
+    const label = ` ↑ ${hiddenLineCount} more `;
+    return this.borderColor(`───${label}${"─".repeat(width - 3 - visibleWidth(label))}`);
   }
 
   setAutocompleteProvider(provider: AutocompleteProvider): void {

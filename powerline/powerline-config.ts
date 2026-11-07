@@ -71,7 +71,7 @@ function normalizeSecondaryOverflow(value: unknown): { secondaryOverflow: Second
 }
 
 function normalizeWorkingIndicatorPlacement(value: unknown): { workingIndicatorPlacement: WorkingIndicatorPlacement; invalidWorkingIndicatorPlacement: string | null } {
-  if (value === undefined) return { workingIndicatorPlacement: "editor-border", invalidWorkingIndicatorPlacement: null };
+  if (value === undefined) return { workingIndicatorPlacement: "above-powerline", invalidWorkingIndicatorPlacement: null };
 
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
   if (normalized === "editor-border" || normalized === "above-powerline") {
@@ -79,7 +79,7 @@ function normalizeWorkingIndicatorPlacement(value: unknown): { workingIndicatorP
   }
 
   return {
-    workingIndicatorPlacement: "editor-border",
+    workingIndicatorPlacement: "above-powerline",
     invalidWorkingIndicatorPlacement: typeof value === "string" ? value.trim() : String(value),
   };
 }
@@ -361,7 +361,7 @@ export function parsePowerlineConfig(value: unknown, presets: readonly StatusLin
     padding: 1,
     secondaryOverflow: "drop",
     invalidSecondaryOverflow: null,
-    workingIndicatorPlacement: "editor-border",
+    workingIndicatorPlacement: "above-powerline",
     invalidWorkingIndicatorPlacement: null,
     welcome: true,
     stashSharpSShortcut: false,

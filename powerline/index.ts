@@ -5,7 +5,7 @@ import {
   type Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { CURSOR_MARKER, isKeyRelease, type AutocompleteProvider, type SelectItem, SelectList, truncateToWidth, TUI_KEYBINDINGS, visibleWidth } from "@earendil-works/pi-tui";
+import { isKeyRelease, type AutocompleteProvider, type SelectItem, SelectList, stripTerminalSequences, truncateToWidth, TUI_KEYBINDINGS, visibleWidth } from "@earendil-works/pi-tui";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 
@@ -89,7 +89,7 @@ let config: PowerlineConfig = {
   padding: 1,
   secondaryOverflow: "drop",
   invalidSecondaryOverflow: null,
-  workingIndicatorPlacement: "editor-border",
+  workingIndicatorPlacement: "above-powerline",
   invalidWorkingIndicatorPlacement: null,
   welcome: true,
   stashSharpSShortcut: false,
@@ -914,175 +914,6 @@ export function parseBashModeSettings(settings: Record<string, unknown>, powerli
     transcriptMaxLines,
     transcriptMaxBytes,
   };
-}
-
-const FAST_EDITOR_RENDER_LINE_THRESHOLD = 80;
-const FAST_EDITOR_RENDER_COLUMN_THRESHOLD = 1200;
-
-interface FastEditorState {
-  lines: string[];
-  cursorLine: number;
-  cursorCol: number;
-}
-
-interface FastEditorVisualLine {
-  text: string;
-  cursorCol?: number;
-}
-
-function readFastEditorState(editor: unknown): FastEditorState | null {
-  const state = Reflect.get(editor as object, "state");
-  if (!isRecord(state) || !Array.isArray(state.lines)) return null;
-  if (typeof state.cursorLine !== "number" || typeof state.cursorCol !== "number") return null;
-
-  const lines = state.lines as string[];
-  const cursorLine = Math.max(0, Math.min(lines.length - 1, Math.floor(state.cursorLine)));
-  const cursorText = lines[cursorLine] ?? "";
-  if (typeof cursorText !== "string") return null;
-  const cursorCol = Math.max(0, Math.min(cursorText.length, Math.floor(state.cursorCol)));
-  return { lines, cursorLine, cursorCol };
-}
-
-function fastChunkCount(line: string, width: number): number {
-  return Math.max(1, Math.ceil(Math.max(1, line.length) / width));
-}
-
-function fastChunk(line: string, width: number, chunkIndex: number): { text: string; startCol: number } {
-  const startCol = chunkIndex * width;
-  return { text: line.slice(startCol, startCol + width), startCol };
-}
-
-function isFastRenderableText(text: string): boolean {
-  return /^[\x20-\x7E]*$/.test(text);
-}
-
-function pushTrailingChunks(target: FastEditorVisualLine[], line: string, width: number, maxCount: number): void {
-  const count = fastChunkCount(line, width);
-  const start = Math.max(0, count - maxCount);
-  for (let index = start; index < count; index++) {
-    target.push({ text: fastChunk(line, width, index).text });
-  }
-}
-
-function collectFastEditorVisualLines(state: FastEditorState, layoutWidth: number, maxVisibleLines: number): {
-  lines: FastEditorVisualLine[];
-  hasBefore: boolean;
-  hasAfter: boolean;
-} {
-  const cursorText = state.lines[state.cursorLine] ?? "";
-  const cursorChunkIndex = Math.floor(state.cursorCol / layoutWidth);
-  const cursorChunkCount = Math.max(fastChunkCount(cursorText, layoutWidth), cursorChunkIndex + 1);
-  const firstCursorChunk = Math.max(0, cursorChunkIndex - maxVisibleLines + 1);
-
-  const visualLines: FastEditorVisualLine[] = [];
-  for (let lineIndex = state.cursorLine - 1; lineIndex >= 0 && visualLines.length < maxVisibleLines - 1; lineIndex--) {
-    const chunks: FastEditorVisualLine[] = [];
-    pushTrailingChunks(chunks, state.lines[lineIndex] ?? "", layoutWidth, maxVisibleLines - 1 - visualLines.length);
-    visualLines.unshift(...chunks);
-  }
-
-  for (let chunkIndex = firstCursorChunk; chunkIndex < cursorChunkIndex && visualLines.length < maxVisibleLines - 1; chunkIndex++) {
-    visualLines.push({ text: fastChunk(cursorText, layoutWidth, chunkIndex).text });
-  }
-
-  const cursorChunk = fastChunk(cursorText, layoutWidth, cursorChunkIndex);
-  visualLines.push({
-    text: cursorChunk.text,
-    cursorCol: state.cursorCol - cursorChunk.startCol,
-  });
-
-  for (let chunkIndex = cursorChunkIndex + 1; chunkIndex < cursorChunkCount && visualLines.length < maxVisibleLines; chunkIndex++) {
-    visualLines.push({ text: fastChunk(cursorText, layoutWidth, chunkIndex).text });
-  }
-
-  for (let lineIndex = state.cursorLine + 1; lineIndex < state.lines.length && visualLines.length < maxVisibleLines; lineIndex++) {
-    const line = state.lines[lineIndex] ?? "";
-    const count = fastChunkCount(line, layoutWidth);
-    for (let chunkIndex = 0; chunkIndex < count && visualLines.length < maxVisibleLines; chunkIndex++) {
-      visualLines.push({ text: fastChunk(line, layoutWidth, chunkIndex).text });
-    }
-  }
-
-  return {
-    lines: visualLines.slice(-maxVisibleLines),
-    hasBefore: state.cursorLine > 0 || firstCursorChunk > 0,
-    hasAfter: state.cursorLine < state.lines.length - 1 || cursorChunkIndex < cursorChunkCount - 1,
-  };
-}
-
-function renderFastCursorLine(line: string, cursorCol: number, focused: boolean): string {
-  const before = line.slice(0, cursorCol);
-  const target = line[cursorCol];
-  const marker = focused ? CURSOR_MARKER : "";
-  if (target) {
-    return `${before}${marker}\x1b[7m${target}\x1b[0m${line.slice(cursorCol + target.length)}`;
-  }
-  return `${before}${marker}\x1b[7m \x1b[0m`;
-}
-
-function padToWidth(line: string, width: number): string {
-  return `${line}${" ".repeat(Math.max(0, width - visibleWidth(line)))}`;
-}
-
-export function colorEditorBorder(editor: unknown, text: string): string {
-  const borderColor = editor && typeof editor === "object"
-    ? Reflect.get(editor, "borderColor")
-    : undefined;
-  return typeof borderColor === "function"
-    ? borderColor.call(editor, text)
-    : `${getFgAnsiCode("sep")}${text}${ansi.reset}`;
-}
-
-export function renderFastPowerlineEditor(
-  editor: unknown,
-  width: number,
-  options: { bashModeActive: boolean; completionsEnabled: boolean },
-): string[] | null {
-  if (width < 10 || options.completionsEnabled) return null;
-  if (Reflect.get(editor as object, "isInPaste") === true || Reflect.get(editor as object, "jumpMode") != null) return null;
-  if (Reflect.get(editor as object, "autocompleteState") != null) return null;
-  // This path lays down its own top border, so an embedded status would be lost.
-  if (Reflect.get(editor as object, "workingStatusIndicator") != null) return null;
-
-  const isShowingAutocomplete = Reflect.get(editor as object, "isShowingAutocomplete");
-  if (typeof isShowingAutocomplete === "function" && isShowingAutocomplete.call(editor)) return null;
-
-  const state = readFastEditorState(editor);
-  if (!state) return null;
-
-  const cursorText = state.lines[state.cursorLine] ?? "";
-  if (state.lines.length < FAST_EDITOR_RENDER_LINE_THRESHOLD && cursorText.length < FAST_EDITOR_RENDER_COLUMN_THRESHOLD) {
-    return null;
-  }
-
-  const terminalRows = Reflect.get(Reflect.get(editor as object, "tui") ?? {}, "terminal")?.rows;
-  const maxVisibleLines = Math.max(5, Math.floor((typeof terminalRows === "number" ? terminalRows : 24) * 0.3));
-  const innerWidth = Math.max(1, width - 3);
-  const layoutWidth = Math.max(1, innerWidth - 1);
-  const viewport = collectFastEditorVisualLines(state, layoutWidth, maxVisibleLines);
-  if (viewport.lines.some((line) => !isFastRenderableText(line.text))) return null;
-
-  Reflect.set(editor as object, "lastWidth", layoutWidth);
-
-  const border = (marker: "↑" | "↓" | "─") => {
-    const text = marker === "─" ? "─".repeat(width - 2) : `${marker}${"─".repeat(Math.max(0, width - 3))}`;
-    return ` ${colorEditorBorder(editor, text)}`;
-  };
-  const promptGlyph = options.bashModeActive ? "$" : ">";
-  const prompt = `${ansi.getFgAnsi(200, 200, 200)}${promptGlyph}${ansi.reset}`;
-  const promptPrefix = ` ${prompt} `;
-  const contPrefix = "   ";
-
-  const lines = [border(viewport.hasBefore ? "↑" : "─")];
-  for (let index = 0; index < viewport.lines.length; index++) {
-    const visual = viewport.lines[index]!;
-    const content = visual.cursorCol === undefined
-      ? visual.text
-      : renderFastCursorLine(visual.text, visual.cursorCol, Reflect.get(editor as object, "focused") === true);
-    lines.push(`${index === 0 ? promptPrefix : contPrefix}${padToWidth(content, innerWidth)}`);
-  }
-  lines.push(border(viewport.hasAfter ? "↓" : "─"));
-  return lines;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -3242,6 +3073,38 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     return lines;
   }
 
+  function renderEditorBadges(theme: Theme, budget: number): string {
+    const statuses = footerDataRef?.getExtensionStatuses();
+    const mode = statuses?.get("agent-mode") ?? "";
+    const responseTime = statuses?.get("agent-response-time");
+    const response = responseTime ? theme.inverse(theme.fg("accent", ` ${responseTime} `)) : "";
+    const [branch, plainBranch] = renderBranchBadges(theme);
+    const path = (...parts: string[]) => parts.filter(Boolean).join(" ❯ ");
+
+    return [
+      [response, path(mode, branch)],
+      [response, path(mode, plainBranch)],
+      [path(mode, branch)],
+      [mode],
+    ]
+      .map((parts) => parts.filter(Boolean).join("   "))
+      .find((badges) => visibleWidth(badges) <= budget) ?? "";
+  }
+
+  function renderBranchBadges(theme: Theme): [string, string] {
+    if (!currentCtx) return ["", ""];
+    try {
+      const segmentCtx = buildSegmentContext(currentCtx, theme, ["git"]);
+      const git = { ...segmentCtx.options.git, showStaged: false, showUnstaged: false, showUntracked: false };
+      const plain = { ...segmentCtx, options: { ...segmentCtx.options, git } };
+      return [renderSegment("git", segmentCtx).content, renderSegment("git", plain).content];
+    } catch (error) {
+      if (!isStaleExtensionContextError(error)) throw error;
+      currentCtx = null;
+      return ["", ""];
+    }
+  }
+
   function measureWidget(name: string, render: () => string[]): string[] {
     return editorPerf.options.enabled ? editorPerf.measure(`widget.${name}`, render) : render();
   }
@@ -3557,85 +3420,39 @@ export default function powerlineFooter(pi: ExtensionAPI) {
         : handlePowerlineEditorInput;
 
       const originalRender = editor.render.bind(editor);
+      const theme: Theme = ctx.ui.theme;
+      const outline = (text: string) => theme.fg("text", text);
+
+      const renderEditorBox = (width: number): string[] => {
+        const borderColor = editor.borderColor;
+        editor.borderColor = (text: string) =>
+          text.split(/(─+)/).map((part) => (part.startsWith("─") ? outline(part) : borderColor(part))).join("");
+        let lines: string[];
+        try {
+          lines = originalRender(width - 5);
+        } finally {
+          editor.borderColor = borderColor;
+        }
+
+        const bottom = editor.visibleLineCount + 1;
+        const hintWidth = visibleWidth(stripTerminalSequences(lines[0]!).replace(/─+$/, ""));
+        const badges = renderEditorBadges(theme, width - hintWidth - 8);
+        const top = badges
+          ? `${truncateToWidth(outline("╭───") + lines[0], width - visibleWidth(badges) - 5, "")} ${badges} ${outline("──╮")}`
+          : outline("╭───") + lines[0] + outline("╮");
+        const prompt = bashModeActive ? `${ansi.getFgAnsi(200, 200, 200)}$${ansi.reset}` : theme.fg("accent", "◆");
+
+        return [
+          top,
+          ...lines.slice(1, bottom).map((line, index) => outline("│") + (index === 0 ? ` ${prompt} ` : "   ") + line + outline("│")),
+          outline("╰───") + lines[bottom] + outline("╯"),
+          ...lines.slice(bottom + 1).map((line) => `    ${line}`),
+        ];
+      };
+
       editor.render = (width: number): string[] => {
-        const renderPowerlineEditor = (): string[] => {
-          if (!editorPerf.options.editorChrome) {
-            return editorPerf.options.enabled
-              ? editorPerf.measure("editor.render.base", () => originalRender(width))
-              : originalRender(width);
-          }
-
-          if (editorPerf.options.fastRender) {
-            const fastLines = editorPerf.options.enabled
-              ? editorPerf.measure("editor.render.fast-probe", () => renderFastPowerlineEditor(editor, width, {
-                  bashModeActive,
-                  completionsEnabled: bashModeSettings.completions,
-                }))
-              : renderFastPowerlineEditor(editor, width, {
-                  bashModeActive,
-                  completionsEnabled: bashModeSettings.completions,
-                });
-            if (fastLines) {
-              if (editorPerf.options.enabled) editorPerf.count("editor.render.fast-hit");
-              return fastLines;
-            }
-          }
-
-          if (width < 10) {
-            return editorPerf.options.enabled
-              ? editorPerf.measure("editor.render.base", () => originalRender(width))
-              : originalRender(width);
-          }
-
-          const promptGlyph = bashModeActive ? "$" : ">";
-          const promptColor = ansi.getFgAnsi(200, 200, 200);
-          const prompt = `${promptColor}${promptGlyph}${ansi.reset}`;
-          const promptPrefix = ` ${prompt} `;
-          const contPrefix = "   ";
-          const contentWidth = Math.max(1, width - 3);
-          const lines = editorPerf.options.enabled
-            ? editorPerf.measure("editor.render.base", () => originalRender(contentWidth))
-            : originalRender(contentWidth);
-
-          if (lines.length === 0) return lines;
-
-          let bottomBorderIndex = lines.length - 1;
-          for (let i = lines.length - 1; i >= 1; i--) {
-            const stripped = lines[i]?.replace(/\x1b\[[0-9;]*m/g, "") || "";
-            if (stripped.length > 0 && /^─{3,}/.test(stripped)) {
-              bottomBorderIndex = i;
-              break;
-            }
-          }
-
-          const result: string[] = [];
-          // Reuse the editor's own top border when Pi has embedded a status in
-          // it. The base render above ran at contentWidth, so an embedded line
-          // has to be re-rendered at the width this frame actually uses.
-          const embeddedTopBorder = editor.renderEmbeddedTopBorder(width - 2);
-          result.push(" " + (embeddedTopBorder ?? colorEditorBorder(editor, "─".repeat(width - 2))));
-
-          for (let i = 1; i < bottomBorderIndex; i++) {
-            const prefix = i === 1 ? promptPrefix : contPrefix;
-            result.push(`${prefix}${lines[i] || ""}`);
-          }
-
-          if (bottomBorderIndex === 1) {
-            result.push(`${promptPrefix}${" ".repeat(contentWidth)}`);
-          }
-
-          result.push(" " + colorEditorBorder(editor, "─".repeat(width - 2)));
-
-          for (let i = bottomBorderIndex + 1; i < lines.length; i++) {
-            result.push(lines[i] || "");
-          }
-
-          return result;
-        };
-
-        return editorPerf.options.enabled
-          ? editorPerf.measure("editor.render.total", renderPowerlineEditor)
-          : renderPowerlineEditor();
+        const render = () => (editorPerf.options.editorChrome ? renderEditorBox(width) : originalRender(width));
+        return editorPerf.options.enabled ? editorPerf.measure("editor.render.total", render) : render();
       };
 
       return editor;

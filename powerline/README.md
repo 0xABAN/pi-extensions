@@ -109,7 +109,6 @@ You can also set it in the agent settings file (`~/.pi/agent/settings.json` by d
 
 For typing diagnostics, start Pi with `POWERLINE_DEBUG_PERF=1`, reproduce the slow editor case, then run `/powerline-perf`. Use `/powerline-perf reset` before a focused run. Profiling is off by default. While it is enabled, these A/B flags can disable one render seam before `/reload`:
 
-- `POWERLINE_PERF_FAST_RENDER=0`
 - `POWERLINE_PERF_EDITOR_CHROME=0`
 - `POWERLINE_PERF_WIDGETS=0`
 - `POWERLINE_PERF_BASH_WIDGETS=0`
@@ -221,12 +220,12 @@ Padding does not change segment-internal spacing, separators, or editor, transcr
 
 By default, segments that don't fit on the secondary line are dropped. Set `"secondaryOverflow": "wrap"` in `powerline` to continue them on extra lines below instead. A single segment wider than the terminal is still hidden. The default is `"drop"`.
 
-Pi's working, compaction, summarization, and retry indicators appear in the editor's top border by default. Set `"workingIndicatorPlacement": "above-powerline"` to show them on Pi's separate status row above the Powerline bar and editor instead. Working Vibes messages follow the same placement. The default is `"editor-border"`.
+Pi's working, compaction, summarization, and retry indicators appear on Pi's separate status row above the Powerline bar and editor by default. Set `"workingIndicatorPlacement": "editor-border"` to show them in the editor's top border instead. Working Vibes messages follow the same placement. The default is `"above-powerline"`.
 
 ```json
 {
   "powerline": {
-    "workingIndicatorPlacement": "above-powerline"
+    "workingIndicatorPlacement": "editor-border"
   }
 }
 ```

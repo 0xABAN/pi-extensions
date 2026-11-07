@@ -1,6 +1,5 @@
 export interface EditorPerfOptions {
   enabled: boolean;
-  fastRender: boolean;
   editorChrome: boolean;
   widgets: boolean;
   bashWidgets: boolean;
@@ -19,7 +18,6 @@ export function readEditorPerfOptions(
   const enabled = env.POWERLINE_DEBUG_PERF === "1";
   return {
     enabled,
-    fastRender: !enabled || env.POWERLINE_PERF_FAST_RENDER !== "0",
     editorChrome: !enabled || env.POWERLINE_PERF_EDITOR_CHROME !== "0",
     widgets: !enabled || env.POWERLINE_PERF_WIDGETS !== "0",
     bashWidgets: !enabled || env.POWERLINE_PERF_BASH_WIDGETS !== "0",
@@ -76,7 +74,7 @@ export class EditorPerfProfiler {
     const renderCount = this.metrics.get("editor.render.total")?.count ?? 0;
     const lines = [
       `Powerline editor perf (${((Date.now() - this.startedAt) / 1000).toFixed(1)}s)`,
-      `A/B: fast-render=${this.options.fastRender ? "on" : "off"}, editor-chrome=${this.options.editorChrome ? "on" : "off"}, widgets=${this.options.widgets ? "on" : "off"}, bash-widgets=${this.options.bashWidgets ? "on" : "off"}, last-prompt=${this.options.lastPrompt ? "on" : "off"}`,
+      `A/B: editor-chrome=${this.options.editorChrome ? "on" : "off"}, widgets=${this.options.widgets ? "on" : "off"}, bash-widgets=${this.options.bashWidgets ? "on" : "off"}, last-prompt=${this.options.lastPrompt ? "on" : "off"}`,
       `inputs=${inputCount}, editor-renders=${renderCount}, renders/input=${inputCount > 0 ? (renderCount / inputCount).toFixed(2) : "0.00"}, max-draft=${this.maxDraftChars}`,
     ];
 
