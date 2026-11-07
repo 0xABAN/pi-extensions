@@ -16,7 +16,7 @@ import { type ExtensionUIContext, type Theme, transcriptBodyPadding } from "@ear
 import { type TUI, truncateToWidth } from "@earendil-works/pi-tui";
 import { COLLAPSE_KEY_OFF, getMaxWidgetLines, resolveCollapseKey } from "./config.ts";
 import { formatStatusLabel, t } from "./state/i18n-bridge.ts";
-import { selectHasActive, selectOverlayLayout, selectShowTaskIds, selectTodoCounts } from "./state/selectors.ts";
+import { selectHasActive, selectOverlayLayout, selectTodoCounts } from "./state/selectors.ts";
 import { getRenderState } from "./state/store.ts";
 import { formatOverlayTaskLine } from "./view/format.ts";
 
@@ -148,7 +148,6 @@ export class TodoOverlay {
 			" ".repeat(gutter) + truncateToWidth(line, width - 2 * gutter, "…");
 		const counts = selectTodoCounts(overlayState);
 		const hasActive = selectHasActive(overlayState);
-		const showIds = selectShowTaskIds(overlayState);
 
 		const headingIcon = theme.fg(hasActive ? "accent" : "muted", hasActive ? "◈" : "◇");
 		const headingText = `${t("overlay.heading", OVERLAY_HEADING)} (${counts.completed}/${counts.total})`;
@@ -181,7 +180,7 @@ export class TodoOverlay {
 		const bodyBudget = this.uiCtx?.getToolsExpanded?.() === true ? overlayTasks.length : getMaxWidgetLines() - 1;
 		const layout = selectOverlayLayout(overlayState, bodyBudget);
 		for (const task of layout.visible) {
-			lines.push(truncate(`${theme.fg("dim", "├─")} ${formatOverlayTaskLine(task, theme, showIds)}`));
+			lines.push(truncate(`${theme.fg("dim", "├─")} ${formatOverlayTaskLine(task, theme, false)}`));
 		}
 
 		const newlyDisplayedCompletedTaskIds = overlayTasks

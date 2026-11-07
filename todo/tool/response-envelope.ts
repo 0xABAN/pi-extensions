@@ -1,36 +1,27 @@
 import type { TaskState } from "../state/state.ts";
 import type { Op } from "../state/state-reducer.ts";
-import { deriveBlocks } from "../state/task-graph.ts";
 import { sanitizeTerminalText } from "./sanitize.ts";
 import type { Task, TaskAction, TaskDetails, TaskMutationParams } from "./types.ts";
 
 /**
- * Format a single task as a `[status] #id subject [(activeForm)] [⛓ #dep,…]`
+ * Format a single task as a `[status] #id subject [(activeForm)]`
  * line. Used by the `list` content branch only — the overlay and `/todos`
  * formatting paths use `view/format.ts` for richer presentations.
  */
 function formatListLine(t: Task): string {
-	const block = t.blockedBy?.length ? ` ⛓ ${t.blockedBy.map((id) => `#${id}`).join(",")}` : "";
 	const form = t.status === "in_progress" && t.activeForm ? ` (${sanitizeTerminalText(t.activeForm)})` : "";
-	return `[${t.status}] #${t.id} ${sanitizeTerminalText(t.subject)}${form}${block}`;
+	return `[${t.status}] #${t.id} ${sanitizeTerminalText(t.subject)}${form}`;
 }
 
 /**
  * Multi-line presentation for the `get` action. Order of rows is pinned by
- * pre-refactor `todo.ts:354-376` — description, activeForm, blockedBy, blocks,
- * owner — so envelope-level snapshot tests stay byte-equivalent.
+ * pre-refactor `todo.ts:354-376` — description, activeForm, owner — so
+ * envelope-level snapshot tests stay byte-equivalent.
  */
-function formatGetLines(task: Task, state: TaskState): string {
-	const blocks = deriveBlocks(state.tasks).get(task.id) ?? [];
+function formatGetLines(task: Task): string {
 	const lines = [`#${task.id} [${task.status}] ${sanitizeTerminalText(task.subject)}`];
 	if (task.description) lines.push(`  description: ${sanitizeTerminalText(task.description)}`);
 	if (task.activeForm) lines.push(`  activeForm: ${sanitizeTerminalText(task.activeForm)}`);
-	if (task.blockedBy?.length) {
-		lines.push(`  blockedBy: ${task.blockedBy.map((id) => `#${id}`).join(", ")}`);
-	}
-	if (blocks.length) {
-		lines.push(`  blocks: ${blocks.map((id) => `#${id}`).join(", ")}`);
-	}
 	if (task.owner) lines.push(`  owner: ${sanitizeTerminalText(task.owner)}`);
 	return lines.join("\n");
 }
@@ -71,7 +62,7 @@ export function formatContent(op: Op, state: TaskState): string {
 			return view.length === 0 ? "No tasks" : view.map(formatListLine).join("\n");
 		}
 		case "get":
-			return formatGetLines(op.task, state);
+			return formatGetLines(op.task);
 		case "error":
 			return `Error: ${op.message}`;
 	}

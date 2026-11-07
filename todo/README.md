@@ -58,9 +58,6 @@ by status.
 - **The overlay never eats your terminal.** Past the row budget it drops
   completed tasks first, truncates unfinished ones last, and tells you what it
   hid with `+3 more (2 completed, 1 pending)`.
-- **The agent can sequence work, not just list it.** `blockedBy` dependencies are
-  validated before anything is written — dangling ids, deleted dependencies,
-  self-blocks, and cycles are all rejected.
 - **Parallel sessions stay separate.** Task state is keyed by session, so a
   detached or child session can neither read nor overwrite the foreground list.
 - **Localized UI, no setup required.** Nine locales ship with the package and

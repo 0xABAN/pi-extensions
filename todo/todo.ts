@@ -53,7 +53,6 @@ const SECTION_COMPLETED = "── Completed ──";
 export { isTransitionValid } from "./state/invariants.ts";
 export { applyTaskMutation } from "./state/state-reducer.ts";
 export { __resetState, getNextId, getTodos, setActiveRenderSession, sid } from "./state/store.ts";
-export { deriveBlocks, detectCycle } from "./state/task-graph.ts";
 export type { Task, TaskAction, TaskDetails, TaskStatus } from "./tool/types.ts";
 export { TOOL_NAME } from "./tool/types.ts";
 

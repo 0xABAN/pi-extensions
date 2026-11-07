@@ -26,27 +26,24 @@ snapshots are saved.
 ## Anatomy of a row
 
 ```
-● Todos (2/5)
+◈ Todos (2/5)
 ├─ ✓ Create DemoTodo domain entity
 ├─ ✓ Create IDemoTodoRepository interface
-├─ ◐ Create DemoTodoRepository (creating the repository)
-├─ ○ Register DI bindings
-└─ ○ Add integration tests
+├─ ◈ Create DemoTodoRepository (creating the repository)
+├─ ◇ Register DI bindings
+╰─ ◇ Add integration tests
 ```
 
-- **Heading** — `● Todos (done/total)` in the accent color while any task is
-  `pending` or `in_progress`; `○ Todos (done/total)` dimmed once everything is
+- **Heading** — `◈ Todos (done/total)` with an accent glyph while any task is
+  `pending` or `in_progress`; `◇ Todos (done/total)` muted once everything is
   completed.
-- **Glyphs** — `○` pending, `◐` in_progress, `✓` completed, `✗` deleted.
-  Completed and deleted subjects render dim and struck through.
-- **activeForm** — appended dim in parentheses, only while the task is
+- **Glyphs** — `◇` pending, `◈` in_progress, `✓` completed, `⊘` deleted.
+  Completed and deleted subjects render muted and struck through.
+- **activeForm** — appended muted in parentheses, only while the task is
   `in_progress`.
-- **Dependencies** — appended as `⛓ #1,#2` when the task has a `blockedBy` set.
-- **`#id` prefix** — shown on every row only when at least one visible task
-  carries a `blockedBy`. Without a `⛓ #N` anywhere, the per-row ids have nothing
-  to point at, so they are omitted.
-- **Prefixes** — `├─` on each row, `└─` on the last one. A blank spacer line is
-  always appended below the panel so it is not flush against the input box.
+- **Prefixes** — `├─` on each row, `╰─` on the last one. The panel is indented
+  like the transcript body, and two blank lines are appended below it so it is
+  not flush against the input box.
 
 Rows longer than the terminal width are truncated with `…`.
 
@@ -78,7 +75,7 @@ session resets that tracking, so a fresh session shows the full list again.
 ## Collapsing
 
 Press `ctrl+shift+t` to collapse the panel to two lines — the heading plus a dim
-`└─ ctrl+shift+t to expand` hint — and again to expand it. The hint always shows
+`╰─ ctrl+shift+t to expand` hint — and again to expand it. The hint always shows
 the currently configured key.
 
 Rebind or disable the shortcut with the `collapseKey` option; see
@@ -92,17 +89,17 @@ label rather than advertising an unbindable key.
 row budget and auto-hiding:
 
 ```
-2/7 completed · 1 in progress · 4 pending
-── Pending ──
-  ○ #4 Register DI bindings
-  ○ #5 Add integration tests    ⛓ #4
-  ○ #6 Wire up the HTTP endpoint
-  ○ #7 Update the API docs
-── In Progress ──
-  ◐ #3 Create DemoTodoRepository (creating the repository)
-── Completed ──
-  ✓ #1 Create DemoTodo domain entity
-  ✓ #2 Create IDemoTodoRepository interface
+◇ 2/7 completed · 1 in progress · 4 pending
+◇ Pending
+├─ ◇ #4 Register DI bindings
+├─ ◇ #5 Add integration tests
+├─ ◇ #6 Wire up the HTTP endpoint
+╰─ ◇ #7 Update the API docs
+◇ In Progress
+╰─ ◈ #3 Create DemoTodoRepository (creating the repository)
+◇ Completed
+├─ ✓ #1 Create DemoTodo domain entity
+╰─ ✓ #2 Create IDemoTodoRepository interface
 ```
 
 The header omits any count that is zero. Sections appear only when they have

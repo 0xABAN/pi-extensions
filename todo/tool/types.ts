@@ -42,7 +42,6 @@ export interface Task {
 	description?: string;
 	activeForm?: string;
 	status: TaskStatus;
-	blockedBy?: number[];
 	owner?: string;
 	metadata?: Record<string, unknown>;
 }
@@ -71,7 +70,6 @@ export interface CreateTaskInput {
 	subject: string;
 	description?: string;
 	activeForm?: string;
-	blockedBy?: number[];
 	owner?: string;
 	metadata?: Record<string, unknown>;
 }
@@ -82,9 +80,6 @@ export interface TaskMutationParams {
 	description?: string;
 	activeForm?: string;
 	status?: TaskStatus;
-	blockedBy?: number[];
-	addBlockedBy?: number[];
-	removeBlockedBy?: number[];
 	owner?: string;
 	metadata?: Record<string, unknown>;
 	id?: number;

@@ -62,9 +62,6 @@ export function formatOverlayTaskLine(t: Task, theme: Theme, showId: boolean): s
 	if (t.status === "in_progress" && t.activeForm) {
 		line += ` ${theme.fg("muted", `(${sanitizeTerminalText(t.activeForm)})`)}`;
 	}
-	if (t.blockedBy && t.blockedBy.length > 0) {
-		line += ` ${theme.fg("muted", `⛓ ${t.blockedBy.map((id) => `#${id}`).join(",")}`)}`;
-	}
 	return line;
 }
 

@@ -16,7 +16,6 @@ function isTask(value: unknown): value is Task {
 		optional(t.description, isString) &&
 		optional(t.activeForm, isString) &&
 		optional(t.owner, isString) &&
-		optional(t.blockedBy, (v) => Array.isArray(v) && v.every((id) => Number.isSafeInteger(id))) &&
 		optional(t.metadata, (v) => typeof v === "object" && v !== null)
 	);
 }
