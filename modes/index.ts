@@ -1,6 +1,6 @@
 /**
  * Build, Plan, and Learn share one mode controller and tool checkpoint.
- * Shift+Tab cycles modes; /plan and /learn toggle their mode directly.
+ * Shift+Tab cycles modes.
  * Plan preserves the existing exploration/execute flow. Learn teaches without
  * doing the task and permits only local file inspection and web reading.
  */
@@ -129,25 +129,9 @@ export default function modesExtension(pi: ExtensionAPI): void {
 		updateStatus(ctx);
 	}
 
-	pi.registerCommand("plan", {
-		description: "Toggle plan mode (read-only exploration)",
-		handler: async (_args, ctx) => changeMode(mode === "plan" ? "build" : "plan", ctx),
-	});
-
-	pi.registerCommand("learn", {
-		description: "Toggle learn mode (guided thinking, no solutions)",
-		handler: async (_args, ctx) => changeMode(mode === "learn" ? "build" : "learn", ctx),
-	});
-
 	pi.registerShortcut("shift+tab", {
 		description: "Cycle build, plan, and learn modes",
 		handler: async (ctx) => changeMode(mode === "build" ? "plan" : mode === "plan" ? "learn" : "build", ctx),
-	});
-
-	// Keep Ctrl+Alt+P as a direct Plan toggle.
-	pi.registerShortcut("ctrl+alt+p", {
-		description: "Toggle plan mode",
-		handler: async (ctx) => changeMode(mode === "plan" ? "build" : "plan", ctx),
 	});
 
 	// Exposure alone is not a permission boundary: also block nested/inactive calls.
@@ -164,7 +148,7 @@ export default function modesExtension(pi: ExtensionAPI): void {
 			if (!isSafeCommand(command)) {
 				return {
 					block: true,
-					reason: `Plan mode: command blocked (not allowlisted). Use /plan to disable plan mode first.\nCommand: ${command}`,
+					reason: `${mode} mode: command blocked (not allowlisted). Ask the user to press Shift+Tab to return to build mode.\nCommand: ${command}`,
 				};
 			}
 		}

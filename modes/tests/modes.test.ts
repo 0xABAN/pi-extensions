@@ -24,7 +24,7 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 	let choice: string | undefined;
 
 	const handlers = new Map<string, Function>();
-	const commands = new Map<string, { handler: Function }>();
+	const commands = new Map<string, unknown>();
 	const shortcuts = new Map<string, { handler: Function }>();
 	const statuses = new Map<string, string>();
 	const flagValues = new Map<string, unknown>();
@@ -47,7 +47,7 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 
 	modesExtension({
 		on: (name: string, handler: Function) => handlers.set(name, handler),
-		registerCommand: (name: string, command: { handler: Function }) => commands.set(name, command),
+		registerCommand: (name: string, command: unknown) => commands.set(name, command),
 		registerShortcut: (key: string, shortcut: { handler: Function }) => shortcuts.set(key, shortcut),
 		registerFlag: (name: string, flag: { default: unknown }) => flagValues.set(name, flags[name] ?? flag.default),
 		getFlag: (name: string) => flagValues.get(name),
@@ -71,8 +71,9 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 		statuses,
 		notices,
 		sent,
-		command: (name: string) => commands.get(name)!.handler("", ctx),
-		shortcut: (key: string) => shortcuts.get(key)!.handler(ctx),
+		commands,
+		shortcuts,
+		shiftTab: () => shortcuts.get("shift+tab")!.handler(ctx),
 		tools: () => activeTools,
 		entries: () => branch,
 		setBranch: (next: Entry[]) => {
@@ -90,8 +91,8 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 
 async function savedLearn() {
 	const h = await harness();
-	await h.shortcut("shift+tab");
-	await h.shortcut("shift+tab");
+	await h.shiftTab();
+	await h.shiftTab();
 	return structuredClone(h.entries());
 }
 
@@ -100,24 +101,35 @@ function promptEvent() {
 	return { systemPromptOptions: { appendSystemPrompt: "Other instructions.\n", sections } };
 }
 
+test("shift+tab is the only mode control", async () => {
+	const h = await harness();
+
+	expect([...h.commands.keys()]).toEqual([]);
+	expect([...h.shortcuts.keys()]).toEqual(["shift+tab"]);
+});
+
 test("plan hides edits, keeps other tools, and filters bash", async () => {
 	const h = await harness();
 	expect(h.mode()).toMatch(/build mode$/);
 
-	await h.shortcut("shift+tab");
+	await h.shiftTab();
 	expect(h.mode()).toMatch(/plan mode$/);
 	expect(h.tools()).not.toContain("edit");
 	expect(h.tools()).toContain("custom_tool");
 	expect(h.tools()).toContain("todo");
 
-	expect((await h.emit("tool_call", { toolName: "bash", input: { command: "rm file" } })).block).toBe(true);
+	const blocked = await h.emit("tool_call", { toolName: "bash", input: { command: "rm file" } });
+	expect(blocked.block).toBe(true);
+	expect(blocked.reason).toStartWith("plan mode: command blocked");
+	expect(blocked.reason).toContain("press Shift+Tab");
+
 	expect(await h.emit("tool_call", { toolName: "bash", input: { command: "git status" } })).toBeUndefined();
 });
 
 test("learn blocks every tool outside its list, including nested calls", async () => {
 	const h = await harness();
-	await h.shortcut("shift+tab");
-	await h.shortcut("shift+tab");
+	await h.shiftTab();
+	await h.shiftTab();
 	expect(h.mode()).toBe(LEARN_LABEL);
 	expect(h.tools()).toEqual([...LEARN_MODE_TOOLS]);
 
@@ -143,7 +155,8 @@ test("learn appends its policy once, and leaving removes only that policy", asyn
 	const event = promptEvent();
 	const options = event.systemPromptOptions;
 
-	await h.command("learn");
+	await h.shiftTab();
+	await h.shiftTab();
 	await h.emit("before_agent_start", event);
 	expect(options.appendSystemPrompt).toContain(LEARN_MODE_PROMPT);
 	expect(options.sections.unrelated).toBe("keep me");
@@ -152,13 +165,12 @@ test("learn appends its policy once, and leaving removes only that policy", asyn
 	await h.emit("before_agent_start", event);
 	expect(options.appendSystemPrompt).toBe(learnAppendix);
 
-	await h.command("learn");
+	await h.shiftTab();
 	await h.emit("before_agent_start", event);
 	expect(options.sections).toEqual({ unrelated: "keep me" });
 	expect(options.appendSystemPrompt).toBe("Other instructions.\n");
 
-	await h.command("learn");
-	await h.command("plan");
+	await h.shiftTab();
 	await h.emit("before_agent_start", event);
 	expect(options.appendSystemPrompt).toBe("Other instructions.\n");
 });
@@ -196,32 +208,15 @@ test("learn never offers to execute a Plan section", async () => {
 	expect(h.sent).toHaveLength(0);
 });
 
-test("returning to build restores the original tools and allows edits", async () => {
+test("a full cycle back to build restores the original tools and allows edits", async () => {
 	const h = await harness();
-	await h.shortcut("shift+tab");
-	await h.shortcut("shift+tab");
-	await h.shortcut("shift+tab");
+	await h.shiftTab();
+	await h.shiftTab();
+	await h.shiftTab();
 
 	expect(h.mode()).toMatch(/build mode$/);
 	expect(h.tools()).toEqual(BUILD_TOOLS);
 	expect(await h.emit("tool_call", { toolName: "edit", input: {} })).toBeUndefined();
-});
-
-test("direct toggles and plan ↔ learn switches keep the original build tools", async () => {
-	const h = await harness();
-
-	await h.command("learn");
-	await h.command("plan");
-	expect(h.mode()).toMatch(/plan mode$/);
-
-	await h.command("learn");
-	await h.command("learn");
-	expect(h.tools()).toEqual(BUILD_TOOLS);
-
-	await h.shortcut("ctrl+alt+p");
-	expect(h.mode()).toMatch(/plan mode$/);
-	await h.shortcut("ctrl+alt+p");
-	expect(h.mode()).toMatch(/build mode$/);
 });
 
 test("refuses to change modes while a turn is running", async () => {
@@ -229,11 +224,10 @@ test("refuses to change modes while a turn is running", async () => {
 	h.setIdle(false);
 	const before = structuredClone(h.entries());
 
-	await h.command("learn");
-	await h.shortcut("shift+tab");
+	await h.shiftTab();
 	expect(h.mode()).toMatch(/build mode$/);
 	expect(h.entries()).toEqual(before);
-	expect(h.notices).toHaveLength(2);
+	expect(h.notices).toHaveLength(1);
 });
 
 test("reload restores learn from the saved build tools, and the tree follows the branch", async () => {
@@ -241,7 +235,7 @@ test("reload restores learn from the saved build tools, and the tree follows the
 	const resumed = await harness({ entries: saved, tools: [...LEARN_MODE_TOOLS], reason: "reload" });
 	expect(resumed.mode()).toBe(LEARN_LABEL);
 
-	await resumed.command("learn");
+	await resumed.shiftTab();
 	expect(resumed.tools()).toEqual(BUILD_TOOLS);
 
 	resumed.setBranch(saved);
@@ -260,10 +254,10 @@ test("migrates a legacy plan-mode entry on the next switch", async () => {
 	});
 	expect(legacy.mode()).toMatch(/plan mode$/);
 
-	await legacy.command("learn");
+	await legacy.shiftTab();
 	expect(legacy.entries().at(-1)!.customType).toBe("agent-mode");
 
-	await legacy.command("learn");
+	await legacy.shiftTab();
 	expect(legacy.tools()).toEqual(BUILD_TOOLS);
 });
 
@@ -271,9 +265,9 @@ test("does not enable tools the user disabled before switching", async () => {
 	const limited = await harness({ tools: ["read", "custom_tool"] });
 	expect(limited.tools()).toEqual(["read", "custom_tool"]);
 
-	await limited.command("learn");
-	await limited.command("plan");
-	await limited.command("plan");
+	await limited.shiftTab();
+	await limited.shiftTab();
+	await limited.shiftTab();
 	expect(limited.tools()).toEqual(["read", "custom_tool"]);
 });
 

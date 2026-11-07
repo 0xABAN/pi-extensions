@@ -14,8 +14,6 @@ Run `/reload` in Pi after installation or source changes.
 ## Controls
 
 - `Shift+Tab`: Build → Plan → Learn → Build.
-- `/plan` or `Ctrl+Alt+P`: toggle Plan and Build; enter Plan from Learn.
-- `/learn`: toggle Learn and Build; enter Learn from Plan.
 - `--plan` or `--learn`: choose a startup mode, overriding saved state.
   Learn wins if both flags are set.
 
