@@ -97,6 +97,11 @@ After a plan, choose Execute, Stay, or Refine. Execute returns to Build and remi
 the agent to seed the steps into an rpiv-todo list before working through them.
 The reminder is not a tool gate.
 
+## Structure
+
+Mode status formatting in `status.ts` is pure. `index.ts` owns status publication,
+tool restoration, and persistence.
+
 ## Checks
 
 From the repository root:
