@@ -12,7 +12,6 @@
   "include": [
     "inline-skills/**/*.ts",
     "dj/**/*.ts",
-    "commit-policy/**/*.ts",
     "modes/**/*.ts",
     "response-time/**/*.ts",
     "whimsical/**/*.ts",

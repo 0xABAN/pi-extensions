@@ -8,7 +8,6 @@
     "extensions": [
       "inline-skills/index.ts",
       "dj/index.ts",
-      "commit-policy/index.ts",
       "modes/index.ts",
       "response-time/index.ts",
       "whimsical/index.ts"
@@ -17,7 +16,6 @@
   "workspaces": [
     "inline-skills",
     "dj",
-    "commit-policy",
     "modes",
     "response-time",
     "whimsical",

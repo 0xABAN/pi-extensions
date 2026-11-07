@@ -6,7 +6,6 @@ Personal extensions for the [Pi coding agent](https://github.com/earendil-works/
 
 | Extension | Description |
 | --- | --- |
-| [commit-policy](commit-policy/) | Add the git commit policy to each new session |
 | [dj](dj/) | Spotify now playing, with pastel themes and layout presets |
 | [inline-skills](inline-skills/) | Complete and apply skills anywhere in a prompt |
 | [modes](modes/) | Switch between Build, Plan, and Learn modes |

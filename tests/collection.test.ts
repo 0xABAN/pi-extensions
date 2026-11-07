@@ -12,7 +12,6 @@ test("the collection explicitly lists package entry points, never helpers or tes
   expect(manifest.pi.extensions).toEqual([
     "inline-skills/index.ts",
     "dj/index.ts",
-    "commit-policy/index.ts",
     "modes/index.ts",
     "response-time/index.ts",
     "whimsical/index.ts",
@@ -36,7 +35,7 @@ test("Pi loads the collection and honors per-extension filtering", async () => {
       await loader.reload();
       const loaded = loader.getExtensions();
       expect(loaded.errors).toEqual([]);
-      expect(loaded.extensions).toHaveLength(filter ? 1 : 6);
+      expect(loaded.extensions).toHaveLength(filter ? 1 : 5);
       expect(loaded.extensions.filter(extension => extension.commands.has("dj"))).toHaveLength(1);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   }
