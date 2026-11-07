@@ -221,20 +221,51 @@ test("learn's policy reaches turns without a UI", async () => {
 	expect(event.systemPromptOptions.sections.learn_mode).toBe(LEARN_MODE_PROMPT);
 });
 
-test("learn drops plan notes from context but keeps the lesson", async () => {
-	const h = await harness({ flags: { learn: true } });
+test("learn adds a hidden note to every turn, and other modes do not", async () => {
+	const h = await harness();
+	const note = async () => (await h.emit("before_agent_start", promptEvent()))?.message;
+	const learnNote = {
+		customType: "learn-mode-context",
+		content: expect.stringContaining("follow the <learn_mode> rules"),
+		display: false,
+	};
+
+	expect(await note()).toBeUndefined();
+
+	await h.shiftTab();
+	expect((await note()).customType).toBe("plan-mode-context");
+
+	await h.shiftTab();
+	expect(await note()).toEqual(learnNote);
+	expect(await note()).toEqual(learnNote);
+
+	await h.shiftTab();
+	expect(await note()).toBeUndefined();
+});
+
+test("each mode keeps only its own notes in context, and the lesson in all of them", async () => {
+	const planNote = { role: "custom", customType: "plan-mode-context", content: "Produce a plan." };
+	const execute = { role: "custom", customType: "plan-mode-execute", content: "Execute the plan." };
+	const learnNote = { role: "custom", customType: "learn-mode-context", content: "Guide, don't solve." };
 	const explanation = { role: "assistant", content: [{ type: "text", text: "A return exits the whole function." }] };
 	const lesson = { role: "user", content: "I understand return. I have not traced the loop yet." };
 
-	const context = await h.emit("context", {
-		messages: [
-			{ role: "custom", customType: "plan-mode-context", content: "Produce a plan." },
-			{ role: "custom", customType: "plan-mode-execute", content: "Execute the plan." },
-			explanation,
-			lesson,
-		],
-	});
-	expect(context.messages).toEqual([explanation, lesson]);
+	const h = await harness();
+	const context = async () => {
+		const messages = [planNote, execute, learnNote, explanation, lesson];
+		return (await h.emit("context", { messages })).messages;
+	};
+
+	expect(await context()).toEqual([execute, explanation, lesson]);
+
+	await h.shiftTab();
+	expect(await context()).toEqual([planNote, execute, explanation, lesson]);
+
+	await h.shiftTab();
+	expect(await context()).toEqual([learnNote, explanation, lesson]);
+
+	await h.shiftTab();
+	expect(await context()).toEqual([execute, explanation, lesson]);
 });
 
 test("learn never offers to execute a Plan section", async () => {

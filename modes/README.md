@@ -65,7 +65,10 @@ Learn uses the read-only tools. The agent may run read-only commands but not
 programs; you write the code and run experiments yourself. Existing source files
 and tool results remain visible; Learn does not redact them.
 
-The teaching policy is the `learn_mode` system prompt section.
+The teaching policy is the `learn_mode` system prompt section. Like Plan, Learn
+adds a short hidden note after each of your messages that points the model back
+to those rules, so a session started in Build or Plan does not drift from them.
+Each mode drops the other modes' notes from context.
 
 Tool restrictions are enforced in code. Teaching behavior relies on the model
 following its instructions, so this is not a guarantee against answer leakage.

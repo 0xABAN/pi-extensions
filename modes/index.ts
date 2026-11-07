@@ -123,15 +123,19 @@ export default function modesExtension(pi: ExtensionAPI): void {
 		}
 	});
 
-	// Drop stale Plan instructions, including execution reminders while learning.
+	function staleNotes(): Set<string> {
+		if (mode === "plan") return new Set(["learn-mode-context"]);
+		if (mode === "learn") return new Set(["plan-mode-context", "plan-mode-execute"]);
+		return new Set(["plan-mode-context", "learn-mode-context"]);
+	}
+
+	// Each mode keeps only its own notes; Learn also drops Plan's execution reminders.
 	pi.on("context", async (event) => {
-		if (mode === "plan") return;
+		const stale = staleNotes();
 		return {
 			messages: event.messages.filter((m) => {
-				const msg = m as AgentMessage & { customType?: string };
-				if (msg.customType === "plan-mode-context") return false;
-				if (mode === "learn" && msg.customType === "plan-mode-execute") return false;
-				return true;
+				const { customType } = m as AgentMessage & { customType?: string };
+				return !customType || !stale.has(customType);
 			}),
 		};
 	});
@@ -142,7 +146,14 @@ export default function modesExtension(pi: ExtensionAPI): void {
 
 		if (mode === "learn") {
 			event.systemPromptOptions.sections.learn_mode = LEARN_MODE_PROMPT;
-			return;
+			return {
+				message: {
+					customType: "learn-mode-context",
+					content:
+						"Learn mode: follow the <learn_mode> rules. Guide, don't solve: no code, fixes, or solution steps. Under 100 words, at most one question.",
+					display: false,
+				},
+			};
 		}
 		if (mode !== "plan") return;
 		return {
