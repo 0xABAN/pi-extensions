@@ -117,14 +117,6 @@
         "@earendil-works/pi-tui": ">=0.81.0",
       },
     },
-    "skill-palette": {
-      "name": "pi-skill-palette",
-      "version": "2.2.0",
-      "peerDependencies": {
-        "@earendil-works/pi-coding-agent": ">=0.83.0",
-        "@earendil-works/pi-tui": ">=0.83.0",
-      },
-    },
     "todo": {
       "name": "@juicesharp/rpiv-todo",
       "version": "2.15.0",
@@ -594,8 +586,6 @@
     "pi-modes": ["pi-modes@workspace:modes"],
 
     "pi-powerline-footer": ["pi-powerline-footer@workspace:powerline"],
-
-    "pi-skill-palette": ["pi-skill-palette@workspace:skill-palette"],
 
     "pi-whimsical": ["pi-whimsical@workspace:whimsical"],
 
