@@ -6,14 +6,12 @@
   "keywords": ["pi-package"],
   "pi": {
     "extensions": [
-      "inline-skills/index.ts",
       "dj/index.ts",
       "modes/index.ts",
       "whimsical/index.ts"
     ]
   },
   "workspaces": [
-    "inline-skills",
     "dj",
     "modes",
     "whimsical",

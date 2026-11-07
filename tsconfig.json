@@ -10,7 +10,6 @@
     "types": ["bun"]
   },
   "include": [
-    "inline-skills/**/*.ts",
     "dj/**/*.ts",
     "modes/**/*.ts",
     "whimsical/**/*.ts",
