@@ -32,12 +32,11 @@ import { resolveThinkingLevelSelection } from "./thinking-level.ts";
 import { getGitStatus, invalidateGitStatus, invalidateGitBranch, subscribeGitUpdates } from "./git-status.ts";
 import { SessionUsageCache } from "./token-stats.ts";
 import { ansi, getFgAnsiCode } from "./colors.ts";
-import { WelcomeComponent, WelcomeHeader, discoverLoadedCounts, getRecentSessions } from "./welcome.ts";
 import { createRenderScheduler } from "./render-scheduler.ts";
 import { getEditorAutocompleteProvider, passAutocompleteProviderThroughPreviousEditor } from "./editor-composition.ts";
 import { EditorPerfProfiler, readEditorPerfOptions } from "./editor-performance.ts";
-import { CoreContextUsageCache, estimateInitialContextTokens, estimateUnknownContextUsage, resolveDisplayContextUsage, type CoreContextUsage } from "./context-usage.ts";
-import { isStaleExtensionContextError, shouldShowStartupWelcome } from "./lifecycle.ts";
+import { CoreContextUsageCache, estimateUnknownContextUsage, resolveDisplayContextUsage, type CoreContextUsage } from "./context-usage.ts";
+import { isStaleExtensionContextError } from "./lifecycle.ts";
 import { getDefaultColors } from "./theme.ts";
 import { registerCdCommand } from "./cd-command.ts";
 import {
@@ -91,7 +90,6 @@ let config: PowerlineConfig = {
   invalidSecondaryOverflow: null,
   workingIndicatorPlacement: "above-powerline",
   invalidWorkingIndicatorPlacement: null,
-  welcome: true,
   stashSharpSShortcut: false,
   queue: { compactPromptMode: "queue" },
   sendDelayMs: 0,
@@ -649,7 +647,7 @@ function writePowerlinePresetSetting(preset: StatusLinePreset, cwd: string = pro
 
 function writePowerlineOptionSetting(
   cwd: string,
-  updates: Partial<Pick<PowerlineConfig, "welcome" | "stashSharpSShortcut" | "placement">>,
+  updates: Partial<Pick<PowerlineConfig, "stashSharpSShortcut" | "placement">>,
   currentPreset: StatusLinePreset,
 ): boolean {
   return writePowerlineSetting(cwd, (existingPowerlineSetting) => (
@@ -1134,10 +1132,6 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   let tuiRef: any = null;
   let restoreFooterStatusRepaintHook: (() => void) | null = null;
   let stashShortcutInputUnsubscribe: (() => void) | null = null;
-  let dismissWelcomeOverlay: (() => void) | null = null;
-  let welcomeHeaderActive = false;
-  let welcomeRequest: AbortController | null = null;
-  let welcomeTimer: ReturnType<typeof setTimeout> | null = null;
   let lastUserPrompt = "";
   let showLastPrompt = true;
   let lastPromptRenderCache: {
@@ -1741,7 +1735,6 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
   // Track session start
   pi.on("session_start", async (event, ctx) => {
-    dismissWelcome(ctx);
     shellSession?.dispose();
     shellSession = null;
     sessionGeneration++;
@@ -1790,15 +1783,6 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
     if (enabled && ctx.hasUI) {
       setupCustomEditor(ctx);
-      if (shouldShowStartupWelcome(event.reason, config.welcome, ctx.mode)) {
-        if (settings.quietStartup === true) {
-          setupWelcomeHeader(ctx);
-        } else {
-          setupWelcomeOverlay(ctx);
-        }
-      } else {
-        dismissWelcome(ctx);
-      }
     }
 
   });
@@ -1815,11 +1799,6 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     }
     stashedEditorText = null;
     sessionGeneration++;
-    try {
-      dismissWelcome(ctx);
-    } catch (error) {
-      if (!isStaleExtensionContextError(error)) throw error;
-    }
     restorePendingSend();
     statusRenderScheduler.cancel();
     restoreFooterStatusRepaintHook?.();
@@ -1981,12 +1960,10 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   });
 
   // Track streaming state (footer only shows status during streaming)
-  // Also dismiss welcome when agent starts responding (handles `p "command"` case)
   pi.on("agent_start", async (_event, ctx) => {
     isStreaming = true;
     liveAssistantUsage = null;
     onVibeAgentStart();
-    dismissWelcome(ctx);
     currentCtx = ctx;
   });
 
@@ -2066,9 +2043,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     schedulePostCompactionDelivery();
   });
 
-  // Also dismiss on tool calls (agent is working) + refresh vibe if rate limit allows
+  // Refresh vibe on tool calls if rate limit allows
   pi.on("tool_call", async (event, ctx) => {
-    dismissWelcome(ctx);
     if (ctx.hasUI) {
       // Extract recent agent context from session for richer vibe generation
       const agentContext = getRecentAgentContext(ctx);
@@ -2100,26 +2076,6 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       }
     }
     return undefined;
-  }
-
-  function dismissWelcome(ctx: any) {
-    welcomeRequest?.abort();
-    welcomeRequest = null;
-    if (welcomeTimer) clearTimeout(welcomeTimer);
-    welcomeTimer = null;
-    if (dismissWelcomeOverlay) {
-      dismissWelcomeOverlay();
-      dismissWelcomeOverlay = null;
-    }
-    if (welcomeHeaderActive) {
-      welcomeHeaderActive = false;
-      ctx.ui.setHeader(undefined);
-    }
-  }
-
-  function dismissWelcomeForInput(ctx: any) {
-    if (!welcomeRequest && !dismissWelcomeOverlay && !welcomeHeaderActive) return;
-    dismissWelcome(ctx);
   }
 
   function addStashHistoryEntry(text: string): void {
@@ -2517,7 +2473,6 @@ export default function powerlineFooter(pi: ExtensionAPI) {
           shellSession = null;
           bashTranscript.clear();
           bashModeActive = false;
-          dismissWelcome(ctx);
           getPromptHistoryState().savedPromptHistory = [];
           stashedEditorText = null;
           clearActiveStashReload(ctx);
@@ -3200,7 +3155,6 @@ export default function powerlineFooter(pi: ExtensionAPI) {
         }
         if (isStashShortcutInput(data)) {
           stashOrRestoreEditorText(ctx);
-          dismissWelcomeForInput(ctx);
           tuiRef?.requestRender();
           return { consume: true };
         }
@@ -3211,7 +3165,6 @@ export default function powerlineFooter(pi: ExtensionAPI) {
         }
 
         runPowerlineShortcut(ctx, powerlineShortcutAction);
-        dismissWelcomeForInput(ctx);
         tuiRef?.requestRender();
         return { consume: true };
       })
@@ -3325,7 +3278,6 @@ export default function powerlineFooter(pi: ExtensionAPI) {
         : baseHandleInput;
       const handlePowerlineEditorInput = (data: string) => {
         lastEditorInputAt = Date.now();
-        dismissWelcomeForInput(ctx);
 
         if (isPrintableInput(data)) {
           originalHandleInput(data);
@@ -3493,134 +3445,5 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     });
 
     installPowerlineWidgets(ctx);
-  }
-
-  function beginWelcomeRequest(ctx: any): AbortController {
-    dismissWelcome(ctx);
-    welcomeRequest = new AbortController();
-    return welcomeRequest;
-  }
-
-  function canShowWelcome(ctx: any, request: AbortController, generation: number): boolean {
-    if (request !== welcomeRequest || request.signal.aborted || generation !== sessionGeneration
-      || !enabled || !config.welcome || !ctx.hasUI || isStreaming
-      || ctx.ui.getEditorText()) return false;
-    const sessionEvents = ctx.sessionManager?.getBranch?.() ?? [];
-    return !sessionEvents.some((entry: unknown) => {
-      if (!isRecord(entry)) return false;
-      if (entry.type === "tool_call" || entry.type === "tool_result") return true;
-      return entry.type === "message" && isRecord(entry.message) && entry.message.role === "assistant";
-    });
-  }
-
-  function setupWelcomeHeader(ctx: any) {
-    const request = beginWelcomeRequest(ctx);
-    const generation = sessionGeneration;
-    // Keep optional archive discovery off the session_start completion path.
-    welcomeTimer = setTimeout(async () => {
-      welcomeTimer = null;
-      try {
-        if (!canShowWelcome(ctx, request, generation)) return;
-        const recentSessions = await getRecentSessions(3, request.signal);
-        if (!canShowWelcome(ctx, request, generation)) return;
-        const modelName = ctx.model?.name || ctx.model?.id || "No model";
-        const providerName = ctx.model?.provider || "Unknown";
-        const loadedCounts = discoverLoadedCounts(pi.getCommands());
-        const initialContextTokens = estimateInitialContextTokens(ctx);
-
-        const header = new WelcomeHeader(modelName, providerName, recentSessions, loadedCounts, initialContextTokens);
-        welcomeHeaderActive = true;
-        ctx.ui.setHeader(() => header);
-      } catch (error: unknown) {
-        if (!request.signal.aborted || error !== request.signal.reason) {
-          console.debug("[powerline-footer] Welcome header failed:", error);
-        }
-      }
-    }, 0);
-  }
-
-  function setupWelcomeOverlay(ctx: any) {
-    const request = beginWelcomeRequest(ctx);
-    const modelName = ctx.model?.name || ctx.model?.id || "No model";
-    const providerName = ctx.model?.provider || "Unknown";
-
-    const overlaySessionGeneration = sessionGeneration;
-
-    // Small delay to let pi-mono finish initialization
-    welcomeTimer = setTimeout(async () => {
-      welcomeTimer = null;
-      try {
-        if (!canShowWelcome(ctx, request, overlaySessionGeneration)) return;
-        const recentSessions = await getRecentSessions(3, request.signal);
-        if (!canShowWelcome(ctx, request, overlaySessionGeneration)) return;
-        const loadedCounts = discoverLoadedCounts(pi.getCommands());
-        const initialContextTokens = estimateInitialContextTokens(ctx);
-
-        void ctx.ui.custom(
-          (tui: any, _theme: any, _keybindings: any, done: (result: void) => void) => {
-            if (!canShowWelcome(ctx, request, overlaySessionGeneration)) {
-              done();
-              return { render: () => [], invalidate() {} };
-            }
-            const welcome = new WelcomeComponent(
-              modelName,
-              providerName,
-              recentSessions,
-              loadedCounts,
-              initialContextTokens,
-            );
-
-            let countdown = 30;
-            let dismissed = false;
-            let interval: ReturnType<typeof setInterval> | null = null;
-
-            const dismiss = () => {
-              if (dismissed) return;
-              dismissed = true;
-              if (interval) clearInterval(interval);
-              request.abort();
-              if (welcomeRequest === request) welcomeRequest = null;
-              dismissWelcomeOverlay = null;
-              done();
-            };
-
-            interval = setInterval(() => {
-              if (dismissed) return;
-              countdown--;
-              welcome.setCountdown(countdown);
-              tui.requestRender();
-              if (countdown <= 0) dismiss();
-            }, 1000);
-
-            dismissWelcomeOverlay = dismiss;
-
-            return {
-              focused: false,
-              wantsKeyRelease: true,
-              invalidate: () => welcome.invalidate(),
-              render: (width: number) => welcome.render(width),
-              handleInput: (data: string) => {
-                dismiss();
-                if (!isKeyRelease(data)) currentEditor?.handleInput(data);
-              },
-              dispose: dismiss,
-            };
-          },
-          {
-            overlay: true,
-            overlayOptions: () => ({
-              verticalAlign: "center",
-              horizontalAlign: "center",
-            }),
-          },
-        ).catch((error: unknown) => {
-          console.debug("[powerline-footer] Welcome overlay failed:", error);
-        });
-      } catch (error: unknown) {
-        if (!request.signal.aborted || error !== request.signal.reason) {
-          console.debug("[powerline-footer] Welcome overlay failed:", error);
-        }
-      }
-    }, 100);
   }
 }

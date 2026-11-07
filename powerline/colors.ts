@@ -25,7 +25,7 @@ function hexToRgb(hex: string): [number, number, number] {
   ];
 }
 
-// Colors used by welcome/editor chrome rendering
+// Colors used by editor chrome rendering
 const THEME = {
   sep: 244,               // ANSI 256 gray
   model: "#d787af",       // Pink/mauve
@@ -55,12 +55,6 @@ function getAnsiCode(color: ColorName): string {
   }
   
   return "";
-}
-
-// Helper to apply foreground color only (no reset - caller manages reset)
-export function fgOnly(color: ColorName, text: string): string {
-  const code = getAnsiCode(color);
-  return code ? `${code}${text}` : text;
 }
 
 // Get raw ANSI code for a color

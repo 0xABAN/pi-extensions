@@ -4,7 +4,7 @@
 
 # pi-powerline-footer
 
-Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a powerline-style status bar, welcome overlay, and AI-generated "vibes" for loading messages. Inspired by [Powerlevel10k](https://github.com/romkatv/powerlevel10k) and [oh-my-pi](https://github.com/can1357/oh-my-pi).
+Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a powerline-style status bar and AI-generated "vibes" for loading messages. Inspired by [Powerlevel10k](https://github.com/romkatv/powerlevel10k) and [oh-my-pi](https://github.com/can1357/oh-my-pi).
 
 <img width="1261" height="817" alt="Example powerline UI" src="https://github.com/user-attachments/assets/4cc43320-3fb8-4503-b857-69dffa7028f2" />
 
@@ -18,8 +18,6 @@ Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a p
 **Powerline Queue** — Messages typed during compaction are held by Powerline and delivered after successful compaction instead of disappearing into Pi's native queue. `/queue` provides a file-backed queue for aliases, retries, clears, and manual delivery. Active queued and blocked counts appear in the `queue` segment only when there is something to show.
 
 **Working Vibes** — AI-generated themed loading messages. Set `/vibe star trek` and your "Working..." becomes "Running diagnostics..." or "Engaging warp drive...". Supports any theme: pirate, zen, noir, cowboy, etc.
-
-**Welcome overlay** — Branded splash screen shown as centered overlay on startup. Shows gradient logo, model info, keyboard tips, detected AGENTS.md files, effective loaded skills and prompt templates, an approximate initial system-prompt token count, and recent sessions. Auto-dismisses after 30 seconds or on any key press. Set `powerline.welcome` to `false` to disable it while keeping the footer enabled.
 
 **Powerline placement** — The primary Powerline row can be shown above or below the editor.
 
@@ -89,8 +87,7 @@ You can also set it in the agent settings file (`~/.pi/agent/settings.json` by d
   "showLastPrompt": true,
   "powerline": {
     "preset": "default",
-    "placement": "below",
-    "welcome": true
+    "placement": "below"
   }
 }
 ```
@@ -164,7 +161,7 @@ To hide an extension's status without giving it its own item, list its key in `h
 { "powerline": { "hiddenExtensionStatusKeys": ["mcp", "pi-lens-lsp"] } }
 ```
 
-If you still prefer the older string preset config shape, `"powerline": "default"` continues to work. String preset shorthand keeps `welcome` enabled and uses the default shortcut/cost/model display settings.
+If you still prefer the older string preset config shape, `"powerline": "default"` continues to work. String preset shorthand uses the default shortcut/cost/model display settings.
 
 ### Disabling segments
 
