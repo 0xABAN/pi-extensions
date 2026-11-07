@@ -8,7 +8,7 @@ Personal extensions for the [Pi coding agent](https://github.com/earendil-works/
 | --- | --- |
 | [dj](dj/) | Spotify now playing, with pastel themes and layout presets |
 | [modes](modes/) | Switch between Build, Plan, and Learn modes |
-| [whimsical](whimsical/) | Sparkle animation for the working indicator |
+| [whimsical](whimsical/) | Sparkle animation for Pi's status line; needs the [Pi fork](https://github.com/0xABAN/pi) |
 
 ## Maintained copies
 

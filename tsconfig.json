@@ -12,7 +12,6 @@
   "include": [
     "dj/**/*.ts",
     "modes/**/*.ts",
-    "whimsical/**/*.ts",
     "tests/**/*.ts"
   ]
 }

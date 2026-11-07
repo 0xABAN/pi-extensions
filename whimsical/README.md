@@ -1,15 +1,5 @@
 # Whimsical
 
-Replace Pi's working indicator with a colorful sparkle animation and a random message, shown just above the editor and below the rpiv-todo list. Compaction gets the same animation.
+Turns Pi's status line, the row directly above the prompt, into a colorful sparkle animation. Each turn shows a random message such as "Combobulating...". The compaction, branch summary, and retry lines get the same sparkles around their own text.
 
-## Install
-
-```sh
-pi install ~/dev/pi-extensions/whimsical
-```
-
-Run `/reload` in Pi after installation or source changes.
-
-## Compatibility
-
-Pi's compaction loader ignores custom working indicators. `compaction_loader.ts` patches `Loader.prototype.setIndicator` once per process to animate the compacting message. Keep that patch out of `catalog.ts` and `animation.ts`, and remove it when Pi exposes compaction indicator options.
+Whimsical needs the [Pi fork](https://github.com/0xABAN/pi). It passes Pi a function that builds the animation frames around the current message, which stock Pi does not support.

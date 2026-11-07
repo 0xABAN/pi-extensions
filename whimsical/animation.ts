@@ -2,18 +2,12 @@ import { COLORS, SYMBOLS, messages } from "./catalog.ts";
 
 const RESET = "\x1b[39m";
 
-function pickRandom<T>(items: T[]): T {
-	return items[Math.floor(Math.random() * items.length)]!;
-}
+export const INTERVAL_MS = 90;
 
 function paint(text: string, color: string): string {
 	return `${color}${text}${RESET}`;
 }
 
-export const INTERVAL_MS = 90;
-
-// Whole line lives in indicator frames (rendered verbatim + animated).
-// setWorkingMessage is theme-muted and static, so it can't do this effect.
 export function sparkleFrames(message: string): string[] {
 	return Array.from({ length: SYMBOLS.length }, (_, i) => {
 		const s1 = SYMBOLS[i]!;
@@ -27,6 +21,6 @@ export function sparkleFrames(message: string): string[] {
 	});
 }
 
-export function randomFrames(): string[] {
-	return sparkleFrames(pickRandom(messages));
+export function randomMessage(): string {
+	return messages[Math.floor(Math.random() * messages.length)]!;
 }
