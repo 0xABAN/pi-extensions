@@ -1,0 +1,216 @@
+// Pure pi→Anthropic message conversion helpers.
+// Extracted so they can be tested without pulling in the full extension runtime.
+
+import type { Message as PiMessage } from "@earendil-works/pi-ai";
+import type { Message as SessionMessage, ToolResultBlock } from "cc-session-io";
+import { MCP_TOOL_PREFIX } from "./skills.js";
+
+export const PROVIDER_ID = "claude-bridge";
+
+export function sanitizeToolId(id: string, cache: Map<string, string>): string {
+	const existing = cache.get(id);
+	if (existing) return existing;
+	const clean = id.replace(/[^a-zA-Z0-9_-]/g, "_");
+	cache.set(id, clean);
+	return clean;
+}
+
+/** A pi tool name as the name a rebuilt transcript has to call it by.
+ *
+ *  On the provider path the query runs `tools: []`, so every tool Claude can
+ *  call is a pi tool served over MCP, and its name is `mcp__custom-tools__<pi name>`
+ *  by construction (resolveMcpTools). The map is consulted first only because it
+ *  carries the served tool's exact casing. A name it lacks is a tool pi ran that
+ *  we do not serve now (an extension since disabled), and naming that after a
+ *  Claude Code builtin would tell the model a builtin it cannot call is available
+ *  and was already used. That is the prompt condition behind the phantom-call
+ *  deadlock fixed in 122914dd, and the read direction refuses the same names for
+ *  the same reason (piToolNameFor in index.ts).
+ *
+ *  The AskClaude package has a trimmed copy of this conversion
+ *  (askclaude/src/claude-code.ts).
+ */
+function mapPiToolNameToSdk(name: string, customToolNameToSdk: ReadonlyMap<string, string> = new Map()): string {
+	if (!name) return "";
+	const normalized = name.toLowerCase();
+	// Pi history holds pi tool names. Our own SDK prefix can only reach here by
+	// feeding already-converted names back through the conversion, and prefixing
+	// twice invents a tool nobody serves.
+	if (normalized.startsWith(MCP_TOOL_PREFIX)) {
+		throw new Error(`mapPiToolNameToSdk: "${name}" is already an SDK tool name — pi history holds pi tool names`);
+	}
+	return customToolNameToSdk.get(name) ?? customToolNameToSdk.get(normalized) ?? `${MCP_TOOL_PREFIX}${name}`;
+}
+
+export function messageContentToText(
+	content: string | Array<{ type: string; text?: string; data?: string; mimeType?: string }>,
+): string {
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	const parts = [];
+	let hasText = false;
+	for (const block of content) {
+		if (block.type === "text" && block.text) { parts.push(block.text); hasText = true; }
+		else if (block.type !== "text" && block.type !== "image") { parts.push(`[${block.type}]`); }
+	}
+	return hasText ? parts.join("\n") : "";
+}
+
+// Tool results are flattened to text, which is how Claude Code stores most of
+// them. Images are the exception: they have no text form, so a result carrying
+// one keeps the block array shape instead (also what CC writes for screenshots).
+function toolResultContent(
+	content: string | Array<{ type: string; text?: string; data?: string; mimeType?: string }>,
+): string | Array<Record<string, unknown>> {
+	if (typeof content === "string" || !Array.isArray(content)) return messageContentToText(content) || "";
+	const images = content.filter((b) => b.type === "image" && b.data && b.mimeType);
+	if (!images.length) return messageContentToText(content) || "";
+	const blocks: Array<Record<string, unknown>> = [];
+	for (const block of content) {
+		if (block.type === "text" && block.text) blocks.push({ type: "text", text: block.text });
+		else if (block.type === "image" && block.data && block.mimeType) {
+			blocks.push({ type: "image", source: { type: "base64", media_type: block.mimeType, data: block.data } });
+		} else if (block.type !== "text" && block.type !== "image") {
+			// Same marker messageContentToText leaves for unrecognized blocks, so the
+			// text and image paths describe an extension's output the same way.
+			blocks.push({ type: "text", text: `[${block.type}]` });
+		}
+	}
+	return blocks;
+}
+
+/** Claude Code never sends an empty tool result: live, it substitutes these placeholders
+ *  (tests/int-cc-contracts.mjs pins them), and the API rejects an empty one marked is_error. */
+function nonEmptyToolResultContent(
+	msg: Extract<PiMessage, { role: "toolResult" }>,
+	customToolNameToSdk: ReadonlyMap<string, string>,
+): string | Array<Record<string, unknown>> {
+	const content = toolResultContent(msg.content);
+	if (typeof content !== "string" || content.trim()) return content;
+	return msg.isError ? "Command failed with no output" : `(${mapPiToolNameToSdk(msg.toolName, customToolNameToSdk)} completed with no output)`;
+}
+
+/** Convert pi message array to Anthropic API format. `recorded` replaces a tool
+ * result, by pi tool call id, with the block Claude Code recorded for it. */
+export function convertPiMessages(
+	messages: PiMessage[],
+	customToolNameToSdk: ReadonlyMap<string, string> = new Map(),
+	recorded: ReadonlyMap<string, ToolResultBlock> = new Map(),
+): { anthropicMessages: SessionMessage[]; sanitizedIds: Map<string, string>; origins: number[][] } {
+	const anthropicMessages: SessionMessage[] = [];
+	const sources = new Map<SessionMessage, number[]>();
+	const append = (message: SessionMessage, index: number) => {
+		anthropicMessages.push(message);
+		sources.set(message, [index]);
+	};
+	const sanitizedIds = new Map();
+	// The user message collecting this assistant turn's tool results, if one has
+	// been emitted yet, and the index of the assistant message it belongs to. Both
+	// are cleared at every assistant message — see the toolResult branch.
+	let turnResults: { role: "user"; content: Array<ToolResultBlock | Record<string, unknown>> } | null = null;
+	let turnAssistantIdx: number | null = null;
+
+	for (const [piIndex, msg] of messages.entries()) {
+		if (msg.role === "user") {
+			if (typeof msg.content === "string") {
+				append({ role: "user", content: msg.content || "[empty]" }, piIndex);
+			} else if (Array.isArray(msg.content)) {
+				const parts = [];
+				for (const block of msg.content) {
+					if (block.type === "text" && block.text) parts.push({ type: "text", text: block.text });
+					else if (block.type === "image" && block.data && block.mimeType) {
+						parts.push({ type: "image", source: { type: "base64", media_type: block.mimeType, data: block.data } });
+					}
+				}
+				append({ role: "user", content: parts.length ? parts : "[image]" } as SessionMessage, piIndex);
+			} else {
+				append({ role: "user", content: "[empty]" }, piIndex);
+			}
+		} else if (msg.role === "assistant") {
+			const content = Array.isArray(msg.content) ? msg.content : [];
+			const blocks = [];
+			for (const block of content) {
+				if (block.type === "text" && block.text) {
+					blocks.push({ type: "text", text: block.text });
+				} else if (block.type === "thinking") {
+					// Only replay thinking Claude Code itself produced. A signature minted
+					// by any other provider — including pi's own Anthropic provider — is
+					// not ours to hand back, and Anthropic rejects ones it can't verify.
+					const sig = block.thinkingSignature;
+					if (msg.provider === PROVIDER_ID && sig) {
+						blocks.push({ type: "thinking", thinking: block.thinking ?? "", signature: sig });
+					}
+				} else if (block.type === "toolCall") {
+					const toolName = mapPiToolNameToSdk(block.name, customToolNameToSdk);
+					blocks.push({ type: "tool_use", id: sanitizeToolId(block.id, sanitizedIds), name: toolName, input: block.arguments ?? {} });
+				}
+			}
+			// A turn the user aborted before anything streamed carries no content at
+			// all. Standing a placeholder in its place invents a reply the assistant
+			// never made, and because it lands early in the prefix it costs the whole
+			// downstream prompt cache every time the session is rebuilt. Drop it:
+			// Session.importMessages imposes no alternation, and a turn with no blocks
+			// has no tool_use ids needing a synthetic result. Left before the turn
+			// bookkeeping so a stray result still attaches to the last assistant
+			// message actually emitted.
+			//
+			// Do NOT clear turnResults/turnAssistantIdx here. It looks like the tidy
+			// thing to do, but an abort between two parallel results — assistant[X,Y],
+			// R_X, aborted turn, R_Y — would then start a second results message for
+			// R_Y. repairToolPairing consumes both pending ids at the first one, stubs
+			// Y there and drops the real R_Y as unmatched, destroying the parallel
+			// result this merge exists to preserve. unit-import.mjs pins the shape.
+			if (!content.length) continue;
+			// Blocks were present but every one was filtered — content really was
+			// dropped here, so keep the slot and say so. Empty content is rejected by
+			// the API, and dropping the message would break tool pairing.
+			if (!blocks.length) blocks.push({ type: "text", text: "[incompatible content omitted]" });
+			turnResults = null;
+			turnAssistantIdx = anthropicMessages.length;
+			append({ role: "assistant", content: blocks } as SessionMessage, piIndex);
+		} else if (msg.role === "toolResult") {
+			// Pi records one message per tool result, and repairToolPairing only
+			// pairs results that share the user message directly after their
+			// assistant message. Split across messages, the second and later results
+			// match no pending tool_use id: they are dropped and replaced with a
+			// synthetic "[no tool result recorded]", so every rebuild silently
+			// destroyed the output of parallel tool calls. Session.importMessages
+			// applies the repair itself, so this cannot be opted out of by skipping
+			// our own call. (Claude Code's live writer splits a turn across records
+			// — one per content block, one per result — so the single-message shape
+			// is repairToolPairing's requirement, not a copy of CC's own layout;
+			// tests/int-cc-contracts.mjs pins both facts.)
+			//
+			// Collecting into the turn's first result message rather than the
+			// immediately preceding one also handles a steer landing mid-execution,
+			// which pi records between the results (see extractAllToolResults).
+			// The results also have to sit *directly* after their assistant message:
+			// repairToolPairing consumes the turn's pending ids at the first user
+			// message that follows it, so a steer arriving before the first result —
+			// what any steer during a slow first tool looks like — would otherwise
+			// take the stubs and strand every real result behind it.
+			//
+			// Both hoists reorder the steer against wall-clock: Claude sees results
+			// that were still running when the steer arrived. Claude Code normalizes
+			// to the same order — it records a mid-turn steer as an `attachment`, and
+			// reorderAttachmentsForAPI (claude-code-rip src/utils/messages.ts:1481)
+			// bubbles attachments up to the nearest assistant or tool_result message
+			// and re-inserts them after it. The on-disk form differs, the order does not.
+			const id = sanitizeToolId(msg.toolCallId, sanitizedIds);
+			const block = recorded.get(msg.toolCallId)
+				?? { type: "tool_result", tool_use_id: id, content: nonEmptyToolResultContent(msg, customToolNameToSdk), ...(msg.isError ? { is_error: true } : {}) };
+			if (turnResults) {
+				turnResults.content.push(block);
+				sources.get(turnResults as unknown as SessionMessage)!.push(piIndex);
+			} else {
+				turnResults = { role: "user", content: [block] };
+				// A result with no assistant message before it is malformed history;
+				// appending keeps it in order for repairToolPairing to discard.
+				sources.set(turnResults as unknown as SessionMessage, [piIndex]);
+				anthropicMessages.splice(turnAssistantIdx === null ? anthropicMessages.length : turnAssistantIdx + 1, 0, turnResults as unknown as SessionMessage);
+			}
+		}
+	}
+
+	return { anthropicMessages, sanitizedIds, origins: anthropicMessages.map((message) => sources.get(message)!) };
+}
