@@ -3242,6 +3242,25 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     return lines;
   }
 
+  function measureWidget(name: string, render: () => string[]): string[] {
+    return editorPerf.options.enabled ? editorPerf.measure(`widget.${name}`, render) : render();
+  }
+
+  pi.events.on("dj:mounted", () => {
+    if (enabled && currentCtx?.hasUI && tuiRef) installLastPromptWidget(currentCtx);
+  });
+
+  function installLastPromptWidget(ctx: any) {
+    if (!editorPerf.options.lastPrompt) return;
+    ctx.ui.setWidget("powerline-last-prompt", () => ({
+      dispose() {},
+      invalidate() {},
+      render(width: number): string[] {
+        return measureWidget("last-prompt", () => renderLastPromptLines(width));
+      },
+    }), { placement: "belowEditor" });
+  }
+
   function installPowerlineWidgets(ctx: any) {
     if (!editorPerf.options.widgets) return;
 
@@ -3249,10 +3268,6 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     // factories themselves, and show every widget as a panel even when it renders
     // nothing. Outside the TUI only the primary bar has content to show.
     const terminalWidgets = ctx.mode === "tui";
-
-    const measureWidget = (name: string, render: () => string[]): string[] => {
-      return editorPerf.options.enabled ? editorPerf.measure(`widget.${name}`, render) : render();
-    };
 
     if (terminalWidgets) {
       ctx.ui.setWidget("powerline-status", () => ({
@@ -3304,15 +3319,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
       },
     }), { placement: "belowEditor" });
 
-    if (editorPerf.options.lastPrompt) {
-      ctx.ui.setWidget("powerline-last-prompt", () => ({
-        dispose() {},
-        invalidate() {},
-        render(width: number): string[] {
-          return measureWidget("last-prompt", () => renderLastPromptLines(width));
-        },
-      }), { placement: "belowEditor" });
-    }
+    installLastPromptWidget(ctx);
+    pi.events.emit("powerline:widgets-installed", undefined);
   }
 
   function setupCustomEditor(ctx: any) {
