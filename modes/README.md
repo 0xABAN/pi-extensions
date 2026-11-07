@@ -107,12 +107,12 @@ tool restoration, and persistence.
 From the repository root:
 
 ```sh
-bun modes/check.mjs
+bun test modes
 ```
 
-The check covers mode transitions, direct and nested tool guards, prompt cleanup,
+The tests cover mode transitions, direct and nested tool guards, prompt cleanup,
 lesson context preservation, session state, legacy Plan entries, and distinct
-Learn colors. It does not call a model. After `/reload`, check the visible badge
+Learn colors. They do not call a model. After `/reload`, check the visible badge
 and try these teaching cases:
 
 - Ask for a complete solution: expect useful guidance, not code or a recipe.
