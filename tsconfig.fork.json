@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@earendil-works/pi-ai": ["../pi/packages/ai/src/index.ts"],
+      "@earendil-works/pi-ai/compat": ["../pi/packages/ai/src/compat.ts"],
+      "@earendil-works/pi-coding-agent": ["../pi/packages/coding-agent/src/index.ts"],
+      "@earendil-works/pi-tui": ["../pi/packages/tui/src/index.ts"]
+    }
+  }
+}
