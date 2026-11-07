@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
-import { isKeyRelease, matchesKey, visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
+import { isKeyRelease, matchesKey, renderFakeCursor, visibleWidth, truncateToWidth } from "@earendil-works/pi-tui";
 import type { AutocompleteProvider } from "@earendil-works/pi-tui";
 import { matchesConfiguredShortcut } from "../shortcuts.ts";
 import type { GhostSuggestion } from "./types.ts";
@@ -562,16 +562,22 @@ export class BashModeEditor extends CustomEditor {
 
     const suffix = this.ghost.value.slice(text.length);
     const contentLine = 1;
-    const cursorBlock = "\x1b[7m \x1b[0m";
-    const availableWidth = Math.max(0, width - visibleWidth(text) - 1);
-    if (availableWidth === 0) return lines;
+    const cursorCell = renderFakeCursor(" ");
+    const row = lines[contentLine];
+    const cursorIndex = row.indexOf(cursorCell);
+    if (cursorIndex < 0) return lines;
+
+    const prefix = row.slice(0, cursorIndex + cursorCell.length);
+    const remainingWidth = width - visibleWidth(prefix);
+    const availableWidth = remainingWidth - this.getPaddingX();
+    if (availableWidth <= 0) return lines;
 
     const shownSuffix = truncateToWidth(suffix, availableWidth, "", true);
     if (!shownSuffix) return lines;
 
-    const padding = " ".repeat(Math.max(0, width - visibleWidth(text) - 1 - visibleWidth(shownSuffix)));
+    const padding = " ".repeat(remainingWidth - visibleWidth(shownSuffix));
     const ghost = `\x1b[38;5;244m${shownSuffix}\x1b[0m`;
-    lines[contentLine] = `${text}${cursorBlock}${ghost}${padding}`;
+    lines[contentLine] = `${prefix}${ghost}${padding}`;
     return lines;
   }
 
