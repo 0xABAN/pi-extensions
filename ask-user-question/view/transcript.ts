@@ -1,4 +1,4 @@
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import type { Theme, ToolSummary } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { t } from "../state/i18n-bridge.ts";
 import { NO_INPUT_PLACEHOLDER } from "../tool/format-answer.ts";
@@ -25,11 +25,22 @@ class WidthLines implements Component {
 	invalidate(): void {}
 }
 
+function questionHeaders(args: QuestionParams | undefined): string {
+	return (args?.questions ?? [])
+		.map((q) => q?.header)
+		.filter(Boolean)
+		.join(" · ");
+}
+
+export function summarizeAsk(args: QuestionParams | undefined): ToolSummary {
+	return { label: "Ask", icon: "◇", target: questionHeaders(args) };
+}
+
 /** `Ask Format · Migration`: the headers name the questions. */
 export function renderAskCall(args: QuestionParams | undefined, theme: Theme): Component {
-	const headers = (args?.questions ?? []).map((q) => q?.header).filter(Boolean);
+	const headers = questionHeaders(args);
 	const title = theme.fg("toolTitle", theme.bold("Ask"));
-	const text = headers.length > 0 ? `${title} ${theme.fg("accent", headers.join(" · "))}` : title;
+	const text = headers ? `${title} ${theme.fg("accent", headers)}` : title;
 	return new WidthLines((width) => [truncateToWidth(text, width, "…")]);
 }
 
