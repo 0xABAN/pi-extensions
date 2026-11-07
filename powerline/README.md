@@ -11,6 +11,8 @@ Customizes the default [pi](https://github.com/badlogic/pi-mono) editor with a p
 
 ## Features
 
+**Editor box** — The editor is drawn as a rounded box. Its top border shows how long the latest response took, counting up while the agent works, then the `agent-mode` status and the git branch. Failed and cancelled responses keep the previous time.
+
 **Editor stash** — Press `Alt+S` to save your editor content and clear the editor, type a quick prompt, then press `Alt+S` again with an empty editor to restore the stash. Toggles between stash, pop, and update-existing-stash. A `stash` indicator appears in the powerline bar while text is stashed.
 
 **Delayed send** — Optionally hold each prompt for a few seconds before it is sent, so you can press `Esc` to pull it back into the editor without spending tokens. Off by default; see [Delayed send](#delayed-send).

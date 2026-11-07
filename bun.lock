@@ -121,13 +121,6 @@
         "@earendil-works/pi-tui": ">=0.81.0",
       },
     },
-    "response-time": {
-      "name": "pi-response-time",
-      "version": "0.1.0",
-      "peerDependencies": {
-        "@earendil-works/pi-coding-agent": "*",
-      },
-    },
     "todo": {
       "name": "@juicesharp/rpiv-todo",
       "version": "2.15.0",
@@ -597,8 +590,6 @@
     "pi-modes": ["pi-modes@workspace:modes"],
 
     "pi-powerline-footer": ["pi-powerline-footer@workspace:powerline"],
-
-    "pi-response-time": ["pi-response-time@workspace:response-time"],
 
     "pi-whimsical": ["pi-whimsical@workspace:whimsical"],
 

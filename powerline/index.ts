@@ -68,6 +68,7 @@ import {
 } from "./working-vibes.ts";
 import { PowerlineQueueStore, currentQueueContext, formatQueueDeliveryText, parseCompactQueuedPrompt } from "./queue/store.ts";
 import { canWaitAsFollowUp } from "./auto-follow-up.ts";
+import { ResponseTimer } from "./response-timer.ts";
 import type { PowerlineQueueItem, QueueContext, QueueIntent, QueueSummary, QueueTarget } from "./queue/types.ts";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1131,6 +1132,9 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   let liveAssistantUsage: SessionAssistantUsage | null = null;
   let approximateContextUsage: CoreContextUsage | null = null;
   let isStreaming = false;
+  const responseTimer = new ResponseTimer();
+  let responseTicker: ReturnType<typeof setInterval> | undefined;
+  let responseFailed = false;
   let tuiRef: any = null;
   let restoreFooterStatusRepaintHook: (() => void) | null = null;
   let stashShortcutInputUnsubscribe: (() => void) | null = null;
@@ -1807,6 +1811,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     restoreFooterStatusRepaintHook = null;
     stashShortcutInputUnsubscribe?.();
     stashShortcutInputUnsubscribe = null;
+    stopResponseTicker();
     shellSession?.dispose();
     shellSession = null;
     cancelPostCompactionDelivery();
@@ -1879,6 +1884,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
   pi.on("session_tree", async (_event, ctx) => {
     tokenStatsCache.reset();
+    responseTimer.reset();
     currentCtx = ctx;
     currentThinkingLevel = null;
     liveAssistantUsage = null;
@@ -1890,8 +1896,12 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     requestImmediateStatusRender({ deferDuringTyping: false });
   });
 
-  // Custom-message turns have no user prompt and must preserve the current task.
   pi.on("before_agent_start", async (event, ctx) => {
+    responseTimer.start(performance.now());
+    responseFailed = false;
+    responseTicker ??= setInterval(() => tuiRef?.requestRender(), 1000);
+
+    // Custom-message turns have no user prompt and must preserve the current task.
     if ("messageType" in event && event.messageType === "custom") return;
     finishPendingQueueDelivery(event.prompt, ctx);
     lastUserPrompt = event.prompt;
@@ -1993,7 +2003,8 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     currentCtx = ctx;
     coreContextUsageCache.reset();
     if (isSessionAssistantMessage(event.message)) {
-      if (event.message.stopReason === "error" || event.message.stopReason === "aborted") {
+      responseFailed = event.message.stopReason === "error" || event.message.stopReason === "aborted";
+      if (responseFailed) {
         liveAssistantUsage = null;
       } else if (getUsageTokenTotal(event.message.usage) > 0) {
         liveAssistantUsage = event.message.usage;
@@ -2042,8 +2053,16 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   });
 
   pi.on("agent_settled", async () => {
+    responseTimer.finish(performance.now(), !responseFailed);
+    stopResponseTicker();
+    tuiRef?.requestRender();
     schedulePostCompactionDelivery();
   });
+
+  function stopResponseTicker(): void {
+    clearInterval(responseTicker);
+    responseTicker = undefined;
+  }
 
   // Refresh vibe on tool calls if rate limit allows
   pi.on("tool_call", async (event, ctx) => {
@@ -3033,7 +3052,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   function renderEditorBadges(theme: Theme, budget: number): string {
     const statuses = footerDataRef?.getExtensionStatuses();
     const mode = statuses?.get("agent-mode") ?? "";
-    const responseTime = statuses?.get("agent-response-time");
+    const responseTime = responseTimer.text(performance.now());
     const response = responseTime ? theme.inverse(theme.fg("accent", ` ${responseTime} `)) : "";
     const [branch, plainBranch] = renderBranchBadges(theme);
     const path = (...parts: string[]) => parts.filter(Boolean).join(" ❯ ");

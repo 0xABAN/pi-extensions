@@ -13,7 +13,6 @@
     "inline-skills/**/*.ts",
     "dj/**/*.ts",
     "modes/**/*.ts",
-    "response-time/**/*.ts",
     "whimsical/**/*.ts",
     "tests/**/*.ts"
   ]

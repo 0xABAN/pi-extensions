@@ -9,7 +9,6 @@ Personal extensions for the [Pi coding agent](https://github.com/earendil-works/
 | [dj](dj/) | Spotify now playing, with pastel themes and layout presets |
 | [inline-skills](inline-skills/) | Complete and apply skills anywhere in a prompt |
 | [modes](modes/) | Switch between Build, Plan, and Learn modes |
-| [response-time](response-time/) | Show how long the latest agent response took |
 | [whimsical](whimsical/) | Sparkle animation for the working indicator |
 
 ## Maintained copies
@@ -18,7 +17,7 @@ These are our versions of third-party extensions, changed for the [Pi fork](http
 
 | Extension | Upstream | Changes |
 | --- | --- | --- |
-| [powerline](powerline/) | [pi-powerline-footer](https://github.com/nicobailon/pi-powerline-footer) 0.22.0 | Rounded editor box with status badges, aligned and compact footer, context meter, DJ ordering |
+| [powerline](powerline/) | [pi-powerline-footer](https://github.com/nicobailon/pi-powerline-footer) 0.22.0 | Rounded editor box with response time and status badges, aligned and compact footer, context meter, DJ ordering |
 | [todo](todo/) | [@juicesharp/rpiv-todo](https://github.com/juicesharp/rpiv-mono) 2.15.0 | Transcript styling, auto-clear and `/todos-clear`, open-task reminders, no dependencies |
 | [ask-user-question](ask-user-question/) | [@juicesharp/rpiv-ask-user-question](https://github.com/juicesharp/rpiv-mono) 2.15.0 | Transcript row summary |
 | [intercom](intercom/) | pi-intercom 0.18.1 | Messages and calls as transcript rows |

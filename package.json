@@ -9,7 +9,6 @@
       "inline-skills/index.ts",
       "dj/index.ts",
       "modes/index.ts",
-      "response-time/index.ts",
       "whimsical/index.ts"
     ]
   },
@@ -17,7 +16,6 @@
     "inline-skills",
     "dj",
     "modes",
-    "response-time",
     "whimsical",
     "powerline",
     "todo",
