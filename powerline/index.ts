@@ -1,6 +1,7 @@
 import {
   copyToClipboard,
   type ExtensionAPI,
+  parseSkillBlocks,
   type ReadonlyFooterDataProvider,
   type Theme,
 } from "@earendil-works/pi-coding-agent";
@@ -1904,7 +1905,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     // Custom-message turns have no user prompt and must preserve the current task.
     if ("messageType" in event && event.messageType === "custom") return;
     finishPendingQueueDelivery(event.prompt, ctx);
-    lastUserPrompt = event.prompt;
+    lastUserPrompt = parseSkillBlocks(event.prompt)?.userMessage ?? event.prompt;
     if (ctx.hasUI) {
       onVibeBeforeAgentStart(event.prompt, ctx.ui.setWorkingMessage);
     }
