@@ -8,7 +8,6 @@ Personal extensions for the [Pi coding agent](https://github.com/earendil-works/
 | --- | --- |
 | [commit-policy](commit-policy/) | Add the git commit policy to each new session |
 | [dj](dj/) | Spotify now playing, with pastel themes and layout presets |
-| [gray-thinking](gray-thinking/) | Render thinking as plain text without Markdown colors |
 | [inline-skills](inline-skills/) | Complete and apply skills anywhere in a prompt |
 | [modes](modes/) | Switch between Build, Plan, and Learn modes |
 | [response-time](response-time/) | Show how long the latest agent response took |

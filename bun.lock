@@ -73,13 +73,6 @@
         "@earendil-works/pi-tui",
       ],
     },
-    "gray-thinking": {
-      "name": "pi-gray-thinking",
-      "version": "0.1.0",
-      "peerDependencies": {
-        "@earendil-works/pi-coding-agent": "*",
-      },
-    },
     "inline-skills": {
       "name": "pi-inline-skills",
       "version": "0.1.0",
@@ -605,8 +598,6 @@
     "pi-claude-bridge": ["pi-claude-bridge@workspace:claude-bridge"],
 
     "pi-commit-policy": ["pi-commit-policy@workspace:commit-policy"],
-
-    "pi-gray-thinking": ["pi-gray-thinking@workspace:gray-thinking"],
 
     "pi-inline-skills": ["pi-inline-skills@workspace:inline-skills"],
 

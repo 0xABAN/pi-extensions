@@ -9,7 +9,6 @@
       "inline-skills/index.ts",
       "dj/index.ts",
       "commit-policy/index.ts",
-      "gray-thinking/index.ts",
       "modes/index.ts",
       "response-time/index.ts",
       "whimsical/index.ts"
@@ -19,7 +18,6 @@
     "inline-skills",
     "dj",
     "commit-policy",
-    "gray-thinking",
     "modes",
     "response-time",
     "whimsical",
