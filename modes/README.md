@@ -29,8 +29,14 @@ the allowlist, `codemode`, `web_search`, `fetch_content`, `get_search_content`,
 `ask_user_question`, and `intercom`. The tool-call guard blocks every other tool,
 including inactive ones and calls made from inside codemode. Web tools only read
 remote content, though they may cache pages or clone repositories outside the
-project. `intercom` can still message other sessions. The guard is not a sandbox
-for other extensions or arbitrary shell syntax.
+project. `intercom` can still message other sessions.
+
+Bash commands are split at `;`, `&`, `|` and newlines outside quotes, and every
+part must start with an allowlisted read-only command such as `cd`, `grep`, or
+`git log`. Command substitution and output redirection are blocked, except
+`2>/dev/null` and `2>&1`. Some allowlisted commands can still run programs or
+write files through their own options, such as `find -exec`, `env`, or `sort -o`,
+so the guard is not a sandbox.
 
 ## Learn
 

@@ -11,7 +11,7 @@ export const READ_ONLY_TOOLS = new Set([
 	"ask_user_question", "intercom",
 ]);
 
-// Destructive commands blocked in plan mode
+// Destructive commands blocked in plan and learn mode
 const DESTRUCTIVE_PATTERNS = [
 	/\brm\b/i,
 	/\brmdir\b/i,
@@ -48,8 +48,9 @@ const DESTRUCTIVE_PATTERNS = [
 	/\b(vim?|nano|emacs|code|subl)\b/i,
 ];
 
-// Safe read-only commands allowed in plan mode
+// Safe read-only commands allowed in plan and learn mode
 const SAFE_PATTERNS = [
+	/^\s*cd\b/,
 	/^\s*cat\b/,
 	/^\s*head\b/,
 	/^\s*tail\b/,
@@ -102,10 +103,47 @@ const SAFE_PATTERNS = [
 	/^\s*eza\b/,
 ];
 
-export function isSafeCommand(command: string): boolean {
-	const isDestructive = DESTRUCTIVE_PATTERNS.some((p) => p.test(command));
-	const isSafe = SAFE_PATTERNS.some((p) => p.test(command));
+const SUBSTITUTION = /\$\(|`|[<>]\(/;
+const HARMLESS_REDIRECT = /(^|\s)2>(\/dev\/null|&1)(?=[\s;&|]|$)/g;
+
+function splitCommand(command: string): string[] | undefined {
+	const parts = [""];
+	let quote = "";
+
+	for (let i = 0; i < command.length; i++) {
+		let char = command[i]!;
+
+		if (char === "\\" && quote !== "'") {
+			char += command[++i] ?? "";
+		} else if (quote) {
+			if (char === quote) quote = "";
+		} else if (char === "'" || char === '"') {
+			quote = char;
+		} else if (/[;&|\n]/.test(char)) {
+			parts.push("");
+			continue;
+		}
+
+		parts[parts.length - 1] += char;
+	}
+
+	if (quote) return undefined;
+	return parts.filter((part) => part.trim());
+}
+
+function isSafePart(part: string): boolean {
+	const isDestructive = DESTRUCTIVE_PATTERNS.some((p) => p.test(part));
+	const isSafe = SAFE_PATTERNS.some((p) => p.test(part));
 	return !isDestructive && isSafe;
+}
+
+export function isSafeCommand(command: string): boolean {
+	if (SUBSTITUTION.test(command)) return false;
+
+	const parts = splitCommand(command.replace(HARMLESS_REDIRECT, "$1"));
+	if (!parts?.length) return false;
+
+	return parts.every(isSafePart);
 }
 
 /** Numbered steps under a "Plan:" header — handed to rpiv-todo on execute. */

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import modesExtension from "../index.ts";
 import { LEARN_MODE_PROMPT } from "../learn.ts";
 import { formatModeStatus } from "../status.ts";
-import { READ_ONLY_TOOLS } from "../utils.ts";
+import { isSafeCommand, READ_ONLY_TOOLS } from "../utils.ts";
 
 const BUILD_TOOLS = ["read", "bash", "edit", "write", "codemode", "todo", "Agent", "intercom", "custom_tool"];
 const LEARN_LABEL = "\uF19D  learn mode";
@@ -155,6 +155,37 @@ for (const [mode, presses] of [["plan", 1], ["learn", 2]] as const) {
 		}
 	});
 }
+
+test("every part of a bash command must be allowlisted", () => {
+	const allowed = [
+		"git status",
+		"cd x && sed -n '1,5p' f",
+		'grep -E "a|b" f',
+		"ls 2>/dev/null",
+		"git log 2>&1 | head -5",
+	];
+	const blocked = [
+		"rm file",
+		"cat x && python s.py",
+		"cat x & python s.py",
+		"cat x\npython s.py",
+		"cat $(which python)",
+		"cat `which python`",
+		"cat <(python s.py)",
+		"ls > f",
+		"ls 2>/dev/null > f",
+		'grep "unclosed f',
+		"",
+	];
+
+	for (const command of allowed) {
+		expect({ command, safe: isSafeCommand(command) }).toEqual({ command, safe: true });
+	}
+
+	for (const command of blocked) {
+		expect({ command, safe: isSafeCommand(command) }).toEqual({ command, safe: false });
+	}
+});
 
 test("learn appends its policy once, and leaving removes only that policy", async () => {
 	const h = await harness();
