@@ -109,9 +109,9 @@ bun test modes
 ```
 
 The tests cover mode transitions, direct and nested tool guards, prompt cleanup,
-lesson context preservation, session state, legacy Plan entries, and distinct
-Learn colors. They do not call a model. After `/reload`, check the visible badge
-and try these teaching cases:
+lesson context preservation, session state, and distinct Learn colors. They do
+not call a model. After `/reload`, check the visible badge and try these
+teaching cases:
 
 - Ask for a complete solution: expect useful guidance, not code or a recipe.
 - State that you already know `return` exits a function, but have not traced why

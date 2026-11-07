@@ -193,7 +193,6 @@ test("learn drops plan notes from context but keeps the lesson", async () => {
 		messages: [
 			{ role: "custom", customType: "plan-mode-context", content: "Produce a plan." },
 			{ role: "custom", customType: "plan-mode-execute", content: "Execute the plan." },
-			{ role: "user", content: [{ type: "text", text: "[PLAN MODE ACTIVE]" }] },
 			explanation,
 			lesson,
 		],
@@ -246,19 +245,6 @@ test("reload restores learn from the saved build tools, and the tree follows the
 	await resumed.emit("session_tree");
 	expect(resumed.mode()).toMatch(/build mode$/);
 	expect(resumed.tools()).toEqual(BUILD_TOOLS);
-});
-
-test("migrates a legacy plan-mode entry on the next switch", async () => {
-	const legacy = await harness({
-		entries: [{ type: "custom", customType: "plan-mode", data: { enabled: true, toolsBeforePlanMode: BUILD_TOOLS } }],
-	});
-	expect(legacy.mode()).toMatch(/plan mode$/);
-
-	await legacy.shiftTab();
-	expect(legacy.entries().at(-1)!.customType).toBe("agent-mode");
-
-	await legacy.shiftTab();
-	expect(legacy.tools()).toEqual(BUILD_TOOLS);
 });
 
 test("does not enable tools the user disabled before switching", async () => {

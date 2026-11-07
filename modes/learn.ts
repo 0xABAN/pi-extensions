@@ -4,7 +4,6 @@ export const LEARN_MODE_TOOLS = new Set([
 	"web_search", "fetch_content", "get_search_content",
 ]);
 
-// ponytail: teaching is prompt-enforced, not an answer-leakage guarantee.
 export const LEARN_MODE_PROMPT = `LEARN MODE: understanding is the goal, not delivering a solution.
 You are a patient tutor. The learner does the reasoning and writes the solution.
 Instructions elsewhere to implement, execute plans, or commit do not apply here.

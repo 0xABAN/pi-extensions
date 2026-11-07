@@ -33,12 +33,6 @@ interface ModeState {
 	buildTools: string[];
 }
 
-/** Persisted by the original two-mode controller; migrate on the next switch. */
-interface PlanModeState {
-	enabled: boolean;
-	toolsBeforePlanMode?: string[];
-}
-
 export default function modesExtension(pi: ExtensionAPI): void {
 	let mode: AgentMode = "build";
 	let buildTools: string[] = [];
@@ -110,19 +104,13 @@ export default function modesExtension(pi: ExtensionAPI): void {
 	function restoreState(ctx: ExtensionContext): void {
 		mode = "build";
 		const entry = ctx.sessionManager.getBranch().findLast(
-			(e) => e.type === "custom" && (e.customType === "agent-mode" || e.customType === "plan-mode"),
+			(e) => e.type === "custom" && e.customType === "agent-mode",
 		);
 
 		if (entry?.type === "custom") {
-			if (entry.customType === "agent-mode") {
-				const state = entry.data as ModeState;
-				mode = state.mode;
-				buildTools = state.buildTools;
-			} else {
-				const state = entry.data as PlanModeState;
-				mode = state.enabled ? "plan" : "build";
-				if (state.toolsBeforePlanMode) buildTools = state.toolsBeforePlanMode;
-			}
+			const state = entry.data as ModeState;
+			mode = state.mode;
+			buildTools = state.buildTools;
 		}
 
 		applyModeTools();
@@ -162,17 +150,6 @@ export default function modesExtension(pi: ExtensionAPI): void {
 				const msg = m as AgentMessage & { customType?: string };
 				if (msg.customType === "plan-mode-context") return false;
 				if (mode === "learn" && msg.customType === "plan-mode-execute") return false;
-				if (msg.role !== "user") return true;
-
-				const content = msg.content;
-				if (typeof content === "string") {
-					return !content.includes("[PLAN MODE ACTIVE]");
-				}
-				if (Array.isArray(content)) {
-					return !content.some(
-						(c) => c.type === "text" && (c as TextContent).text?.includes("[PLAN MODE ACTIVE]"),
-					);
-				}
 				return true;
 			}),
 		};
