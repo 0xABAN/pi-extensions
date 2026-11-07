@@ -16,6 +16,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { loadConfig, validateGuidanceFields } from "./config.ts";
 import { formatStatusLabel, t } from "./state/i18n-bridge.ts";
 import { selectTasksByStatus, selectTodoCounts, selectVisibleTasks } from "./state/selectors.ts";
+import { isTaskDetails } from "./state/replay.ts";
 import { applyTaskMutation, changesState } from "./state/state-reducer.ts";
 import { commitState, getRenderState, getState, sid } from "./state/store.ts";
 import { prepareTodoArguments } from "./tool/normalize-params.ts";
@@ -105,8 +106,8 @@ export function registerTodoTool(pi: ExtensionAPI): void {
 		// foreground lookup and falls back to `#<id>` (see renderTodoCall). That is the
 		// safe outcome: per-session ids restart at 1, so searching sibling slots could
 		// surface the WRONG subject — the `#<id>` fallback is intentional, not a gap.
-		summarize(args) {
-			return summarizeTodo(args as never, getRenderState());
+		summarize(args, result) {
+			return summarizeTodo(args as never, isTaskDetails(result?.details) ? result.details : getRenderState());
 		},
 
 		renderCall(args, theme, _context) {
