@@ -19,22 +19,29 @@
  * correctly after upgrade.
  */
 
-import type { ExtensionAPI, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import type { KeyId } from "@earendil-works/pi-tui";
 import { COLLAPSE_KEY_OFF, resolveCollapseKey } from "./config.ts";
 import { I18N_NAMESPACE } from "./state/i18n-bridge.ts";
 import { replayFromBranch } from "./state/replay.ts";
+import { selectVisibleTasks } from "./state/selectors.ts";
+import { applyTaskMutation } from "./state/state-reducer.ts";
 import {
 	clearActiveRenderSession,
+	commitState,
 	evictSession,
 	getActiveRenderSession,
 	getRenderState,
+	getState,
 	replaceState,
 	setActiveRenderSession,
 	sid,
 } from "./state/store.ts";
 import { registerTodosCommand, registerTodoTool, TOOL_NAME } from "./todo.ts";
 import type { TodoOverlay } from "./todo-overlay.ts";
+import { buildToolResult } from "./tool/response-envelope.ts";
+import { STATE_ENTRY_TYPE } from "./tool/types.ts";
+import { formatCommandHeading } from "./view/format.ts";
 
 type I18nLoader = {
 	registerLocalesFromDir: (namespace: string, packageUrl: string, options?: { label?: string }) => void;
@@ -150,6 +157,44 @@ export default function (pi: ExtensionAPI, importOverlay: TodoOverlayImporter = 
 	registerTodoTool(pi);
 	registerTodosCommand(pi);
 
+	function clearTodos(ctx: ExtensionContext, notice: string): void {
+		const id = sid(ctx);
+		const result = applyTaskMutation(getState(id), "clear", {});
+		commitState(id, result.state);
+		pi.appendEntry(STATE_ENTRY_TYPE, buildToolResult("clear", {}, result.state, result.op).details);
+		ctx.ui.notify(formatCommandHeading(notice, ctx.ui.theme), "info");
+	}
+
+	pi.registerCommand("todos-clear", {
+		description: "Clear all todos",
+		handler: async (_args, ctx) => {
+			const count = selectVisibleTasks(getState(sid(ctx))).length;
+			if (count === 0) {
+				ctx.ui.notify(formatCommandHeading("No todos to clear", ctx.ui.theme), "info");
+				return;
+			}
+			clearTodos(ctx, `Cleared ${count} todo${count === 1 ? "" : "s"}`);
+			await updateTodoOverlay();
+		},
+	});
+
+	pi.on("before_agent_start", async (_event, ctx) => {
+		const open = getState(sid(ctx)).tasks.filter((task) => task.status === "pending" || task.status === "in_progress");
+		if (open.length === 0) return;
+
+		const tasks = open.map((task) => `#${task.id} [${task.status}] ${task.subject}`).join("\n");
+		return {
+			message: {
+				customType: "todo-nudge",
+				content:
+					`Open todos — call the todo tool this turn as you progress:\n${tasks}\n` +
+					"Mark the task you are about to do in_progress (with activeForm) BEFORE other tools. " +
+					"Mark it completed IMMEDIATELY when done. Exactly one in_progress. Never leave the list stale.",
+				display: false,
+			},
+		};
+	});
+
 	// Collapse/expand hotkey for the todo overlay. The key is resolved once at
 	// factory scope from config (register-once contract: a config change needs
 	// `/reload` to re-bind, same as lane-switcher's env hotkey) and the binding is
@@ -261,8 +306,12 @@ export default function (pi: ExtensionAPI, importOverlay: TodoOverlayImporter = 
 
 	// Reads getTodos() at render time; do NOT call replayFromBranch here
 	// (branch is stale — message_end runs after tool_execution_end).
-	pi.on("tool_execution_end", async (event) => {
+	pi.on("tool_execution_end", async (event, ctx) => {
 		if (event.toolName !== TOOL_NAME || event.isError) return;
+		const tasks = selectVisibleTasks(getState(sid(ctx)));
+		if (tasks.length > 0 && tasks.every((task) => task.status === "completed")) {
+			clearTodos(ctx, "All todos done — cleared");
+		}
 		try {
 			await updateTodoOverlay();
 		} catch (e) {
