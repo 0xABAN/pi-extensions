@@ -1105,13 +1105,23 @@ function renderSegmentWithWidth(
 function buildContentFromParts(
   parts: string[],
   separatorStyle: StatusLineSeparatorStyle,
+  joiner = ` ${getFgAnsiCode("sep")}${getSeparator(separatorStyle).left}${ansi.reset} `,
 ): string {
   if (parts.length === 0) return "";
-  const separatorDef = getSeparator(separatorStyle);
-  const sepAnsi = getFgAnsiCode("sep");
-  const sep = separatorDef.left;
   const padding = " ".repeat(config.padding);
-  return padding + parts.join(` ${sepAnsi}${sep}${ansi.reset} `) + ansi.reset + padding;
+  return padding + parts.join(joiner) + ansi.reset + padding;
+}
+
+type RenderedPart = { content: string; right: boolean };
+
+function buildAlignedContent(parts: RenderedPart[], separatorStyle: StatusLineSeparatorStyle, width: number): string {
+  const left = buildContentFromParts(parts.filter((part) => !part.right).map((part) => part.content), separatorStyle);
+  const right = buildContentFromParts(parts.filter((part) => part.right).map((part) => part.content), separatorStyle, " ");
+  if (!right) return left;
+
+  const gap = width - visibleWidth(left) - visibleWidth(right);
+  if (gap < 0) return buildContentFromParts(parts.map((part) => part.content), separatorStyle);
+  return left + " ".repeat(gap) + right;
 }
 
 type ResponsiveLayout = { topContent: string; secondaryLines: string[] };
@@ -1126,6 +1136,7 @@ function computeResponsiveLayout(
   ctx: SegmentContext,
   presetDef: ReturnType<typeof getPreset>,
   allSegmentIds: StatusLineSegmentId[],
+  rightSegmentIds: readonly StatusLineSegmentId[],
   availableWidth: number
 ): ResponsiveLayout {
   const separatorStyle = config.separator ?? presetDef.separator;
@@ -1133,11 +1144,11 @@ function computeResponsiveLayout(
   const sepWidth = visibleWidth(separatorDef.left) + 2; // separator + spaces around it
 
   // Render all segments and get their widths
-  const renderedSegments: { content: string; width: number }[] = [];
+  const renderedSegments: (RenderedPart & { width: number })[] = [];
   for (const segId of allSegmentIds) {
     const { content, width, visible } = renderSegmentWithWidth(segId, ctx);
     if (visible) {
-      renderedSegments.push({ content, width });
+      renderedSegments.push({ content, width, right: rightSegmentIds.includes(segId) });
     }
   }
 
@@ -1149,15 +1160,15 @@ function computeResponsiveLayout(
   // Reserve the configured outer padding on both edges of every row.
   const baseOverhead = 2 * config.padding;
   let currentWidth = baseOverhead;
-  let topSegments: string[] = [];
-  let overflowSegments: { content: string; width: number }[] = [];
+  let topSegments: RenderedPart[] = [];
+  let overflowSegments: typeof renderedSegments = [];
   let overflow = false;
 
   for (const seg of renderedSegments) {
     const neededWidth = seg.width + (topSegments.length > 0 ? sepWidth : 0);
 
     if (!overflow && currentWidth + neededWidth <= availableWidth) {
-      topSegments.push(seg.content);
+      topSegments.push(seg);
       currentWidth += neededWidth;
     } else {
       overflow = true;
@@ -1169,7 +1180,7 @@ function computeResponsiveLayout(
   // Drop mode stops at the first non-fitting segment to preserve ordering.
   // Wrap mode starts a new row instead, skipping segments too wide for any row.
   const wrap = config.secondaryOverflow === "wrap";
-  const secondaryRows: string[][] = [[]];
+  const secondaryRows: RenderedPart[][] = [[]];
   let secondaryWidth = baseOverhead;
 
   for (const seg of overflowSegments) {
@@ -1183,15 +1194,15 @@ function computeResponsiveLayout(
       secondaryWidth = baseOverhead;
       neededWidth = seg.width;
     }
-    row.push(seg.content);
+    row.push(seg);
     secondaryWidth += neededWidth;
   }
 
   return {
-    topContent: buildContentFromParts(topSegments, separatorStyle),
+    topContent: buildAlignedContent(topSegments, separatorStyle, availableWidth),
     secondaryLines: secondaryRows
       .filter((row) => row.length > 0)
-      .map((row) => buildContentFromParts(row, separatorStyle)),
+      .map((row) => buildAlignedContent(row, separatorStyle, availableWidth)),
   };
 }
 
@@ -3045,7 +3056,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     }
 
     lastLayoutWidth = width;
-    lastLayoutResult = computeResponsiveLayout(segmentCtx, presetDef, allSegmentIds, width);
+    lastLayoutResult = computeResponsiveLayout(segmentCtx, presetDef, allSegmentIds, mergedSegments.rightSegments, width);
     lastLayoutTimestamp = now;
     layoutDirty = false;
     forceNextLayoutRecompute = false;
