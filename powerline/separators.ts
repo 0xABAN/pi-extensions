@@ -46,7 +46,7 @@ export function getSeparator(style: StatusLineSeparatorStyle): SeparatorDef {
       return { left: chars.dot, right: chars.dot };
 
     case "chevron":
-      return { left: "›", right: "‹" };
+      return { left: "❯", right: "❮" };
 
     case "star":
       return { left: "✦", right: "✦" };

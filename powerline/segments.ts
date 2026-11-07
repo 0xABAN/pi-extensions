@@ -176,7 +176,7 @@ const gitSegment: StatusLineSegment = {
     if (gitStatus) {
       const indicators: string[] = [];
       if (opts.showUnstaged !== false && gitStatus.unstaged > 0) {
-        indicators.push(applyColor(ctx.theme, "warning", `*${gitStatus.unstaged}`));
+        indicators.push(applyColor(ctx.theme, "muted", `*${gitStatus.unstaged}`));
       }
       if (opts.showStaged !== false && gitStatus.staged > 0) {
         indicators.push(applyColor(ctx.theme, "success", `+${gitStatus.staged}`));
