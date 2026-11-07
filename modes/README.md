@@ -3,14 +3,6 @@
 Build, Plan, and Learn share one controller for the mode shortcut, tool permissions,
 and status badge.
 
-## Install
-
-```sh
-pi install ~/dev/pi-extensions/modes
-```
-
-Run `/reload` in Pi after installation or source changes.
-
 ## Controls
 
 - `Shift+Tab`: Build → Plan → Learn → Build.
@@ -105,8 +97,13 @@ not a tool gate.
 
 ## Structure
 
-Mode status formatting in `status.ts` is pure. `index.ts` owns status publication,
-tool restoration, and persistence.
+- `index.ts`: the controller. It owns the shortcut and flags, the tool guard, mode
+  notes, Learn's prompt section, the Plan execute flow, status publication, and
+  persistence.
+- `learn.ts`: the teaching policy.
+- `utils.ts`: the read-only tool set, the Bash allowlist, and Plan step extraction.
+- `status.ts`: pure status badge formatting.
+- `tests/modes.test.ts`: the checks below.
 
 ## Checks
 
@@ -116,10 +113,10 @@ From the repository root:
 bun test modes
 ```
 
-The tests cover mode transitions, direct and nested tool guards, prompt cleanup,
-lesson context preservation, session state, and distinct Learn colors. They do
-not call a model. After `/reload`, check the visible badge and try these
-teaching cases:
+The tests cover mode transitions, direct and nested tool guards, the Bash
+allowlist, Learn's prompt section and note, context filtering, session state,
+and distinct Learn colors. They do not call a model. After `/reload`, check the
+visible badge and try these teaching cases:
 
 - Ask for a complete solution: expect useful guidance, not code or a recipe.
 - State that you already know `return` exits a function, but have not traced why
