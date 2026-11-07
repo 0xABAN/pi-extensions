@@ -2311,7 +2311,7 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       expansionState.globalExpanded = options.expanded;
       expansionState.expanded = options.expanded;
     }
-    return new InlineMessageComponent(details.from, details.message, theme, details.replyCommand, details.bodyText, !options.expanded, expansionState);
+    return new InlineMessageComponent(details.from, details.message, theme, details.replyCommand, details.bodyText, !options.expanded, expansionState, options.outputPad);
   });
 
   pi.on("tool_result", (event) => {
@@ -3026,6 +3026,9 @@ Usage:
             details: { error: true },
           };
       }
+    },
+    summarize(args) {
+      return { label: "Chat", icon: "⇄", target: [args.action, args.to?.trim()].filter(Boolean).join(" → ") };
     },
     renderCall(args, theme, context) {
       const action = typeof args.action === "string" ? args.action : "intercom";
