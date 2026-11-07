@@ -19,7 +19,8 @@
     "todo",
     "ask-user-question",
     "intercom",
-    "claude-bridge"
+    "claude-bridge",
+    "skill-palette"
   ],
   "scripts": {
     "test": "bun test",
