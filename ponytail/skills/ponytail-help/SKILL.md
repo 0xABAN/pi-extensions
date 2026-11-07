@@ -14,9 +14,9 @@ write flag files, or persist anything.
 
 | Level | Trigger | What change |
 |-------|---------|-------------|
-| **Lite** | `/ponytail lite` | Build what was asked, name the smaller option in one line. |
-| **Full** | `/ponytail` | The smallest complete change, a check where the logic needs one, and a reply that names what was skipped and any risk. Default. |
-| **Ultra** | `/ponytail ultra` | Also questions the request and pushes back before building. |
+| **Lite** | `/set-ponytail lite` | Build what was asked, name the smaller option in one line. |
+| **Full** | `/set-ponytail` | The smallest complete change, a check where the logic needs one, and a reply that names what was skipped and any risk. Default. |
+| **Ultra** | `/set-ponytail ultra` | Also questions the request and pushes back before building. |
 
 Level sticks until changed or session end.
 
@@ -37,8 +37,8 @@ slash-command forms above (OpenCode ships all six as slash commands).
 
 ## Deactivate
 
-Say "stop ponytail" or "normal mode". Resume anytime with `/ponytail`.
-`/ponytail off` also works.
+Say "stop ponytail" or "normal mode". Resume anytime with `/set-ponytail`.
+`/set-ponytail off` also works.
 
 ## Band (Claude Code)
 

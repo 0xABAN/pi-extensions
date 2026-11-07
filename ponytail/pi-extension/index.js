@@ -21,7 +21,6 @@ export const readQuietStartup = getQuietStartup;
 const RUNTIME_MODE_LIST = RUNTIME_MODES.join("|");
 const PONYTAIL_COMMAND_DESCRIPTION = `Set mode: ${RUNTIME_MODE_LIST}. Commands: status, default <mode>`;
 
-// Every item is a complete command: pi submits on Enter, so a bare "default" would run without a mode.
 // Values only: per-level descriptions would be a second copy of the Levels table in SKILL.md.
 export function completePonytailArgs(prefix) {
   const typed = String(prefix || "").trimStart();
@@ -49,7 +48,7 @@ export function parsePonytailCommand(text, defaultMode = DEFAULT_MODE, currentMo
   const normalizedText = String(text || "").trim().toLowerCase();
 
   if (!normalizedText) {
-    // Bare /ponytail switches ponytail on, or reports the level when it already is (#639).
+    // Bare /set-ponytail switches ponytail on, or reports the level when it already is (#639).
     if (currentMode && currentMode !== "off") return { type: "status" };
     return { type: "set-mode", mode: fallback === "off" ? "full" : fallback };
   }
@@ -108,23 +107,7 @@ export default function ponytailExtension(pi) {
     ctx?.ui?.notify?.(`Ponytail mode set to ${normalized}.`, "info");
   };
 
-  const sendAlias = (skillName, args, ctx) => {
-    const normalized = String(args || "").trim();
-    const message = normalized ? `${skillName} ${normalized}` : skillName;
-
-    // pi.sendUserMessage does not expand skill commands on its own, so without
-    // expandPromptTemplates the alias lands as the literal text
-    // "/skill:ponytail-review" and the skill body never reaches the agent.
-    if (ctx?.isIdle?.() === false) {
-      pi.sendUserMessage(message, { expandPromptTemplates: true, deliverAs: "followUp" });
-      ctx?.ui?.notify?.(`${skillName} queued as follow-up.`, "info");
-      return;
-    }
-
-    pi.sendUserMessage(message, { expandPromptTemplates: true });
-  };
-
-  pi.registerCommand("ponytail", {
+  pi.registerCommand("set-ponytail", {
     description: PONYTAIL_COMMAND_DESCRIPTION,
     getArgumentCompletions: (prefix) => completePonytailArgs(prefix),
     handler: async (args, ctx) => {
@@ -156,33 +139,8 @@ export default function ponytailExtension(pi) {
         return;
       }
 
-      ctx?.ui?.notify?.("Unknown or unsupported /ponytail mode.", "warning");
+      ctx?.ui?.notify?.("Unknown or unsupported /set-ponytail mode.", "warning");
     },
-  });
-
-  pi.registerCommand("ponytail-review", {
-    description: "Run /skill:ponytail-review",
-    handler: (args, ctx) => sendAlias("/skill:ponytail-review", args, ctx),
-  });
-
-  pi.registerCommand("ponytail-audit", {
-    description: "Run /skill:ponytail-audit",
-    handler: (args, ctx) => sendAlias("/skill:ponytail-audit", args, ctx),
-  });
-
-  pi.registerCommand("ponytail-gain", {
-    description: "Run /skill:ponytail-gain",
-    handler: (args, ctx) => sendAlias("/skill:ponytail-gain", args, ctx),
-  });
-
-  pi.registerCommand("ponytail-debt", {
-    description: "Run /skill:ponytail-debt",
-    handler: (args, ctx) => sendAlias("/skill:ponytail-debt", args, ctx),
-  });
-
-  pi.registerCommand("ponytail-help", {
-    description: "Run /skill:ponytail-help",
-    handler: (args, ctx) => sendAlias("/skill:ponytail-help", args, ctx),
   });
 
   pi.on("input", async (event, ctx) => {
