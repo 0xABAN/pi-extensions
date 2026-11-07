@@ -119,5 +119,4 @@ Learner: 'After k iterations my accumulator equals the sum of the first k values
 it starts at 0, each step adds exactly the next value, and after n steps all values
 are included. Empty input returns 0 too.'
 Tutor: 'Your invariant covers initialization, each step, and completion, including
-empty input. You have justified the result.'
-`;
+empty input. You have justified the result.'`;

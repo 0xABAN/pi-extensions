@@ -187,29 +187,29 @@ test("every part of a bash command must be allowlisted", () => {
 	}
 });
 
-test("learn appends its policy once, and leaving removes only that policy", async () => {
+test("learn sends its policy as the learn_mode section, only while learning", async () => {
 	const h = await harness();
-	const event = promptEvent();
-	const options = event.systemPromptOptions;
+	const untouched = promptEvent().systemPromptOptions;
+
+	const turn = async () => {
+		const event = promptEvent();
+		await h.emit("before_agent_start", event);
+		return event.systemPromptOptions;
+	};
+
+	expect(await turn()).toEqual(untouched);
 
 	await h.shiftTab();
-	await h.shiftTab();
-	await h.emit("before_agent_start", event);
-	expect(options.appendSystemPrompt).toContain(LEARN_MODE_PROMPT);
-	expect(options.sections.unrelated).toBe("keep me");
-
-	const learnAppendix = options.appendSystemPrompt;
-	await h.emit("before_agent_start", event);
-	expect(options.appendSystemPrompt).toBe(learnAppendix);
+	expect(await turn()).toEqual(untouched);
 
 	await h.shiftTab();
-	await h.emit("before_agent_start", event);
-	expect(options.sections).toEqual({ unrelated: "keep me" });
-	expect(options.appendSystemPrompt).toBe("Other instructions.\n");
+	expect(await turn()).toEqual({
+		appendSystemPrompt: "Other instructions.\n",
+		sections: { unrelated: "keep me", learn_mode: LEARN_MODE_PROMPT },
+	});
 
 	await h.shiftTab();
-	await h.emit("before_agent_start", event);
-	expect(options.appendSystemPrompt).toBe("Other instructions.\n");
+	expect(await turn()).toEqual(untouched);
 });
 
 test("learn's policy reaches turns without a UI", async () => {
@@ -218,7 +218,7 @@ test("learn's policy reaches turns without a UI", async () => {
 	h.ctx.hasUI = false;
 
 	await h.emit("before_agent_start", event);
-	expect(event.systemPromptOptions.appendSystemPrompt).toContain(LEARN_MODE_PROMPT);
+	expect(event.systemPromptOptions.sections.learn_mode).toBe(LEARN_MODE_PROMPT);
 });
 
 test("learn drops plan notes from context but keeps the lesson", async () => {

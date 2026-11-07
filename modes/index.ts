@@ -23,8 +23,6 @@ function getTextContent(message: AssistantMessage): string {
 		.join("\n");
 }
 
-const LEARN_MODE_APPENDIX = `\n\n<learn_mode>\n${LEARN_MODE_PROMPT}</learn_mode>`;
-
 interface ModeState {
 	mode: AgentMode;
 	buildTools: string[];
@@ -142,12 +140,8 @@ export default function modesExtension(pi: ExtensionAPI): void {
 		// Status strings contain ANSI colors; refresh after a theme selection.
 		if (ctx.hasUI) updateStatus(ctx);
 
-		// The Claude bridge forwards appendSystemPrompt but drops custom sections.
-		// Remove only our exact appendix so other extensions' instructions stay intact.
-		const options = event.systemPromptOptions;
-		options.appendSystemPrompt = options.appendSystemPrompt.replace(LEARN_MODE_APPENDIX, "");
 		if (mode === "learn") {
-			options.appendSystemPrompt += LEARN_MODE_APPENDIX;
+			event.systemPromptOptions.sections.learn_mode = LEARN_MODE_PROMPT;
 			return;
 		}
 		if (mode !== "plan") return;
