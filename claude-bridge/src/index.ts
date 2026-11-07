@@ -1937,6 +1937,7 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 			systemPrompt: {
 				type: "preset", preset: "claude_code",
 				append: systemPromptAppend ? systemPromptAppend : undefined,
+				snapshot: false,
 			},
 			model: cliModel,
 			strictMcpConfig: strictMcpConfigEnabled,
