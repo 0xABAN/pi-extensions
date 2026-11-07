@@ -30,7 +30,13 @@ import {
 	TOOL_NAME,
 	TodoParamsSchema,
 } from "./tool/types.ts";
-import { formatCommandTaskLine, renderTodoCall, renderTodoResult } from "./view/format.ts";
+import {
+	formatCommandHeading,
+	formatCommandTaskLine,
+	renderTodoCall,
+	renderTodoResult,
+	summarizeTodo,
+} from "./view/format.ts";
 
 // English fallbacks for localized /todos section headers — the box-drawing
 // decoration is part of the localized string so translators can adjust spacing.
@@ -99,6 +105,10 @@ export function registerTodoTool(pi: ExtensionAPI): void {
 		// foreground lookup and falls back to `#<id>` (see renderTodoCall). That is the
 		// safe outcome: per-session ids restart at 1, so searching sibling slots could
 		// surface the WRONG subject — the `#<id>` fallback is intentional, not a gap.
+		summarize(args) {
+			return summarizeTodo(args as never, getRenderState());
+		},
+
 		renderCall(args, theme, _context) {
 			return renderTodoCall(args as never, theme, getRenderState());
 		},
@@ -124,7 +134,7 @@ export function registerTodosCommand(pi: ExtensionAPI): void {
 			const state = getState(sid(ctx));
 			const visible = selectVisibleTasks(state);
 			if (visible.length === 0) {
-				ctx.ui.notify(t("command.no_todos", MSG_NO_TODOS), "info");
+				ctx.ui.notify(formatCommandHeading(t("command.no_todos", MSG_NO_TODOS), ctx.ui.theme), "info");
 				return;
 			}
 			const groups = selectTasksByStatus(state);
@@ -135,18 +145,16 @@ export function registerTodosCommand(pi: ExtensionAPI): void {
 			if (counts.inProgress > 0) header.push(`${counts.inProgress} ${formatStatusLabel("in_progress")}`);
 			if (counts.pending > 0) header.push(`${counts.pending} ${formatStatusLabel("pending")}`);
 
-			const lines: string[] = [header.join(" · ")];
-			if (groups.pending.length > 0) {
-				lines.push(t("command.section.pending", SECTION_PENDING));
-				for (const task of groups.pending) lines.push(formatCommandTaskLine(task, "○"));
-			}
-			if (groups.inProgress.length > 0) {
-				lines.push(t("command.section.in_progress", SECTION_IN_PROGRESS));
-				for (const task of groups.inProgress) lines.push(formatCommandTaskLine(task, "◐"));
-			}
-			if (groups.completed.length > 0) {
-				lines.push(t("command.section.completed", SECTION_COMPLETED));
-				for (const task of groups.completed) lines.push(formatCommandTaskLine(task, "✓"));
+			const lines: string[] = [formatCommandHeading(header.join(" · "), ctx.ui.theme)];
+			const sections = [
+				[t("command.section.pending", SECTION_PENDING), groups.pending],
+				[t("command.section.in_progress", SECTION_IN_PROGRESS), groups.inProgress],
+				[t("command.section.completed", SECTION_COMPLETED), groups.completed],
+			] as const;
+			for (const [title, tasks] of sections) {
+				if (tasks.length === 0) continue;
+				lines.push(formatCommandHeading(title, ctx.ui.theme));
+				tasks.forEach((task, index) => lines.push(formatCommandTaskLine(task, ctx.ui.theme, index === tasks.length - 1)));
 			}
 
 			ctx.ui.notify(lines.join("\n"), "info");

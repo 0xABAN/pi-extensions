@@ -1,4 +1,4 @@
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import type { Theme, ToolSummary } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { formatStatusLabel } from "../state/i18n-bridge.ts";
 import { selectTaskSubjectById } from "../state/selectors.ts";
@@ -15,21 +15,16 @@ export { formatStatusLabel };
 // ---------------------------------------------------------------------------
 
 export const STATUS_GLYPH: Record<TaskStatus, string> = {
-	pending: "○",
-	in_progress: "◐",
-	completed: "●",
+	pending: "◇",
+	in_progress: "◈",
+	completed: "✓",
 	deleted: "⊘",
 };
 
-/**
- * Color palette for the renderResult status echo. `deleted` uses `muted` so a
- * successful delete is visually distinct from the error branch (which uses
- * `error` + `✗`).
- */
-export const STATUS_COLOR: Record<TaskStatus, "dim" | "warning" | "success" | "muted"> = {
-	pending: "dim",
-	in_progress: "warning",
-	completed: "success",
+export const STATUS_COLOR: Record<TaskStatus, "accent" | "muted"> = {
+	pending: "muted",
+	in_progress: "accent",
+	completed: "muted",
 	deleted: "muted",
 };
 
@@ -46,23 +41,8 @@ export const ACTION_GLYPH: Record<TaskAction, string> = {
 	clear: "∅",
 };
 
-/**
- * Glyph for the persistent overlay's per-task row. Differs from `STATUS_GLYPH`
- * for `completed` (`✓` vs `●`) and `deleted` (`✗` vs `⊘`) because the
- * overlay caller never renders a `deleted` row but uses `✗` in its
- * error-toned palette.
- */
 export function overlayStatusGlyph(status: TaskStatus, theme: Theme): string {
-	switch (status) {
-		case "pending":
-			return theme.fg("dim", "○");
-		case "in_progress":
-			return theme.fg("warning", "◐");
-		case "completed":
-			return theme.fg("success", "✓");
-		case "deleted":
-			return theme.fg("error", "✗");
-	}
+	return theme.fg(STATUS_COLOR[status], STATUS_GLYPH[status]);
 }
 
 /**
@@ -71,8 +51,7 @@ export function overlayStatusGlyph(status: TaskStatus, theme: Theme): string {
  */
 export function formatOverlayTaskLine(t: Task, theme: Theme, showId: boolean): string {
 	const glyph = overlayStatusGlyph(t.status, theme);
-	const subjectColor =
-		t.status === "in_progress" ? "accent" : t.status === "completed" || t.status === "deleted" ? "muted" : "text";
+	const subjectColor = t.status === "completed" || t.status === "deleted" ? "muted" : "text";
 	let subject = theme.fg(subjectColor, sanitizeTerminalText(t.subject));
 	if (t.status === "completed" || t.status === "deleted") {
 		subject = theme.strikethrough(subject);
@@ -89,19 +68,43 @@ export function formatOverlayTaskLine(t: Task, theme: Theme, showId: boolean): s
 	return line;
 }
 
-/**
- * Format a single task line for the `/todos` slash command (no glyph color,
- * indented bullet prefix).
- */
-export function formatCommandTaskLine(t: Task, glyph: string): string {
-	const form = t.status === "in_progress" && t.activeForm ? ` (${sanitizeTerminalText(t.activeForm)})` : "";
-	const block = t.blockedBy?.length ? `    ⛓ ${t.blockedBy.map((id) => `#${id}`).join(",")}` : "";
-	return `  ${glyph} #${t.id} ${sanitizeTerminalText(t.subject)}${form}${block}`;
+export function formatCommandHeading(label: string, theme: Theme): string {
+	const title = sanitizeTerminalText(label).replace(/^─+\s*|\s*─+$/g, "");
+	return `${theme.fg("accent", "◇")} ${theme.fg("muted", title)}`;
+}
+
+export function formatCommandTaskLine(t: Task, theme: Theme, last: boolean): string {
+	return `${theme.fg("dim", last ? "╰─" : "├─")} ${formatOverlayTaskLine(t, theme, true)}`;
 }
 
 // ---------------------------------------------------------------------------
 // Tool render hooks — wrapped so `todo.ts` becomes a thin call-site.
 // ---------------------------------------------------------------------------
+
+export function summarizeTodo(
+	args: TaskMutationParams & { action?: TaskAction },
+	state: TaskState,
+): ToolSummary {
+	return { label: "Tasks", icon: "☷", target: [args.action, callTarget(args, state)].filter(Boolean).join(" ") };
+}
+
+function callTarget(args: TaskMutationParams & { action?: TaskAction }, state: TaskState): string {
+	switch (args.action) {
+		case "create":
+			return args.subject ?? (Array.isArray(args.tasks) ? `${args.tasks.length} tasks` : "");
+		case "update":
+		case "get":
+		case "delete": {
+			if (args.id === undefined) return "";
+			const subject = selectTaskSubjectById(state, args.id) ?? `#${args.id}`;
+			return args.action === "update" && args.status ? `${subject} → ${formatStatusLabel(args.status)}` : subject;
+		}
+		case "list":
+			return args.status ? formatStatusLabel(args.status) : "";
+		default:
+			return "";
+	}
+}
 
 /**
  * `renderCall` body. Receives the call's args, the theme, and the live

@@ -12,7 +12,7 @@
  * `message_end` runs after).
  */
 
-import type { ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
+import { type ExtensionUIContext, type Theme, transcriptBodyPadding } from "@earendil-works/pi-coding-agent";
 import { type TUI, truncateToWidth } from "@earendil-works/pi-tui";
 import { COLLAPSE_KEY_OFF, getMaxWidgetLines, resolveCollapseKey } from "./config.ts";
 import { formatStatusLabel, t } from "./state/i18n-bridge.ts";
@@ -27,6 +27,8 @@ const OVERLAY_HEADING = "Todos";
 const OVERLAY_MORE = "more";
 const OVERLAY_EXPAND_HINT = "{key} to expand";
 const OVERLAY_COLLAPSED = "collapsed";
+
+const DEFAULT_OUTPUT_PAD = 1;
 
 export class TodoOverlay {
 	private uiCtx: ExtensionUIContext | undefined;
@@ -141,17 +143,18 @@ export class TodoOverlay {
 		if (overlayTasks.length === 0) return [];
 
 		const overlayState = { tasks: overlayTasks, nextId: snapshot.nextId };
-		const truncate = (line: string): string => truncateToWidth(line, width, "…");
+		const gutter = transcriptBodyPadding(DEFAULT_OUTPUT_PAD, width);
+		const truncate = (line: string): string =>
+			" ".repeat(gutter) + truncateToWidth(line, width - 2 * gutter, "…");
 		const counts = selectTodoCounts(overlayState);
 		const hasActive = selectHasActive(overlayState);
 		const showIds = selectShowTaskIds(overlayState);
 
-		const headingColor = hasActive ? "accent" : "dim";
-		const headingIcon = hasActive ? "●" : "○";
+		const headingIcon = theme.fg(hasActive ? "accent" : "muted", hasActive ? "◈" : "◇");
 		const headingText = `${t("overlay.heading", OVERLAY_HEADING)} (${counts.completed}/${counts.total})`;
-		const heading = truncate(`${theme.fg(headingColor, headingIcon)} ${theme.fg(headingColor, headingText)}`);
+		const heading = truncate(`${headingIcon} ${theme.fg("muted", headingText)}`);
 
-		// Collapsed view: just the heading + a dim "└─" expand hint, then the
+		// Collapsed view: just the heading + a dim "╰─" expand hint, then the
 		// trailing spacer. Short-circuit before the budget math and the completed-
 		// display tracking — nothing is shown to track, and skipping the tracking
 		// when nothing is rendered is correctness, not optimization. The hint splices
@@ -166,7 +169,7 @@ export class TodoOverlay {
 				key === COLLAPSE_KEY_OFF
 					? t("overlay.collapsed", OVERLAY_COLLAPSED)
 					: t("overlay.expandHint", OVERLAY_EXPAND_HINT).replace("{key}", key);
-			return this.withTrailingSpacer([heading, truncate(`${theme.fg("dim", "└─")} ${theme.fg("dim", hint)}`)]);
+			return this.withTrailingSpacer([heading, truncate(`${theme.fg("dim", "╰─")} ${theme.fg("dim", hint)}`)]);
 		}
 
 		const lines: string[] = [heading];
@@ -195,7 +198,7 @@ export class TodoOverlay {
 
 		if (layout.hiddenCompleted === 0 && layout.truncatedTail === 0) {
 			const last = lines.length - 1;
-			lines[last] = lines[last].replace("├─", "└─");
+			lines[last] = lines[last].replace("├─", "╰─");
 			return this.withTrailingSpacer(lines);
 		}
 
@@ -206,20 +209,20 @@ export class TodoOverlay {
 		const more = t("overlay.more", OVERLAY_MORE);
 		const summary =
 			overflowParts.length > 0 ? `+${totalHidden} ${more} (${overflowParts.join(", ")})` : `+${totalHidden} ${more}`;
-		lines.push(truncate(`${theme.fg("dim", "└─")} ${theme.fg("dim", summary)}`));
+		lines.push(truncate(`${theme.fg("dim", "╰─")} ${theme.fg("dim", summary)}`));
 		return this.withTrailingSpacer(lines);
 	}
 
 	/**
 	 * Append a trailing blank line so the overlay isn't flush against the
 	 * editor box. Pi's host adds a leading spacer above the widget but none
-	 * below, which leaves the last "└─" row (or the "+N more" summary) glued
+	 * below, which leaves the last "╰─" row (or the "+N more" summary) glued
 	 * to the input box. The empty string gives the "Todos" panel a little
 	 * breathing room.
 	 */
 	private withTrailingSpacer(lines: string[]): string[] {
 		if (lines.length === 0) return lines;
-		lines.push("");
+		lines.push("", "");
 		return lines;
 	}
 
