@@ -262,7 +262,7 @@ Segment display formats (opt-in; defaults match the historical rendering):
 
 | Segment option | Values | Default | Effect |
 |---|---|---|---|
-| `"context": { "format" }` | `"full"` / `"percent"` | `"full"` | `"percent"` shows a bare rounded `83%` (threshold-colored, no icon) instead of `12k/200k (6.2%)` |
+| `"context": { "format" }` | `"full"` / `"percent"` / `"meter"` | `"full"` | `"percent"` shows a bare rounded `83%` (threshold-colored, no icon) instead of `12k/200k (6.2%)`; `"meter"` shows a five-cell gauge, `● [▰▰▰▰▱] 83% context` |
 | `"cache_read": { "format" }` | `"tokens"` / `"percent"` / `"both"` / `"request"` / `"session-request"` | `"tokens"` | Hit rates are `cacheRead / (input + cacheRead + cacheWrite)`. `"percent"` shows the whole-session hit rate instead of the raw token count; `"both"` shows raw tokens plus that rate, e.g. `cache in: 12k (80%)`; `"request"` shows the latest request's rate, colored by the `cacheHit*` semantic colors (below 30% error, below 70% warning, otherwise success), and shows `--` until a request completes after a compaction or model switch; `"session-request"` shows the session rate, then the latest request's after `·`, e.g. `cache 24% · last 16%`, each colored by its own band |
 
 ```json

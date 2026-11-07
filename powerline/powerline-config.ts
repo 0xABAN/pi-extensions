@@ -312,7 +312,7 @@ function normalizeSegmentOptions(raw: Record<string, unknown>): StatusLineSegmen
 
   if (isRecord(raw.context)) {
     options.context = {
-      ...(raw.context.format === "full" || raw.context.format === "percent" ? { format: raw.context.format } : {}),
+      ...(raw.context.format === "full" || raw.context.format === "percent" || raw.context.format === "meter" ? { format: raw.context.format } : {}),
     };
   }
 

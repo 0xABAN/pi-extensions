@@ -109,7 +109,7 @@ export interface StatusLineSegmentOptions {
   };
   time?: { format?: "12h" | "24h"; showSeconds?: boolean };
   cost?: { subscriptionDisplay?: "subscription" | "reported-cost" | "both"; currency?: CostCurrencyCode };
-  context?: { format?: "full" | "percent" };
+  context?: { format?: "full" | "percent" | "meter" };
   cache_read?: { format?: "tokens" | "percent" | "both" | "request" | "session-request" };
 }
 

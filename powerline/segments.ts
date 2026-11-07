@@ -339,6 +339,12 @@ const costSegment: StatusLineSegment = {
   },
 };
 
+function contextMeter(percent: number | null, approximate: boolean): string {
+  if (percent === null) return "● [-----] ? context";
+  const filled = Math.round(Math.min(100, percent) / 20);
+  return `● [${"▰".repeat(filled)}${"▱".repeat(5 - filled)}] ${approximate ? "~" : ""}${Math.round(percent)}% context`;
+}
+
 const contextPctSegment: StatusLineSegment = {
   id: "context_pct",
   render(ctx) {
@@ -348,12 +354,15 @@ const contextPctSegment: StatusLineSegment = {
     const { contextTokens, contextPercent, contextWindow } = ctx;
 
     const autoIcon = ctx.autoCompactEnabled && icons.auto ? ` ${icons.auto}` : "";
-    const percentOnly = ctx.options.context?.format === "percent";
+    const meter = ctx.options.context?.format === "meter";
+    const percentOnly = meter || ctx.options.context?.format === "percent";
     const hasKnownUsage = contextTokens !== null && contextPercent !== null;
     const approximate = ctx.contextApproximate ? "~" : "";
     // "full" (default): tokens/window + one-decimal percentage + auto-compact icon.
     // "percent": bare rounded percentage, threshold-colored, no icons.
-    const text = percentOnly
+    const text = meter
+      ? contextMeter(hasKnownUsage ? contextPercent : null, ctx.contextApproximate)
+      : percentOnly
       ? (hasKnownUsage ? `${approximate}${Math.round(contextPercent)}%` : "?")
       : hasKnownUsage
         ? `${approximate}${formatTokens(contextTokens)}/${formatTokens(contextWindow)} (${contextPercent.toFixed(1)}%)${autoIcon}`
