@@ -1,0 +1,15 @@
+{
+  "name": "pi-whimsical",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Replace the working indicator with a sparkle animation.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  }
+}

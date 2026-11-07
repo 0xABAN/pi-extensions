@@ -1,0 +1,16 @@
+{
+  "name": "pi-modes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Switch between Build, Plan, and Learn modes.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}

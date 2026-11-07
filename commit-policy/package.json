@@ -1,0 +1,14 @@
+{
+  "name": "pi-commit-policy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Add the git commit policy to each new session.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}

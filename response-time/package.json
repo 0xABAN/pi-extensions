@@ -1,0 +1,14 @@
+{
+  "name": "pi-response-time",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Show how long the latest agent response took.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}

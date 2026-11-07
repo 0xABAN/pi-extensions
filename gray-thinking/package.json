@@ -1,0 +1,14 @@
+{
+  "name": "pi-gray-thinking",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Render thinking as plain text without Markdown colors.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}

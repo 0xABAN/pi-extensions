@@ -4,8 +4,18 @@
   "type": "module",
   "description": "Independently installable Pi extensions.",
   "keywords": ["pi-package"],
-  "pi": { "extensions": ["inline-skills/index.ts", "dj/index.ts"] },
-  "workspaces": ["inline-skills", "dj"],
+  "pi": {
+    "extensions": [
+      "inline-skills/index.ts",
+      "dj/index.ts",
+      "commit-policy/index.ts",
+      "gray-thinking/index.ts",
+      "modes/index.ts",
+      "response-time/index.ts",
+      "whimsical/index.ts"
+    ]
+  },
+  "workspaces": ["inline-skills", "dj", "commit-policy", "gray-thinking", "modes", "response-time", "whimsical"],
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"

@@ -9,5 +9,14 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["inline-skills/**/*.ts", "dj/**/*.ts", "tests/**/*.ts"]
+  "include": [
+    "inline-skills/**/*.ts",
+    "dj/**/*.ts",
+    "commit-policy/**/*.ts",
+    "gray-thinking/**/*.ts",
+    "modes/**/*.ts",
+    "response-time/**/*.ts",
+    "whimsical/**/*.ts",
+    "tests/**/*.ts"
+  ]
 }
