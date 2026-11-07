@@ -106,12 +106,6 @@ const CreateTaskInputSchema = Type.Object({
 			description: "Present-continuous spinner label shown while status is in_progress (e.g. 'writing tests')",
 		}),
 	),
-	blockedBy: Type.Optional(
-		Type.Array(Type.Number(), {
-			description:
-				"Existing task ids this item waits on. Cannot name another item in this same batch; create the prerequisite first, then the dependent with blockedBy.",
-		}),
-	),
 	owner: Type.Optional(Type.String({ description: "Agent/owner assigned to this task" })),
 	metadata: Type.Optional(
 		Type.Record(Type.String(), Type.Unknown(), {
@@ -139,21 +133,6 @@ export const TodoParamsSchema = Type.Object({
 				"Set this task's status (update): one of pending, in_progress, completed, deleted. When action is list, filters returned tasks by this status.",
 		}),
 	),
-	blockedBy: Type.Optional(
-		Type.Array(Type.Number(), {
-			description: "Initial blockedBy ids (create only)",
-		}),
-	),
-	addBlockedBy: Type.Optional(
-		Type.Array(Type.Number(), {
-			description: "Task ids to add to blockedBy (update only, additive merge)",
-		}),
-	),
-	removeBlockedBy: Type.Optional(
-		Type.Array(Type.Number(), {
-			description: "Task ids to remove from blockedBy (update only, additive merge)",
-		}),
-	),
 	owner: Type.Optional(Type.String({ description: "Agent/owner assigned to this task" })),
 	metadata: Type.Optional(
 		Type.Record(Type.String(), Type.Unknown(), {
@@ -173,7 +152,7 @@ export const TodoParamsSchema = Type.Object({
 	tasks: Type.Optional(
 		Type.Array(CreateTaskInputSchema, {
 			description:
-				"Batch create: independent tasks in one call, one-of with subject. The whole list is validated then committed together. Items cannot blockedBy each other; create the prerequisite first, then the dependent with blockedBy.",
+				"Batch create: several tasks in one call, one-of with subject. The whole list is validated then committed together.",
 		}),
 	),
 });
