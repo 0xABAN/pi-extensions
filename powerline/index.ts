@@ -22,7 +22,7 @@ import {
 import { BashModeEditor, isPrintableInput } from "./bash-mode/editor.ts";
 import { ManagedShellSession } from "./bash-mode/shell-session.ts";
 import { matchHistoryEntries, readGlobalShellHistory, readProjectHistory, appendProjectHistory } from "./bash-mode/history.ts";
-import type { BashModeSettings } from "./bash-mode/types.ts";
+import type { BashCommandRecord, BashModeSettings } from "./bash-mode/types.ts";
 import { getPreset, PRESETS } from "./presets.ts";
 import { getAgentPath } from "./paths.ts";
 import { collectHiddenExtensionStatusKeys, getNotificationExtensionStatuses, mergeSegmentOptions, mergeSegmentsWithCustomItems, nextPowerlineSettingWithOptions, nextPowerlineSettingWithPreset, parsePowerlineConfig } from "./powerline-config.ts";
@@ -1125,6 +1125,44 @@ function buildAlignedContent(parts: RenderedPart[], separatorStyle: StatusLineSe
 }
 
 type ResponsiveLayout = { topContent: string; secondaryLines: string[] };
+
+const COMPACT_WIDTH = 80;
+
+function computeCompactLayout(
+  ctx: SegmentContext,
+  presetDef: ReturnType<typeof getPreset>,
+  segments: ReturnType<typeof mergeSegmentsWithCustomItems>,
+  width: number,
+): ResponsiveLayout {
+  const separatorStyle = config.separator ?? presetDef.separator;
+  const ids = [...segments.leftSegments, ...segments.rightSegments, ...segments.secondarySegments];
+  const rendered = new Map(ids.map((id) => [id, renderSegmentWithWidth(id, ctx)]));
+  const minimumWidth = (parts: RenderedPart[]) => visibleWidth(buildAlignedContent(parts, separatorStyle, 0));
+  const parts: RenderedPart[] = [];
+
+  const context = rendered.get("context_pct");
+  if (context?.visible) {
+    const content = context.content.replace(" context", "");
+    parts.push({ content: width < 60 ? content.replace(/ \[[▰▱-]{5}\]/, "") : content, right: true });
+  }
+
+  const model = rendered.get("model");
+  const modelRoom = width - minimumWidth(parts) - 3;
+  if (model?.visible && modelRoom > 0) {
+    parts.unshift({ content: truncateToWidth(model.content, modelRoom, "…"), right: false });
+  }
+
+  for (const id of new Set<StatusLineSegmentId>(["shell_mode", ...ids])) {
+    if (id === "model" || id === "context_pct" || id === "queue") continue;
+    const segment = rendered.get(id);
+    if (!segment?.visible) continue;
+
+    const candidate = { content: segment.content, right: segments.rightSegments.includes(id) };
+    if (minimumWidth([...parts, candidate]) <= width) parts.push(candidate);
+  }
+
+  return { topContent: buildAlignedContent(parts, separatorStyle, width), secondaryLines: [] };
+}
 
 /**
  * Responsive segment layout - fits segments into top bar, overflows to secondary row.
@@ -3056,7 +3094,9 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     }
 
     lastLayoutWidth = width;
-    lastLayoutResult = computeResponsiveLayout(segmentCtx, presetDef, allSegmentIds, mergedSegments.rightSegments, width);
+    lastLayoutResult = width < COMPACT_WIDTH
+      ? computeCompactLayout(segmentCtx, presetDef, mergedSegments, width)
+      : computeResponsiveLayout(segmentCtx, presetDef, allSegmentIds, mergedSegments.rightSegments, width);
     lastLayoutTimestamp = now;
     layoutDirty = false;
     forceNextLayoutRecompute = false;
@@ -3073,10 +3113,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
     const notifications: string[] = [];
     for (const value of getNotificationExtensionStatuses(statuses, hiddenExtensionStatusKeys)) {
-      const lineContent = ` ${value}`;
-      if (visibleWidth(lineContent) <= width) {
-        notifications.push(lineContent);
-      }
+      notifications.push(truncateToWidth(` ${value}`, width, "…"));
     }
 
     return notifications;
@@ -3098,6 +3135,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
   function renderPowerlineQueuePreviewLines(width: number, theme: Theme): string[] {
     if (!currentCtx) return [];
     const summary = getQueueSummary(currentCtx);
+    if (width < COMPACT_WIDTH) return renderCompactQueuePreview(summary, width, theme);
     if (!summary.leadingText) return [];
 
     const prefix = summary.leadingStatus === "blocked" || summary.leadingStatus === "failed"
@@ -3108,6 +3146,34 @@ export default function powerlineFooter(pi: ExtensionAPI) {
     const text = `${prefix}${summary.leadingText.replace(/\s+/g, " ").trim()}`;
     const color = summary.leadingStatus === "blocked" || summary.leadingStatus === "failed" ? "warning" : "dim";
     return [` ${theme.fg(color, truncateToWidth(text, Math.max(1, width - 1), "…"))}`];
+  }
+
+  function renderCompactQueuePreview(summary: QueueSummary, width: number, theme: Theme): string[] {
+    const counts: string[] = [];
+    if (summary.blockedCount) counts.push(`blocked ${summary.blockedCount}`);
+    if (summary.queueCount) counts.push(`q ${summary.queueCount}`);
+    if (!counts.length && !summary.leadingText) return [];
+
+    const state = summary.compacting ? "compact" : summary.leadingStatus === "delivering" ? "sending" : "";
+    const label = [...counts, state].filter(Boolean).join(" · ");
+    const preview = summary.leadingText?.replace(/\s+/g, " ").trim();
+    const content = preview ? `${label}: ${preview}` : label;
+    return [truncateToWidth(` ${theme.fg(summary.blockedCount ? "warning" : "dim", content)}`, width, "…")];
+  }
+
+  function renderCompactBashTranscript(commands: readonly BashCommandRecord[], width: number, theme: Theme): string[] {
+    const command = commands[commands.length - 1]!;
+    const failed = commands.filter((item) => item.exitCode !== null && item.exitCode !== 0).length;
+    const state = command.exitCode === null ? "running" : command.exitCode === 0 ? "ok" : `exit ${command.exitCode}`;
+    const color = command.exitCode === null ? "accent" : command.exitCode === 0 ? "success" : "error";
+    const failures = failed > 0 ? theme.fg("error", ` · ${failed} failed`) : "";
+    const suffix = ` (${theme.fg(color, state)})${failures}`;
+    const prompt = theme.fg("accent", (shellSession?.state.shellName ?? "shell") === "fish" ? ">" : "$");
+    const commandText = truncateToWidth(command.command.replace(/\s+/g, " ").trim(), width - visibleWidth(suffix) - 3, "…");
+    return [
+      truncateToWidth(` ${prompt} ${commandText}${suffix}`, width, "…"),
+      ...command.output.slice(-2).map((line) => truncateToWidth(` ${line}`, width, "…")),
+    ];
   }
 
   function renderPendingSendLines(width: number, theme: Theme): string[] {
@@ -3123,6 +3189,7 @@ export default function powerlineFooter(pi: ExtensionAPI) {
 
     const snapshot = bashTranscript.getSnapshot();
     if (snapshot.commands.length === 0) return [];
+    if (width < COMPACT_WIDTH) return renderCompactBashTranscript(snapshot.commands, width, theme);
 
     const lines: string[] = [];
     if (snapshot.truncatedCommands > 0) {
