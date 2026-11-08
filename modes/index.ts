@@ -53,7 +53,7 @@ export default function modesExtension(pi: ExtensionAPI): void {
 	function updateStatus(ctx: ExtensionContext): void {
 		const status = formatModeStatus(mode, ctx.thinkingLevel, ctx.ui.theme?.name);
 		ctx.ui.setStatus("agent-mode", status.mode);
-		ctx.ui.setStatus("agent-thinking", status.thinking);
+		ctx.ui.setStatus("agent-thinking", status.thinking, { placement: "footer" });
 	}
 
 	function modeTools(): string[] {

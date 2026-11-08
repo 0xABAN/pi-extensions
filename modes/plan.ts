@@ -82,9 +82,12 @@ export function registerPlanTool(pi: ExtensionAPI, approve: (ctx: ExtensionConte
 		}),
 		defaultActive: false,
 
+		summarize: (args) => ({ label: "Plan", icon: "◇", target: args.topic }),
+
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const choice = await ctx.ui.custom<Choice | undefined>((_tui, theme, keybindings, done) =>
-				approvalPicker(params.topic, theme, keybindings, done),
+			const choice = await ctx.ui.custom<Choice | undefined>(
+				(_tui, theme, keybindings, done) => approvalPicker(params.topic, theme, keybindings, done),
+				{ blocked: { kind: "permission", message: QUESTION } },
 			);
 
 			if (choice === "Approve") {
