@@ -60,7 +60,6 @@ export class SessionListOverlay implements Component {
   private currentSession: SessionInfo;
   private done: (result: SessionListSelection | undefined) => void;
   private sessions: SessionInfo[];
-  private pool: string | undefined;
   private selectedIndex = 0;
   private maxVisible = 8;
 
@@ -70,14 +69,12 @@ export class SessionListOverlay implements Component {
     currentSession: SessionInfo,
     sessions: SessionInfo[],
     done: (result: SessionListSelection | undefined) => void,
-    pool?: string,
   ) {
     this.theme = theme;
     this.keybindings = keybindings;
     this.currentSession = currentSession;
     this.sessions = sessions;
     this.done = done;
-    this.pool = pool;
   }
 
   invalidate(): void {}
@@ -134,7 +131,6 @@ export class SessionListOverlay implements Component {
     lines.push(row(`  ${this.theme.fg("dim", `${middleTruncate(this.currentSession.cwd, Math.max(8, contentWidth - 4))} • ${this.currentSession.model}`)}`));
     const currentHerdrLocation = herdrLocationText(this.currentSession);
     if (currentHerdrLocation) lines.push(row(`  ${this.theme.fg("dim", currentHerdrLocation)}`));
-    if (this.pool) lines.push(row(`  ${this.theme.fg("dim", `Pool: ${this.pool}`)}`));
     lines.push(row());
     lines.push(border(`├${"─".repeat(contentWidth)}┤`));
     lines.push(row(this.theme.bold(" Other sessions")));

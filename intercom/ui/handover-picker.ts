@@ -1,7 +1,6 @@
 import type { Component, TUI } from "@earendil-works/pi-tui";
-import { Input, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { Input, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
-import type { RemoteAgent, SavedMachine } from "../cross-machine-discovery.ts";
 import type { SessionInfo } from "../types.ts";
 import { herdrLocationText, middleTruncate, shortSessionId } from "./session-list.ts";
 
@@ -11,56 +10,29 @@ const CONTEXT_WARNING_PCT = 80;
 
 export type HandoverPickerTarget =
   | { kind: "local"; session: SessionInfo }
-  | { kind: "project" }
-  | { kind: "remote"; target: string };
+  | { kind: "project" };
 
 export interface HandoverPickerResult {
   target: HandoverPickerTarget;
   goal?: string;
 }
 
-export interface RemoteSessionLister {
-  listMachines(): Promise<SavedMachine[]>;
-  listAgents(machine: SavedMachine): Promise<RemoteAgent[]>;
-}
-
 export interface HandoverPickerOptions {
   currentSession: SessionInfo;
   sessions: SessionInfo[];
-  lister: RemoteSessionLister;
   preselectSessionId?: string;
 }
 
-type MachineEntry =
-  | { machine: SavedMachine; state: "fetching" }
-  | { machine: SavedMachine; state: "done"; agents: RemoteAgent[] }
-  | { machine: SavedMachine; state: "error"; error: string };
-
-type RemoteState =
-  | { state: "idle" }
-  | { state: "listing" }
-  | { state: "error"; error: string }
-  | { state: "machines"; machines: MachineEntry[] };
-
 type Item =
   | { kind: "local"; session: SessionInfo }
-  | { kind: "project" }
-  | { kind: "fetch" }
-  | { kind: "remote"; machine: SavedMachine; agent: RemoteAgent };
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+  | { kind: "project" };
 
 export class HandoverPicker implements Component {
   private readonly tui: TUI;
   private readonly theme: Theme;
   private readonly keybindings: KeybindingsManager;
-  private readonly lister: RemoteSessionLister;
   private readonly done: (result: HandoverPickerResult | undefined) => void;
   private readonly localSessions: SessionInfo[];
-  private remote: RemoteState = { state: "idle" };
-  private closed = false;
   private selectedIndex = 0;
   private focus: "list" | "task" = "list";
   private readonly taskInput = new Input();
@@ -75,7 +47,6 @@ export class HandoverPicker implements Component {
     this.tui = tui;
     this.theme = theme;
     this.keybindings = keybindings;
-    this.lister = options.lister;
     this.done = done;
     this.localSessions = options.sessions
       .filter((session) => session.id !== options.currentSession.id)
@@ -89,18 +60,11 @@ export class HandoverPicker implements Component {
 
   private items(): Item[] {
     const items: Item[] = this.localSessions.map((session) => ({ kind: "local", session }));
-    items.push({ kind: "project" }, { kind: "fetch" });
-    if (this.remote.state === "machines") {
-      for (const entry of this.remote.machines) {
-        if (entry.state !== "done") continue;
-        for (const agent of entry.agents) items.push({ kind: "remote", machine: entry.machine, agent });
-      }
-    }
+    items.push({ kind: "project" });
     return items;
   }
 
   private close(result: HandoverPickerResult | undefined): void {
-    this.closed = true;
     this.done(result);
   }
 
@@ -129,68 +93,12 @@ export class HandoverPicker implements Component {
     }
     if (this.keybindings.matches(data, "tui.select.confirm")) {
       const item = items[this.selectedIndex];
-      if (item) this.activate(item);
+      if (item) this.close({ target: item, goal: this.taskInput.getValue().trim() || undefined });
       return;
     }
     if (this.focus !== "task") return;
     this.taskInput.handleInput(data);
     this.tui.requestRender();
-  }
-
-  private activate(item: Item): void {
-    if (item.kind === "fetch") {
-      void this.fetchRemote();
-      return;
-    }
-    const goal = this.taskInput.getValue().trim() || undefined;
-    const target: HandoverPickerTarget = item.kind === "remote"
-      ? { kind: "remote", target: `${item.agent.sessionId ?? item.agent.name}@${item.machine.label}` }
-      : item;
-    this.close({ target, goal });
-  }
-
-  private async fetchRemote(): Promise<void> {
-    const busy = this.remote.state === "listing"
-      || (this.remote.state === "machines" && this.remote.machines.some((entry) => entry.state === "fetching"));
-    if (busy) return;
-    this.remote = { state: "listing" };
-    this.selectedIndex = Math.min(this.selectedIndex, this.items().length - 1);
-    this.tui.requestRender();
-
-    let machines: SavedMachine[];
-    try {
-      machines = (await this.lister.listMachines()).filter((machine) => machine.enabled);
-    } catch (error) {
-      if (this.closed) return;
-      this.remote = { state: "error", error: errorMessage(error) };
-      this.tui.requestRender();
-      return;
-    }
-    if (this.closed) return;
-    const entries: MachineEntry[] = machines.map((machine) => ({ machine, state: "fetching" }));
-    this.remote = { state: "machines", machines: entries };
-    this.tui.requestRender();
-
-    await Promise.all(machines.map(async (machine, index) => {
-      let entry: MachineEntry;
-      try {
-        entry = { machine, state: "done", agents: await this.lister.listAgents(machine) };
-      } catch (error) {
-        entry = { machine, state: "error", error: errorMessage(error) };
-      }
-      if (this.closed) return;
-      const selected = this.items()[this.selectedIndex];
-      entries[index] = entry;
-      if (selected?.kind === "remote") {
-        this.selectedIndex = this.items().findIndex((item) => item.kind === "remote" && item.agent === selected.agent);
-      }
-      this.tui.requestRender();
-    }));
-  }
-
-  private remoteLabel(machine: SavedMachine, agent: RemoteAgent): string {
-    const name = agent.sessionId && agent.name === agent.sessionId ? shortSessionId(agent.sessionId) : agent.name;
-    return `${name}@${machine.label}`;
   }
 
   render(width: number): string[] {
@@ -207,8 +115,6 @@ export class HandoverPicker implements Component {
       return `${border("│")}${clipped}${" ".repeat(Math.max(0, contentWidth - visibleWidth(clipped)))}${border("│")}`;
     };
     const dim = (text: string) => this.theme.fg("dim", text);
-    const errorRows = (text: string) => wrapTextWithAnsi(text, Math.max(1, contentWidth - 2))
-      .map((line) => row(this.theme.fg("error", `  ${line}`)));
     const pathWidth = Math.max(8, contentWidth - 4);
 
     const items = this.items();
@@ -224,7 +130,6 @@ export class HandoverPicker implements Component {
       if (selected) selectedEnd = body.length;
     };
 
-    body.push(row(this.theme.bold(" This machine")));
     for (const item of items) {
       if (item.kind !== "local") continue;
       const session = item.session;
@@ -244,37 +149,6 @@ export class HandoverPicker implements Component {
     }
     pushItem(items.find((item) => item.kind === "project")!, "+ New session in a project path…");
 
-    body.push(separator, row(this.theme.bold(" Other machines")));
-    pushItem(
-      items.find((item) => item.kind === "fetch")!,
-      this.remote.state === "idle" ? "Fetch sessions from other machines" : "Fetch again",
-    );
-    if (this.remote.state === "listing") {
-      body.push(row(dim("  Listing saved Herdr machines…")));
-    } else if (this.remote.state === "error") {
-      body.push(...errorRows(this.remote.error));
-    } else if (this.remote.state === "machines") {
-      if (this.remote.machines.length === 0) body.push(row(dim("  No enabled saved Herdr machines.")));
-      for (const entry of this.remote.machines) {
-        if (entry.state === "fetching") {
-          body.push(row(dim(`  ${entry.machine.label}: fetching…`)));
-        } else if (entry.state === "error") {
-          body.push(...errorRows(entry.error));
-        } else if (entry.agents.length === 0) {
-          body.push(row(dim(`  ${entry.machine.label}: no Pi sessions`)));
-        } else {
-          for (const agent of entry.agents) {
-            const item = items.find((candidate) => candidate.kind === "remote" && candidate.agent === agent)!;
-            pushItem(
-              item,
-              this.remoteLabel(entry.machine, agent),
-              agent.cwd ? [middleTruncate(agent.cwd, pathWidth)] : [],
-              agent.status ? ` · ${agent.status === "idle" ? dim(agent.status) : this.theme.fg("warning", agent.status)}` : "",
-            );
-          }
-        }
-      }
-    }
 
     let visible = body;
     if (body.length > MAX_BODY_LINES) {

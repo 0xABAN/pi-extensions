@@ -1,8 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
-import { hostname } from "os";
 import { getIntercomDirPath } from "./broker/paths.ts";
-import { defaultMachineName } from "./cross-machine-envelope.ts";
 
 const DEFAULT_ASK_TIMEOUT_MS = 10 * 60 * 1000;
 const INTERCOM_SCOPE_ID_ENV = "PI_INTERCOM_SCOPE_ID";
@@ -33,11 +31,6 @@ export function setIntercomScopeId(scopeId: string | undefined): void {
 export type InboundTriggerPolicy = "always" | "replies" | "never";
 export type BusyDeliveryPolicy = "steer" | "human-first";
 
-export interface CrossMachineConfig {
-  machineName: string;
-  remoteCommand: string;
-}
-
 export interface IntercomConfig {
   brokerCommand: string;
 
@@ -57,7 +50,6 @@ export interface IntercomConfig {
 
   replyHint: boolean;
 
-  crossMachine: CrossMachineConfig;
 }
 
 export function getConfigPath(intercomDir: string = getIntercomDirPath()): string {
@@ -72,16 +64,12 @@ const defaults: IntercomConfig = {
   busyDelivery: "steer",
   enabled: true,
   replyHint: true,
-  crossMachine: {
-    machineName: defaultMachineName(hostname()),
-    remoteCommand: "pi-intercom",
-  },
 };
 
 export function loadConfig(): IntercomConfig {
   const configPath = getConfigPath();
   if (!existsSync(configPath)) {
-    return { ...defaults, crossMachine: { ...defaults.crossMachine } };
+    return { ...defaults };
   }
 
   try {
@@ -94,7 +82,6 @@ export function loadConfig(): IntercomConfig {
     const parsedConfig = parsed as Record<string, unknown>;
     const config: IntercomConfig = {
       ...defaults,
-      crossMachine: { ...defaults.crossMachine },
     };
 
     if (Object.hasOwn(parsedConfig, "brokerCommand")) {
@@ -177,26 +164,6 @@ export function loadConfig(): IntercomConfig {
         throw new Error(`"stableId" must not be empty`);
       }
       config.stableId = stableId;
-    }
-
-    if (Object.hasOwn(parsedConfig, "crossMachine")) {
-      const value = parsedConfig.crossMachine;
-      if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        throw new Error(`"crossMachine" must be an object`);
-      }
-      const crossMachine = value as Record<string, unknown>;
-      if (Object.hasOwn(crossMachine, "machineName")) {
-        if (typeof crossMachine.machineName !== "string" || !crossMachine.machineName.trim()) {
-          throw new Error(`"crossMachine.machineName" must be a non-empty string`);
-        }
-        config.crossMachine.machineName = crossMachine.machineName.trim();
-      }
-      if (Object.hasOwn(crossMachine, "remoteCommand")) {
-        if (typeof crossMachine.remoteCommand !== "string" || !crossMachine.remoteCommand.trim()) {
-          throw new Error(`"crossMachine.remoteCommand" must be a non-empty string`);
-        }
-        config.crossMachine.remoteCommand = crossMachine.remoteCommand.trim();
-      }
     }
 
     return config;

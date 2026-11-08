@@ -2,7 +2,6 @@ import type { Component, TuiMouseEvent, TuiMouseEventResult } from "@earendil-wo
 import { truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { keyHint, renderToolRow, type Theme, transcriptBodyPadding } from "@earendil-works/pi-coding-agent";
 import type { SessionInfo, Message } from "../types.ts";
-import { relaySenderName } from "../cross-machine-envelope.ts";
 
 export class InlineMessageComponent implements Component {
   private from: SessionInfo;
@@ -49,13 +48,8 @@ export class InlineMessageComponent implements Component {
     const bodyIndent = indent + "  ";
     const bodyWidth = width - bodyIndent.length;
 
-    const remoteSender = this.message.crossMachine && relaySenderName(this.message.crossMachine.origin);
-    const senderName = remoteSender
-      ? `${remoteSender} · unverified cross-machine`
-      : this.from.name || this.from.id.slice(0, 8);
-    const replyLabel = remoteSender
-      ? `To send a new message to ${remoteSender}:`
-      : "To reply:";
+    const senderName = this.from.name || this.from.id.slice(0, 8);
+    const replyLabel = "To reply:";
 
     const summary = { label: "Chat", icon: "⇄", target: `From ${senderName}` };
     const lines = renderToolRow(summary, { status: "done" }, width - padding).map((line) => indent + line);

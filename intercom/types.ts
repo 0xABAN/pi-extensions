@@ -49,19 +49,6 @@ export interface SessionInfo {
 
 export type SessionHolder = Pick<SessionInfo, "pid" | "cwd" | "name">;
 
-export interface CrossMachineOrigin {
-  name: string;
-  sessionId: string;
-  machine: string;
-}
-
-export interface CrossMachineProvenance {
-  type: "ssh-relay";
-  version: 1;
-  origin: CrossMachineOrigin;
-  trust: "ssh-asserted";
-}
-
 export interface Message {
   id: string;
   timestamp: number;
@@ -74,7 +61,6 @@ export interface Message {
   retryOf?: string;
   replyTo?: string;
   expectsReply?: boolean;
-  crossMachine?: CrossMachineProvenance;
   content: {
     text: string;
     attachments?: Attachment[];
@@ -114,7 +100,7 @@ export type SessionRegistration = Omit<SessionInfo, "id" | "endpointEpoch" | "pe
 };
 
 export type ClientMessage =
-  | { type: "register"; session: SessionRegistration; sessionId?: string; stateId?: string; scopeId?: string }
+  | { type: "register"; session: SessionRegistration; sessionId?: string; stateId?: string }
   | { type: "unregister" }
   | { type: "list"; requestId: string }
   | { type: "send"; to: string; message: Message; targetId?: string; targetEpoch?: string }

@@ -4,12 +4,10 @@ import { randomUUID } from "crypto";
 import { writeMessage, createMessageReader } from "./framing.ts";
 import { getBrokerConnectTarget, type BrokerConnectTarget } from "./paths.ts";
 import { isMessage, isMessageControl, isMessageReceipt, isSessionInfo } from "./protocol.ts";
-import { getIntercomScopeId } from "../config.ts";
 import { EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE, type DeliveryDetails } from "../types.ts";
 import type {
   Attachment,
   BrokerMessage,
-  CrossMachineProvenance,
   ClientMessage,
   Message,
   MessageControl,
@@ -27,7 +25,6 @@ interface SendOptions {
   messageId?: string;
   supersedes?: string;
   retryOf?: string;
-  crossMachine?: CrossMachineProvenance;
 }
 
 export interface SendResult extends DeliveryDetails {
@@ -280,12 +277,10 @@ export class IntercomClient extends EventEmitter {
       this.once("_registered", onRegistered);
 
       try {
-        const scopeId = getIntercomScopeId();
         writeMessage(socket, {
           type: "register",
           session: { ...session, livenessIntervalMs: getLivenessIntervalMs() },
           ...(sessionId ? { sessionId } : {}),
-          ...(scopeId ? { scopeId } : {}),
           ...(typeof target === "string" ? {} : { stateId: target.stateId }),
         });
       } catch (error) {
@@ -564,7 +559,6 @@ export class IntercomClient extends EventEmitter {
       retryOf: options.retryOf,
       replyTo: options.replyTo,
       expectsReply: options.expectsReply,
-      crossMachine: options.crossMachine,
       content: {
         text: options.text,
         attachments: options.attachments,

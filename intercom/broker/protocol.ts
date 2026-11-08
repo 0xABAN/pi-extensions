@@ -90,19 +90,6 @@ function isAttachment(value: unknown): value is Attachment {
   return value.language === undefined || typeof value.language === "string";
 }
 
-function isCrossMachineProvenance(value: unknown): boolean {
-  if (
-    !isRecord(value)
-    || value.type !== "ssh-relay"
-    || value.version !== 1
-    || value.trust !== "ssh-asserted"
-    || !isRecord(value.origin)
-  ) return false;
-  return typeof value.origin.name === "string"
-    && typeof value.origin.sessionId === "string"
-    && typeof value.origin.machine === "string";
-}
-
 export function isMessage(value: unknown): value is Message {
   if (!isRecord(value)) {
     return false;
@@ -134,9 +121,6 @@ export function isMessage(value: unknown): value is Message {
     return false;
   }
 
-  if (value.crossMachine !== undefined && !isCrossMachineProvenance(value.crossMachine)) {
-    return false;
-  }
 
   if (!isRecord(value.content) || typeof value.content.text !== "string") {
     return false;
@@ -155,7 +139,6 @@ export function messageDeliveryFingerprint(message: Message, targetId: string): 
     expectsReply: message.expectsReply,
     supersedes: message.supersedes,
     retryOf: message.retryOf,
-    crossMachine: message.crossMachine,
   });
 }
 

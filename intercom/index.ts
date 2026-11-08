@@ -6,10 +6,10 @@ import { Text } from "@earendil-works/pi-tui";
 import { IntercomClient, IntercomSessionHeldError, type SendResult } from "./broker/client.ts";
 import { spawnBrokerIfNeeded } from "./broker/spawn.ts";
 import { SessionListOverlay, type SessionListSelection } from "./ui/session-list.ts";
-import { HandoverPicker, type HandoverPickerResult, type RemoteSessionLister } from "./ui/handover-picker.ts";
+import { HandoverPicker, type HandoverPickerResult } from "./ui/handover-picker.ts";
 import { ComposeOverlay, type ComposeResult } from "./ui/compose.ts";
 import { InlineMessageComponent } from "./ui/inline-message.ts";
-import { getAskTimeoutMs, getIntercomScopeId, loadConfig, setIntercomScopeId, type IntercomConfig } from "./config.ts";
+import { getAskTimeoutMs, loadConfig, type IntercomConfig } from "./config.ts";
 import type { Attachment, BrokerMessage, Message, MessageControl, MessageReceiptStatus, SessionInfo, SessionRegistration } from "./types.ts";
 import { ReplyTracker } from "./reply-tracker.ts";
 import { homedir } from "node:os";
@@ -17,9 +17,6 @@ import { join as joinPath, resolve as resolvePath } from "node:path";
 import { sameCwd } from "./cwd.ts";
 import { formatContextUsage } from "./format-context.ts";
 import { openProjectPane, resolveTargetInCwd, waitForProjectSession, type ProjectPaneLaunch } from "./project-agent.ts";
-import { relaySenderName } from "./cross-machine-envelope.ts";
-import { runCommand, sendCrossMachine } from "./cross-machine-transport.ts";
-import { listMachineAgents, listSavedMachines, parseCrossMachineTarget } from "./cross-machine-discovery.ts";
 import { formatHandoverMessage, generateHandoverBody, readGitState } from "./handover.ts";
 import { isIdleWakePending, releaseIdleWake, reserveIdleWake } from "./idle-wake.ts";
 
@@ -85,25 +82,6 @@ function triggerTurnRunsPromptLifecycle(piVersion: string): boolean {
   if (!match) return false;
   const major = Number(match[1]);
   return major > 1 || (major === 1 && Number(match[2]) >= 2);
-}
-
-export function explicitCrossMachineSendRestriction(options: {
-  to?: string;
-  cwd?: string;
-  openProjectPaneIfMissing?: boolean;
-  attachments?: readonly unknown[];
-  replyTo?: string;
-  supersedes?: string;
-  retryOf?: string;
-}): string | undefined {
-  if (!options.to?.includes("@")) return undefined;
-  if (options.cwd || options.openProjectPaneIfMissing) {
-    return "Cross-machine send does not support cwd or opening project panes.";
-  }
-  if (options.replyTo || options.supersedes || options.retryOf || options.attachments?.length) {
-    return "Cross-machine send only supports a new text message; attachments, reply relationships, supersede, and retry are not supported.";
-  }
-  return undefined;
 }
 
 function undeliveredText(target: string, result: SendResult): string {
@@ -587,9 +565,7 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       : entry.replyCommand;
     const deliveredEntry = { ...entry, message: injectedMessage, replyCommand };
     replyTracker.queueTurnContext({ from: entry.from, message: injectedMessage, receivedAt: Date.now() });
-    const senderDisplay = injectedMessage.crossMachine
-      ? `${relaySenderName(injectedMessage.crossMachine.origin)} · unverified cross-machine`
-      : entry.from.name || entry.from.id.slice(0, 8);
+    const senderDisplay = entry.from.name || entry.from.id.slice(0, 8);
     const replyInstruction = replyCommand ? `\n\nTo reply, use the intercom tool: ${replyCommand}` : "";
     const deliveryMetadata = formatInboundDeliveryMetadata(injectedMessage);
     const trigger = delivery === "trigger" && shouldTriggerInboundMessage(entry, forceTrigger);
@@ -693,11 +669,9 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       ? formatAttachments(receivedMessage.content.attachments)
       : "";
     const bodyText = `${receivedMessage.content.text}${attachmentText}`;
-    const replyCommand = config.replyHint && receivedMessage.crossMachine
-      ? `intercom({ action: "send", to: ${JSON.stringify(relaySenderName(receivedMessage.crossMachine.origin))}, message: "..." })`
-      : config.replyHint && receivedMessage.expectsReply
-        ? `intercom({ action: "reply", message: "..." })`
-        : undefined;
+    const replyCommand = config.replyHint && receivedMessage.expectsReply
+      ? `intercom({ action: "reply", message: "..." })`
+      : undefined;
     replyTracker.recordIncomingMessage(from, receivedMessage, receiverReceivedAt);
     emitMessageReceipt(receivedMessage.id, "acknowledged", "accepted by receiver");
     const entry = { from, message: receivedMessage, replyCommand, bodyText };
@@ -989,26 +963,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
   ): Promise<IntercomToolResult> {
     const { to, cwd, openProjectPaneIfMissing, focus, message, attachments, replyTo, supersedes, retryOf } = request;
     try {
-      const crossMachineTarget = Boolean(to?.includes("@"));
-      const crossMachineRestriction = explicitCrossMachineSendRestriction({
-        to, cwd, openProjectPaneIfMissing, attachments, replyTo, supersedes, retryOf,
-      });
-      if (crossMachineRestriction) {
-        return {
-          content: [{ type: "text", text: crossMachineRestriction }],
-          details: { error: true, crossMachine: false },
-        };
-      }
-      if (crossMachineTarget) {
-        try {
-          parseCrossMachineTarget(to!);
-        } catch (error) {
-          return {
-            content: [{ type: "text", text: getErrorMessage(error) }],
-            details: { error: true, crossMachine: false },
-          };
-        }
-      }
       if (openProjectPaneIfMissing && !cwd) {
         return {
           content: [{ type: "text", text: "openProjectPaneIfMissing requires a target cwd." }],
@@ -1026,46 +980,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
           return {
             content: [{ type: "text", text: "Message cancelled by user" }],
             details: {},
-          };
-        }
-      }
-      if (confirmSend && crossMachineTarget) {
-        const confirmed = await ctx.ui.confirm("Send message", `Send to "${to}":\n\n${message}`);
-        if (!confirmed) {
-          return {
-            content: [{ type: "text", text: "Message cancelled by user" }],
-            details: {},
-          };
-        }
-      }
-      if (crossMachineTarget) {
-        if (request.handover && signal?.aborted) {
-          return { content: [{ type: "text", text: "Handover was cancelled before delivery." }], details: { error: true } };
-        }
-        const identity = buildPresenceIdentity(pi, connectedClient.sessionId ?? ctx.sessionManager.getSessionId());
-        try {
-          const remote = await sendCrossMachine(to!, message, {
-            name: identity.name,
-            sessionId: connectedClient.sessionId ?? ctx.sessionManager.getSessionId(),
-            machine: config.crossMachine.machineName,
-          }, {
-            remoteCommand: config.crossMachine.remoteCommand,
-          });
-          const remoteTarget = relaySenderName({ name: remote.agent.name, machine: remote.machine.label });
-          pi.appendEntry("intercom_sent", {
-            to: remoteTarget,
-            message: { text: message },
-            timestamp: Date.now(),
-            crossMachine: true,
-          });
-          return {
-            content: [{ type: "text", text: `Message sent to ${remoteTarget} over SSH (origin identity is SSH-asserted)` }],
-            details: { delivered: true, crossMachine: true, machine: remote.machine.label, target: remote.agent.name, trust: "ssh-asserted" },
-          };
-        } catch (remoteError) {
-          return {
-            content: [{ type: "text", text: `Explicit cross-machine message to "${to}" was not delivered: ${getErrorMessage(remoteError)}` }],
-            details: { error: true, crossMachine: false },
           };
         }
       }
@@ -1152,7 +1066,7 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
   async function buildHandoverText(
     connectedClient: IntercomClient,
     ctx: ExtensionContext,
-    options: { goal?: string; crossMachine: boolean },
+    options: { goal?: string },
     signal: AbortSignal | undefined,
   ): Promise<string> {
     const [body, git] = await Promise.all([
@@ -1166,7 +1080,7 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     return formatHandoverMessage({
       senderName: pi.getSessionName()?.trim() || sessionId.slice(0, 8),
       senderCwd: ctx.cwd,
-      sessionFile: options.crossMachine ? undefined : ctx.sessionManager.getSessionFile(),
+      sessionFile: ctx.sessionManager.getSessionFile(),
       git,
       body,
     });
@@ -1563,7 +1477,7 @@ Usage:
           }
           let handoverText: string;
           try {
-            handoverText = await buildHandoverText(connectedClient, ctx, { goal: message, crossMachine: Boolean(to?.includes("@")) }, _signal);
+            handoverText = await buildHandoverText(connectedClient, ctx, { goal: message }, _signal);
           } catch (error) {
             return {
               content: [{ type: "text", text: `Handover failed: ${getErrorMessage(error)}` }],
@@ -1753,13 +1667,12 @@ Usage:
           try {
             const mySessionId = connectedClient.sessionId;
             const sessions = await connectedClient.listSessions();
-            const pool = getIntercomScopeId();
             const mySession = sessions.find((session) => session.id === mySessionId);
             const shortId = (mySessionId ?? "unknown").slice(0, 8);
             return {
               content: [{
                 type: "text",
-                text: `**Intercom status:**\nConnected: Yes\nSession ID: ${mySessionId}\nSession name: ${mySession?.name ?? "(unnamed)"} (short id: ${shortId})${pool ? `\nPool: ${pool}` : ""}\nActive sessions: ${sessions.length}`,
+                text: `**Intercom status:**\nConnected: Yes\nSession ID: ${mySessionId}\nSession name: ${mySession?.name ?? "(unnamed)"} (short id: ${shortId})\nActive sessions: ${sessions.length}`,
               }],
               details: {},
             };
@@ -1906,45 +1819,6 @@ Usage:
     notifyCommand(liveContext, `Session alias set: ${alias}`, "info", commandGeneration);
   }
 
-  async function runIntercomPoolCommand(args: string, ctx: ExtensionContext): Promise<void> {
-    const commandGeneration = runtimeGeneration;
-    const liveContext = getLiveContext(ctx, commandGeneration);
-    if (!liveContext) return;
-    const requested = args.trim();
-    if (!requested) {
-      notifyCommand(liveContext, `Intercom pool: ${getIntercomScopeId() ?? "default"}`, "info", commandGeneration);
-      return;
-    }
-    const nextPool = requested === "default" ? undefined : requested;
-    await reconnectPromise?.catch(() => undefined);
-    if (!getLiveContext(liveContext, commandGeneration)) return;
-    if (nextPool === getIntercomScopeId()) {
-      notifyCommand(liveContext, `Already in intercom pool: ${requested}`, "info", commandGeneration);
-      return;
-    }
-    if (replyWaiter) {
-      notifyCommand(liveContext, `Cannot switch intercom pool while waiting for a reply from "${replyWaiter.from}". Wait for the reply or cancel the ask first.`, "warning", commandGeneration);
-      return;
-    }
-
-    setIntercomScopeId(nextPool);
-    const previousClient = client;
-    client = null;
-    clearReconnectTimer();
-    await previousClient?.disconnect().catch(() => undefined);
-    if (!getLiveContext(liveContext, commandGeneration)) return;
-    try {
-      await ensureConnected("background");
-    } catch (error) {
-      if (getLiveContext(liveContext, commandGeneration)) {
-        scheduleReconnect();
-      }
-      notifyCommand(liveContext, `Switched to intercom pool ${requested}, but intercom is unavailable: ${getErrorMessage(error)}. Retrying in the background.`, "warning", commandGeneration);
-      return;
-    }
-    notifyCommand(liveContext, `Joined intercom pool: ${requested}`, "info", commandGeneration);
-  }
-
   async function runHandoverCommand(args: string, ctx: ExtensionContext): Promise<void> {
     const commandGeneration = runtimeGeneration;
     const liveContext = getLiveContext(ctx, commandGeneration);
@@ -1962,7 +1836,7 @@ Usage:
     const goal = input.slice(target.length).trim() || undefined;
     const isPath = /^(\/|\.\.?\/|~(\/|$))/.test(target);
     const request = isPath ? { cwd: expandHomePath(target), openProjectPaneIfMissing: true } : { to: target };
-    await performHandover(liveContext, commandGeneration, request, { goal, crossMachine: !isPath && target.includes("@") });
+    await performHandover(liveContext, commandGeneration, request, { goal });
   }
 
   async function openHandoverPicker(ctx: ExtensionContext, generation: number, preselectSessionId?: string): Promise<void> {
@@ -1990,24 +1864,15 @@ Usage:
     }
     if (!getLiveContext(ctx, generation)) return;
 
-    const discoveryDeps = { run: runCommand, herdrBin: process.env.HERDR_BIN_PATH ?? "herdr" };
-    const lister: RemoteSessionLister = {
-      listMachines: () => listSavedMachines(discoveryDeps),
-      listAgents: (machine) => listMachineAgents(machine, discoveryDeps),
-    };
     const picked = await ctx.ui.custom<HandoverPickerResult | undefined>(
-      (tui, theme, keybindings, done) => new HandoverPicker(tui, theme, keybindings, { currentSession, sessions, lister, preselectSessionId }, done),
+      (tui, theme, keybindings, done) => new HandoverPicker(tui, theme, keybindings, { currentSession, sessions, preselectSessionId }, done),
       { overlay: true, overlayOptions: { width: 88 } },
     ).catch(() => undefined);
     if (!picked || !getLiveContext(ctx, generation)) return;
 
     const { target, goal } = picked;
     if (target.kind === "local") {
-      await performHandover(ctx, generation, { to: target.session.id }, { goal, crossMachine: false });
-      return;
-    }
-    if (target.kind === "remote") {
-      await performHandover(ctx, generation, { to: target.target }, { goal, crossMachine: true });
+      await performHandover(ctx, generation, { to: target.session.id }, { goal });
       return;
     }
     const path = (await ctx.ui.input("Project path for the new session", "~/dev/project"))?.trim();
@@ -2016,14 +1881,14 @@ Usage:
       notifyIfLive(ctx, "Handover cancelled", "info", generation);
       return;
     }
-    await performHandover(ctx, generation, { cwd: expandHomePath(path), openProjectPaneIfMissing: true }, { goal, crossMachine: false });
+    await performHandover(ctx, generation, { cwd: expandHomePath(path), openProjectPaneIfMissing: true }, { goal });
   }
 
   async function performHandover(
     ctx: ExtensionContext,
     generation: number,
     request: Pick<DeliveryRequest, "to" | "cwd" | "openProjectPaneIfMissing">,
-    options: { goal?: string; crossMachine: boolean },
+    options: { goal?: string },
   ): Promise<void> {
     let handoverClient: IntercomClient;
     try {
@@ -2108,7 +1973,7 @@ Usage:
     }
 
     const selection = await ctx.ui.custom<SessionListSelection | undefined>(
-      (_tui, theme, keybindings, done) => new SessionListOverlay(theme, keybindings, currentSession, sessions, done, getIntercomScopeId()),
+      (_tui, theme, keybindings, done) => new SessionListOverlay(theme, keybindings, currentSession, sessions, done),
       { overlay: true, overlayOptions: { width: 88 } }
     ).catch(() => undefined);
 
@@ -2155,10 +2020,6 @@ Usage:
     handler: async (_args, ctx) => insertIntercomId(ctx),
   });
 
-  pi.registerCommand("intercom-pool", {
-    description: "Show or switch this session's intercom pool (usage: /intercom-pool, /intercom-pool <name>, or /intercom-pool default)",
-    handler: async (args, ctx) => runIntercomPoolCommand(args, ctx),
-  });
 
   pi.registerCommand("alias", {
     description: "Set the current session alias (usage: /alias <name> or /alias menu)",
