@@ -16,9 +16,8 @@ import {
   restrictIntercomRuntimeFile,
   type BrokerConnectTarget,
 } from "./paths.ts";
-import { getAskTimeoutMs } from "../config.ts";
 import { sameCwd } from "../cwd.ts";
-import { EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE } from "../types.ts";
+import { ASK_TIMEOUT_MS, EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE } from "../types.ts";
 import type { DeliveryState, SessionInfo, Message, BrokerMessage, MessageControl, MessageReceiptStatus } from "../types.ts";
 import { assertNoLiveBroker } from "./runtime-claim.ts";
 import { resolveHerdrLocations } from "../herdr-location.ts";
@@ -187,7 +186,6 @@ class IntercomBroker {
   private server: net.Server;
   private lastLivenessSweepAt = Date.now();
   private shutdownTimer: NodeJS.Timeout | null = null;
-  private readonly askTimeoutMs = getAskTimeoutMs();
 
   constructor() {
     ensureIntercomRuntimeDir(INTERCOM_DIR);
@@ -1152,7 +1150,7 @@ class IntercomBroker {
   private pruneAskEdges(now = Date.now()): void {
     this.prunePendingAskRecords(now);
     for (const [messageId, edge] of this.askEdges) {
-      if (now - edge.createdAt > this.askTimeoutMs) {
+      if (now - edge.createdAt > ASK_TIMEOUT_MS) {
         this.askEdges.delete(messageId);
         this.removePendingAskRecord(messageId);
       }
@@ -1177,7 +1175,7 @@ class IntercomBroker {
       target: { sessionId: target.id, name: target.name ?? null },
       question: message.content.text,
       createdAt,
-      expiresAt: createdAt + this.askTimeoutMs,
+      expiresAt: createdAt + ASK_TIMEOUT_MS,
     };
     const filePath = pendingAskRecordPath(message.id);
     writeFileSync(filePath, `${JSON.stringify(record, null, 2)}\n`, { mode: INTERCOM_RUNTIME_FILE_MODE });

@@ -29,7 +29,7 @@ function nextMessage(client: Client): Promise<{ from: SessionInfo; message: Mess
 }
 
 beforeAll(async () => {
-	await spawnBrokerIfNeeded(process.execPath, []);
+	await spawnBrokerIfNeeded();
 });
 
 afterAll(async () => {

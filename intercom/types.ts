@@ -1,5 +1,6 @@
 export const EXACT_SEND_FEATURE = "exact-send-v1";
 export const SESSION_HELD_ERROR_CODE = "E_SESSION_HELD";
+export const ASK_TIMEOUT_MS = 10 * 60 * 1000;
 
 export type DeliveryState = "socket_delivered" | "queued" | "failed" | "unknown";
 

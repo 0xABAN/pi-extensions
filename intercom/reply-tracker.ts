@@ -1,5 +1,5 @@
-import { getAskTimeoutMs } from "./config.ts";
 import type { Message, SessionInfo } from "./types.ts";
+import { ASK_TIMEOUT_MS } from "./types.ts";
 
 export interface IntercomContext {
   from: SessionInfo;
@@ -49,7 +49,6 @@ export class ReplyTracker {
   private readonly pendingTurnContexts: IntercomContext[] = [];
   private currentTurnContext: IntercomContext | null = null;
 
-  constructor(private readonly askTimeoutMs = getAskTimeoutMs()) {}
 
   recordIncomingMessage(from: SessionInfo, message: Message, receivedAt = Date.now()): IntercomContext {
     const context = { from, message, receivedAt };
@@ -117,7 +116,7 @@ export class ReplyTracker {
 
   findUniquePendingAskFrom(to: string, now = Date.now()): IntercomContext | null {
     const candidates = Array.from(this.pendingAsks.values()).filter((context) => {
-      if (now - context.receivedAt > this.askTimeoutMs) {
+      if (now - context.receivedAt > ASK_TIMEOUT_MS) {
         return false;
       }
       return context.from.id === to || context.from.name?.toLowerCase() === to.toLowerCase();
@@ -156,7 +155,7 @@ export class ReplyTracker {
 
   private pruneExpired(now: number): void {
     for (const [messageId, context] of this.pendingAsks) {
-      if (now - context.receivedAt > this.askTimeoutMs) {
+      if (now - context.receivedAt > ASK_TIMEOUT_MS) {
         this.dismissPendingAsk(messageId);
       }
     }

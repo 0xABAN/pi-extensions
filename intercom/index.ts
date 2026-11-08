@@ -1,4 +1,4 @@
-import { BorderedLoader, defineTool, VERSION, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { BorderedLoader, defineTool, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { randomUUID } from "crypto";
 import { Type } from "typebox";
@@ -9,8 +9,7 @@ import { SessionListOverlay, type SessionListSelection } from "./ui/session-list
 import { HandoverPicker, type HandoverPickerResult } from "./ui/handover-picker.ts";
 import { ComposeOverlay, type ComposeResult } from "./ui/compose.ts";
 import { InlineMessageComponent } from "./ui/inline-message.ts";
-import { getAskTimeoutMs, loadConfig, type IntercomConfig } from "./config.ts";
-import type { Attachment, BrokerMessage, Message, MessageControl, MessageReceiptStatus, SessionInfo, SessionRegistration } from "./types.ts";
+import { ASK_TIMEOUT_MS, type Attachment, type BrokerMessage, type Message, type MessageControl, type MessageReceiptStatus, type SessionInfo, type SessionRegistration } from "./types.ts";
 import { ReplyTracker } from "./reply-tracker.ts";
 import { homedir } from "node:os";
 import { join as joinPath, resolve as resolvePath } from "node:path";
@@ -18,13 +17,11 @@ import { sameCwd } from "./cwd.ts";
 import { formatContextUsage } from "./format-context.ts";
 import { openProjectPane, resolveTargetInCwd, waitForProjectSession, type ProjectPaneLaunch } from "./project-agent.ts";
 import { formatHandoverMessage, generateHandoverBody, readGitState } from "./handover.ts";
-import { isIdleWakePending, releaseIdleWake, reserveIdleWake } from "./idle-wake.ts";
 
 const INTERCOM_TOOL_NAME = "intercom";
 const INBOUND_MESSAGE_DEDUPE_MAX = 1000;
 const INBOUND_MESSAGE_DEDUPE_RETENTION_MS = 60 * 60 * 1000;
 const DEFAULT_UNNAMED_SESSION_ALIAS_PREFIX = "session";
-const STABLE_INTERCOM_SESSION_ID_ENV = "PI_INTERCOM_STABLE_ID";
 
 interface InboundMessageEntry {
   from: SessionInfo;
@@ -74,13 +71,6 @@ const BLOCKING_ASK_GUIDANCE = "Blocking asks are not queued; use send for a non-
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function triggerTurnRunsPromptLifecycle(piVersion: string): boolean {
-  const match = /^(\d+)\.(\d+)\./.exec(piVersion);
-  if (!match) return false;
-  const major = Number(match[1]);
-  return major > 1 || (major === 1 && Number(match[2]) >= 2);
 }
 
 function undeliveredText(target: string, result: SendResult): string {
@@ -166,9 +156,6 @@ function buildPresenceIdentity(pi: ExtensionAPI, sessionId: string): { name: str
     runtimeFallbackAlias: !sessionName?.trim(),
   };
 }
-function resolveConfiguredIntercomSessionId(piSessionId: string, config: IntercomConfig): string {
-  return process.env[STABLE_INTERCOM_SESSION_ID_ENV]?.trim() || config.stableId || piSessionId;
-}
 function currentTmuxPane(): string | undefined {
   const pane = process.env.TMUX_PANE?.trim();
   return pane ? pane : undefined;
@@ -236,14 +223,10 @@ function formatInboundDeliveryMetadata(message: Message): string {
   if (injectedAt) parts.push(`injected ${injectedAt}`);
   return parts.join(" · ");
 }
-export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSION) {
+export default function piIntercomExtension(pi: ExtensionAPI) {
   let client: IntercomClient | null = null;
-  const wakeWithTriggerTurn = triggerTurnRunsPromptLifecycle(piVersion);
-  const config: IntercomConfig = loadConfig();
-  const askTimeoutMs = getAskTimeoutMs();
   let runtimeContext: ExtensionContext | null = null;
   let currentSessionId: string | null = null;
-  let currentIntercomSessionId: string | null = null;
   let currentModel = "unknown";
   let sessionStartedAt: number | null = null;
   let reconnectTimer: NodeJS.Timeout | null = null;
@@ -345,9 +328,9 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     }
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        const timeoutDescription = askTimeoutMs % 60000 === 0 ? `${askTimeoutMs / 60000} minutes` : `${askTimeoutMs}ms`;
+        const timeoutDescription = ASK_TIMEOUT_MS % 60000 === 0 ? `${ASK_TIMEOUT_MS / 60000} minutes` : `${ASK_TIMEOUT_MS}ms`;
         rejectReplyWaiter(new Error(`No reply from "${from}" for message ${replyTo} within ${timeoutDescription}. Last known delivery state: ${getDeliveryState()}. This waiter timeout is not cancellation; the delivered message may still be queued or actionable in the recipient session.`));
-      }, askTimeoutMs);
+      }, ASK_TIMEOUT_MS);
       const cleanup = () => {
         clearTimeout(timeout);
         signal?.removeEventListener("abort", onAbort);
@@ -432,7 +415,7 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
   function currentStatus(): string {
     const activeToolName = activeTools.values().next().value;
     const lifecycleStatus = activeToolName ? `tool:${activeToolName}` : agentRunning ? "thinking" : "idle";
-    return config.status ? `${lifecycleStatus} · ${config.status}` : lifecycleStatus;
+    return lifecycleStatus;
   }
   function buildRegistration(): SessionRegistration {
     const liveContext = getLiveContext();
@@ -440,7 +423,7 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       throw new Error("Intercom runtime not initialized");
     }
 
-    const identity = buildPresenceIdentity(pi, currentIntercomSessionId ?? currentSessionId);
+    const identity = buildPresenceIdentity(pi, currentSessionId);
     const tmuxPane = currentTmuxPane();
     const herdrPaneId = currentHerdrPane();
     const herdrSessionPath = herdrPaneId ? liveContext.sessionManager.getSessionFile() : undefined;
@@ -477,7 +460,7 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     if (!client || !getLiveContext()) {
       return;
     }
-    const identity = buildPresenceIdentity(pi, currentIntercomSessionId ?? sessionId);
+    const identity = buildPresenceIdentity(pi, sessionId);
     client.updatePresence({ ...identity, status: currentStatus(), ...currentContextUsage() });
   }
   function syncPresenceStatus(): void {
@@ -493,26 +476,14 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       if (trimmed) targets.add(trimmed.toLowerCase());
     };
     addTarget(currentSessionId);
-    addTarget(currentIntercomSessionId);
+    addTarget(currentSessionId);
     addTarget(activeClient?.sessionId);
     addTarget(pi.getSessionName());
-    if (currentSessionId) addTarget(buildPresenceIdentity(pi, currentIntercomSessionId ?? currentSessionId).name);
+    if (currentSessionId) addTarget(buildPresenceIdentity(pi, currentSessionId).name);
     return Boolean(resolvedTo && activeClient?.sessionId && resolvedTo === activeClient.sessionId)
       || targets.has(to.trim().toLowerCase());
   }
-  function shouldTriggerInboundMessage(entry: InboundMessageEntry, forceTrigger = false): boolean {
-    if (forceTrigger) {
-      return true;
-    }
-    if (config.inboundTrigger === "always") {
-      return true;
-    }
-    if (config.inboundTrigger === "replies") {
-      return Boolean(entry.message.replyTo);
-    }
-    return false;
-  }
-  function sendIncomingMessage(entry: InboundMessageEntry, delivery: "trigger" | "steer", generation = runtimeGeneration, forceTrigger = false): void {
+  function sendIncomingMessage(entry: InboundMessageEntry, delivery: "trigger" | "steer", generation = runtimeGeneration): void {
     if (runtimeStarted && !getLiveContext(runtimeContext, generation)) {
       emitMessageReceipt(entry.message.id, "expired", "session context no longer active before injection");
       return;
@@ -526,9 +497,9 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     const senderDisplay = entry.from.name || entry.from.id.slice(0, 8);
     const replyInstruction = replyCommand ? `\n\nTo reply, use the intercom tool: ${replyCommand}` : "";
     const deliveryMetadata = formatInboundDeliveryMetadata(injectedMessage);
-    const trigger = delivery === "trigger" && shouldTriggerInboundMessage(entry, forceTrigger);
+    const trigger = delivery === "trigger";
     const triggerContext = trigger ? getLiveContext(runtimeContext, generation) : undefined;
-    const startTurn = wakeWithTriggerTurn && triggerContext?.isIdle() === true;
+    const startTurn = triggerContext?.isIdle() === true;
     pi.sendMessage(
       {
         customType: "intercom_message",
@@ -538,10 +509,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       },
       startTurn ? { triggerTurn: true } : trigger ? undefined : { deliverAs: "steer" }
     );
-    if (!wakeWithTriggerTurn && triggerContext?.isIdle() && !isIdleWakePending(triggerContext.sessionManager)) {
-      reserveIdleWake(triggerContext.sessionManager);
-      pi.sendUserMessage("New intercom message above.", { deliverAs: "steer" });
-    }
     emitMessageReceipt(injectedMessage.id, "injected");
   }
   function sendIncomingBrokerMessage(entry: InboundMessageEntry, delivery: "trigger" | "steer", generation = runtimeGeneration): void {
@@ -574,13 +541,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
   }
   function flushHeldInboundMessages(ctx: ExtensionContext, generation: number): void {
     if (!getLiveContext(ctx, generation)) return;
-    if (config.busyDelivery === "human-first" && ctx.hasUI) {
-      if (ctx.isIdle() && !isIdleWakePending(ctx.sessionManager) && heldInboundMessages.length > 0) {
-        deliverIncomingBrokerMessage(heldInboundMessages.shift()!, ctx, generation);
-      }
-      if (heldInboundMessages.length === 0) clearHeldInboundTimer();
-      return;
-    }
     while (heldInboundMessages.length > 0 && (ctx.isIdle() || agentRunning) && getLiveContext(ctx, generation)) {
       deliverIncomingBrokerMessage(heldInboundMessages.shift()!, ctx, generation);
     }
@@ -627,13 +587,11 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       ? formatAttachments(receivedMessage.content.attachments)
       : "";
     const bodyText = `${receivedMessage.content.text}${attachmentText}`;
-    const replyCommand = config.replyHint && receivedMessage.expectsReply
-      ? `intercom({ action: "reply", message: "..." })`
-      : undefined;
+    const replyCommand = receivedMessage.expectsReply ? `intercom({ action: "reply", message: "..." })` : undefined;
     replyTracker.recordIncomingMessage(from, receivedMessage, receiverReceivedAt);
     emitMessageReceipt(receivedMessage.id, "acknowledged", "accepted by receiver");
     const entry = { from, message: receivedMessage, replyCommand, bodyText };
-    if (heldInboundMessages.length > 0 || (!liveContext.isIdle() && (!agentRunning || (config.busyDelivery === "human-first" && liveContext.hasUI)))) {
+    if (heldInboundMessages.length > 0 || (!liveContext.isIdle() && !agentRunning)) {
       holdIncomingBrokerMessage(entry, liveContext, messageGeneration);
     } else {
       deliverIncomingBrokerMessage(entry, liveContext, messageGeneration);
@@ -695,19 +653,16 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
   function reportSessionHeld(ctx: ExtensionContext, generation: number, error: IntercomSessionHeldError): void {
     if (sessionHeldBlocked || !getLiveContext(ctx, generation)) return;
     sessionHeldBlocked = true;
-    const message = `Intercom is offline: session id ${currentIntercomSessionId} is held by process ${error.holder.pid} in ${error.holder.cwd}. Close that session and run /reload, or give this session its own PI_INTERCOM_STABLE_ID.`;
+    const message = `Intercom is offline: session id ${currentSessionId} is held by process ${error.holder.pid} in ${error.holder.cwd}. Close that session and run /reload, or give this session its own PI_INTERCOM_STABLE_ID.`;
     notifyIfLive(ctx, message, "warning", generation);
     pi.appendEntry("intercom_session_held", {
-      sessionId: currentIntercomSessionId,
+      sessionId: currentSessionId,
       holder: error.holder,
       error: error.message,
       timestamp: Date.now(),
     });
   }
   async function ensureConnected(reason: "startup" | "background" | "tool" | "overlay"): Promise<IntercomClient> {
-    if (!config.enabled) {
-      throw new Error("Intercom disabled");
-    }
     if (disposed || shuttingDown) {
       throw new Error("Intercom shutting down");
     }
@@ -729,8 +684,8 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       attachClientHandlers(nextClient);
       let retryAfterFailure = false;
       try {
-        await spawnBrokerIfNeeded(config.brokerCommand, config.brokerArgs);
-        await nextClient.connect(buildRegistration(), currentIntercomSessionId ?? currentSessionId);
+        await spawnBrokerIfNeeded();
+        await nextClient.connect(buildRegistration(), currentSessionId);
         if (!getLiveContext(contextAtStart, generationAtStart)) {
           await nextClient.disconnect();
           throw new Error("Intercom runtime no longer active");
@@ -927,20 +882,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
           details: { error: true },
         };
       }
-      const confirmSend = !replyTo && config.confirmSend && ctx.hasUI;
-      const attachmentText = attachments?.length ? formatAttachments(attachments) : "";
-      if (confirmSend && cwd && openProjectPaneIfMissing) {
-        const confirmed = await ctx.ui.confirm(
-          "Send message",
-          `Send to "${to ?? cwd}":\n\n${message}${attachmentText}`,
-        );
-        if (!confirmed) {
-          return {
-            content: [{ type: "text", text: "Message cancelled by user" }],
-            details: {},
-          };
-        }
-      }
       const target: DeliveryTarget = cwd
         ? await resolveCwdDeliveryTarget(connectedClient, { to, cwd, openProjectPaneIfMissing, focus, signal })
         : { id: (await resolveSessionTarget(connectedClient, to!)) ?? to!, label: to! };
@@ -962,18 +903,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       }
       const inferredAsk = replyTo || request.handover ? null : replyTracker.findUniquePendingAskFrom(sendTo);
       const effectiveReplyTo = replyTo ?? inferredAsk?.message.id;
-      if (confirmSend && !(cwd && openProjectPaneIfMissing)) {
-        const confirmed = await ctx.ui.confirm(
-          "Send message",
-          `Send to "${targetDisplay}":\n\n${message}${attachmentText}`,
-        );
-        if (!confirmed) {
-          return {
-            content: [{ type: "text", text: "Message cancelled by user" }],
-            details: {},
-          };
-        }
-      }
       if (request.handover && signal?.aborted) {
         return { content: [{ type: "text", text: "Handover was cancelled before delivery." }], details: { error: true } };
       }
@@ -1061,7 +990,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     }
     runtimeContext = ctx;
     currentSessionId = ctx.sessionManager.getSessionId();
-    currentIntercomSessionId = resolveConfiguredIntercomSessionId(currentSessionId, config);
     currentModel = ctx.model?.id ?? "unknown";
     sessionStartedAt = Date.now();
     agentRunning = false;
@@ -1085,9 +1013,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     if (getLiveContext(ctx)) syncPresenceIdentity(ctx.sessionManager.getSessionId());
   });
   pi.on("session_start", (_event, ctx) => {
-    if (!config.enabled) {
-      return;
-    }
     startSessionRuntime(ctx);
   });
 
@@ -1108,7 +1033,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     }
     runtimeContext = null;
     currentSessionId = null;
-    currentIntercomSessionId = null;
     sessionStartedAt = null;
   });
   pi.on("turn_end", (event, ctx) => {
@@ -1116,16 +1040,8 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       return;
     }
     replyTracker.endTurn();
-    if (config.busyDelivery === "human-first" && ctx.hasUI && event.message.role === "assistant"
-      && event.message.stopReason !== "aborted" && event.message.stopReason !== "error"
-      && heldInboundMessages.length > 0 && agentRunning
-      && !ctx.isIdle() && !ctx.hasPendingMessages() && getLiveContext(ctx)) {
-      sendIncomingBrokerMessage(heldInboundMessages.shift()!, "steer", runtimeGeneration);
-      if (heldInboundMessages.length === 0) clearHeldInboundTimer();
-    }
   });
-  pi.on("agent_start", (_event, ctx) => {
-    releaseIdleWake(ctx.sessionManager);
+  pi.on("agent_start", () => {
     if (!getLiveContext()) {
       return;
     }
@@ -1159,9 +1075,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
   pi.on("turn_start", (_event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     if (!currentSessionId || sessionId !== currentSessionId) {
-      if (!config.enabled) {
-        return;
-      }
       startSessionRuntime(ctx);
       replyTracker.beginTurn();
       return;
@@ -1179,7 +1092,7 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     currentModel = event.model.id;
     if (client) {
       client.updatePresence({
-        ...buildPresenceIdentity(pi, currentIntercomSessionId ?? ctx.sessionManager.getSessionId()),
+        ...buildPresenceIdentity(pi, ctx.sessionManager.getSessionId()),
         model: event.model.id,
         status: currentStatus(),
       });
@@ -1889,8 +1802,6 @@ Usage:
     description: "Open session intercom overlay",
     handler: async (_args, ctx) => openIntercomOverlay(ctx),
   });
-
-
 
   pi.registerCommand("handover", {
     description: "Summarize this session and hand it over to another session (usage: /handover to pick a session, or /handover <target or project path> [next task])",

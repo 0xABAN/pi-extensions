@@ -1,8 +1,7 @@
 import { spawn } from "child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
-import { fileURLToPath, pathToFileURL } from "url";
-import { createRequire } from "module";
+import { fileURLToPath } from "url";
 import net from "net";
 import { randomUUID } from "crypto";
 import { createMessageReader, writeMessage } from "./framing.ts";
@@ -19,46 +18,12 @@ import {
 } from "./paths.ts";
 
 const INTERCOM_DIR = getIntercomDirPath();
-const EXTENSION_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BROKER_PID = join(INTERCOM_DIR, "broker.pid");
 const BROKER_SPAWN_LOCK = join(INTERCOM_DIR, "broker.spawn.lock");
 const BROKER_STARTUP_STDERR_LIMIT = 4_000;
 
-type BrokerLaunchSpec = {
-  command: string;
-  args: string[];
-  captureStartupStderr: boolean;
-};
-
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-export function getTsxLoaderPath(extensionDir: string = EXTENSION_DIR): string {
-  try {
-    const requireFromExtension = createRequire(join(extensionDir, "package.json"));
-    return requireFromExtension.resolve("tsx");
-  } catch {
-    const siblingTsxLoader = join(extensionDir, "..", "tsx", "dist", "loader.mjs");
-    if (existsSync(siblingTsxLoader)) {
-      return siblingTsxLoader;
-    }
-    return join(extensionDir, "node_modules", "tsx", "dist", "loader.mjs");
-  }
-}
-
-function usesDefaultBrokerCommand(brokerCommand: string, brokerArgs: string[]): boolean {
-  return brokerCommand === "npx"
-    && brokerArgs.length === 2
-    && brokerArgs[0] === "--no-install"
-    && brokerArgs[1] === "tsx";
-}
-
-function getNodeCommand(nodePath: string): string {
-  const executableName = nodePath.split(/[\\/]/).pop();
-  return executableName && /^node(?:js)?(?:\.exe)?$/i.test(executableName)
-    ? nodePath
-    : "node";
 }
 
 export function isBrokerHealthOkMessage(message: unknown, requestId: string): boolean {
@@ -72,53 +37,12 @@ export function isBrokerHealthOkMessage(message: unknown, requestId: string): bo
     && response.version === INTERCOM_PROTOCOL_VERSION;
 }
 
-export function getBrokerLaunchSpec(
-  brokerPath: string,
-  brokerCommand: string,
-  brokerArgs: string[],
-  extensionDir: string = EXTENSION_DIR,
-  nodePath: string = process.execPath,
-): BrokerLaunchSpec {
-  if (usesDefaultBrokerCommand(brokerCommand, brokerArgs)) {
-    return {
-      command: getNodeCommand(nodePath),
-      args: ["--import", pathToFileURL(getTsxLoaderPath(extensionDir)).href, brokerPath],
-      captureStartupStderr: true,
-    };
-  }
-
-  return {
-    command: brokerCommand,
-    args: [...brokerArgs, brokerPath],
-    captureStartupStderr: false,
-  };
-}
-
-export function getBrokerSpawnOptions(
-  env: NodeJS.ProcessEnv = process.env,
-  captureStderr = true,
-): {
-  detached: true;
-  stdio: "ignore" | ["ignore", "ignore", "pipe"];
-  cwd: string;
-  env: NodeJS.ProcessEnv;
-  windowsHide: true;
-} {
-  const agentDir = getAgentDirPath(env);
-  return {
-    detached: true,
-    stdio: captureStderr ? ["ignore", "ignore", "pipe"] : "ignore",
-    cwd: getIntercomDirPath(agentDir),
-    env: { ...env, PI_CODING_AGENT_DIR: agentDir, NODE_NO_WARNINGS: "1" },
-    windowsHide: true,
-  };
-}
 
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-export async function spawnBrokerIfNeeded(brokerCommand: string, brokerArgs: string[]): Promise<void> {
+export async function spawnBrokerIfNeeded(): Promise<void> {
   ensureIntercomRuntimeDir(INTERCOM_DIR);
 
   if (await isBrokerRunning()) {
@@ -137,8 +61,13 @@ export async function spawnBrokerIfNeeded(brokerCommand: string, brokerArgs: str
     }
 
     const brokerPath = join(dirname(fileURLToPath(import.meta.url)), "broker.ts");
-    const launch = getBrokerLaunchSpec(brokerPath, brokerCommand, brokerArgs);
-    const child = spawn(launch.command, launch.args, getBrokerSpawnOptions(process.env, launch.captureStartupStderr));
+    const agentDir = getAgentDirPath();
+    const child = spawn(process.execPath, [brokerPath], {
+      detached: true,
+      stdio: ["ignore", "ignore", "pipe"],
+      cwd: getIntercomDirPath(agentDir),
+      env: { ...process.env, PI_CODING_AGENT_DIR: agentDir, NODE_NO_WARNINGS: "1" },
+    });
     let brokerStderr = "";
     const rememberBrokerStderr = (chunk: Buffer | string) => {
       brokerStderr = `${brokerStderr}${chunk.toString()}`.slice(-BROKER_STARTUP_STDERR_LIMIT);
