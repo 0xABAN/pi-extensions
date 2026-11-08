@@ -11,7 +11,7 @@ import { PROVIDER_ID, messageContentToText } from "./convert.js";
 import { QueryProcess } from "./query-process.js";
 import { readTranscript, recordedToolResults, resolveRecordingCut, savePrefixSession } from "./session-transcript.js";
 import { debugLogPath, diagLogPath } from "./log-paths.js";
-import { applyLongContext, buildModels, claudeCodeModelId, type LongContextSettings } from "./models.js";
+import { buildModels, claudeCodeModelId } from "./models.js";
 import { MCP_SERVER_NAME, MCP_TOOL_PREFIX } from "./skills.js";
 import { verifyWrittenSession as _verifyWrittenSession } from "./session-verify.js";
 import { extractAllToolResults as _extractAllToolResults, type McpResult } from "./extract-tool-results.js";
@@ -20,7 +20,6 @@ import { compareHistory, copyRecording, importHistory, LiveRecording, type Recor
 import { deleteSessionState, loadSessionState, saveSessionState } from "./session-store.js";
 import { newAssistantOutput, QueryContext, type AssistantStep } from "./query-state.js";
 import { makePromptStream, userMessage, type PromptStream } from "./prompt-stream.js";
-import { claudeCodeSettings, globalConfigPath, loadConfig, type Config } from "./config.js";
 import {
 	projectPromptCapture,
 	sharedPromptCaptures,
@@ -47,8 +46,6 @@ function diagDump(label: string, data: Record<string, unknown>) {
 const ACTIVE_STREAM_SIMPLE_KEY = Symbol.for("claude-bridge:activeStreamSimple");
 
 const MODELS = buildModels(getModels("anthropic"));
-let providerSettings: NonNullable<Config["provider"]> = {};
-let longContextSettings: LongContextSettings = { plan: "pro", longContextExtraUsage: false };
 
 const SESSION_REGISTRY_KEY = Symbol.for("claude-bridge:sessionRegistry");
 interface SessionRegistry {
@@ -237,8 +234,7 @@ async function runIsolatedSummary(
 		const promptText = extractUserPrompt(context.messages);
 		if (!promptText) throw new Error("runIsolatedSummary: one-off summary without a user prompt (last message is not user?)");
 		const cwd = sessionCwdFor(summarySessionFor(options?.signal) ?? options?.sessionId);
-		const claudeExecutable = providerSettings.pathToClaudeCodeExecutable;
-		const cliModel = claudeCodeModelId(model, longContextSettings);
+		const cliModel = claudeCodeModelId(model);
 		const effort = effortForReasoning(model, options?.reasoning);
 		const thinking = thinkingForReasoning(model, options?.reasoning);
 		debug(`compact summary: spawn model=${cliModel} registeredModel=${model.id} effort=${effort ?? "default"}${thinking ? " thinking=disabled" : ""} promptLen=${promptText.length}`);
@@ -259,7 +255,6 @@ async function runIsolatedSummary(
 				maxTurns: 1,
 				...(effort ? { effort } : {}),
 				...(thinking ? { thinking } : {}),
-				...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
 				...makeCliDebugOptions("compact-summary"),
 			},
 		});
@@ -497,7 +492,6 @@ function mapToolArgs(
 let piUI: ExtensionUIContext | null = null;
 const activeQueryContexts = new Set<QueryContext>();
 
-let askClaudeWarningShown = false;
 
 const promptCaptures = sharedPromptCaptures((diagnostic) => {
 	const first = diagnostic.matches[0];
@@ -1244,7 +1238,7 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 
 
 		const cwd = sessionCwdFor(options?.sessionId);
-		const cliModel = claudeCodeModelId(model, longContextSettings);
+		const cliModel = claudeCodeModelId(model);
 		const piSessionId = options?.sessionId ?? null;
 		const historyRewritten = rewrittenUnderQuery || (piSessionId !== null && historyRewrittenBySession.has(piSessionId));
 		const promptDigest = createHash("sha256").update(systemPromptAppend ?? "").digest("hex");
@@ -1287,8 +1281,6 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 		queryCtx.promptStream = promptStream;
 		const mcpServers = buildMcpServers(mcpTools, queryCtx);
 
-		const strictMcpConfigEnabled = providerSettings.strictMcpConfig !== false;
-		const claudeExecutable = providerSettings.pathToClaudeCodeExecutable;
 
 		const effort = effortForReasoning(model, options?.reasoning);
 		const thinking = thinkingForReasoning(model, options?.reasoning);
@@ -1307,7 +1299,7 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 			includePartialMessages: true,
 			settingSources: ["user"] as SettingSource[],
 			settings: {
-				...claudeCodeSettings(providerSettings),
+				autoMemoryEnabled: false,
 				claudeMdExcludes: CLAUDE_MD_EXCLUDES,
 				includeGitInstructions: false,
 				outputStyle: "default",
@@ -1318,7 +1310,7 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 				snapshot: false,
 			},
 			model: cliModel,
-			strictMcpConfig: strictMcpConfigEnabled,
+			strictMcpConfig: true,
 			extraArgs,
 			...(effort ? { effort } : {}),
 			...(thinking ? { thinking } : {}),
@@ -1326,7 +1318,6 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 			...(resumeSessionId ? { resume: resumeSessionId } : {}),
 			...(syncResult.forkAt ? { forkSession: true, resumeSessionAt: syncResult.forkAt } : {}),
 			...(syncResult.created && (!resumeSessionId || syncResult.forkAt) ? { sessionId: syncResult.targetSessionId } : {}),
-			...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
 			...cliDebug,
 			spawnClaudeCodeProcess: childProcess.spawn,
 		};
@@ -1334,7 +1325,7 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 		debug("provider: fresh query",
 			`model=${cliModel} msgs=${context.messages.length} tools=${mcpTools.length}`,
 			`resume=${resumeSessionId?.slice(0, 8) ?? "none"} effort=${effort ?? "default"}`,
-			`ctxFiles=${promptCapture?.contextFiles.length ?? 0} strictMcp=${strictMcpConfigEnabled} ${sessionTag(queryCtx.piSessionId)}`,
+			`ctxFiles=${promptCapture?.contextFiles.length ?? 0} ${sessionTag(queryCtx.piSessionId)}`,
 			`prompt=${promptText.slice(0, 60)}${promptBlocks ? " [+images]" : ""}`);
 
 		let wasAborted = false;
@@ -1482,22 +1473,6 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 }
 
 export default function (pi: ExtensionAPI) {
-	const config = loadConfig();
-	debug("loadConfig:", JSON.stringify(config));
-	providerSettings = config.provider ?? {};
-	const forceTwoHundredK = Array.isArray(providerSettings.forceTwoHundredK)
-		? providerSettings.forceTwoHundredK.filter((id): id is string => typeof id === "string")
-		: undefined;
-	longContextSettings = {
-		plan: providerSettings.plan ?? "pro",
-		longContextExtraUsage: providerSettings.longContextExtraUsage ?? false,
-		forceTwoHundredK,
-	};
-	const registeredModels = applyLongContext(MODELS, longContextSettings);
-	if (registeredModels.length === 0) {
-		console.error("claude-bridge: no models available from pi-ai's anthropic catalog — update @earendil-works/pi-ai (requires >=0.86.1)");
-	}
-
 	const clearSession = (event: string) => {
 		debug(`${event}: retaining ${sharedSessions.size} shared session${sharedSessions.size === 1 ? "" : "s"}`);
 
@@ -1514,12 +1489,6 @@ export default function (pi: ExtensionAPI) {
 			clearSession(`session_start:${event.reason}`);
 		}
 		if (event.reason === "fork" && event.previousSessionFile) inheritSessionState(event.previousSessionFile, ctx.sessionManager.getSessionId());
-		if (config.askClaude?.enabled === true && !askClaudeWarningShown) {
-			askClaudeWarningShown = true;
-			if (!pi.getAllTools?.().some((tool) => tool.name === "AskClaude")) {
-				ctx.ui?.notify?.(`claude-bridge: AskClaude is now a separate package. Install it with \`pi install npm:pi-claude-bridge-askclaude\`, or remove "askClaude" from ${globalConfigPath()}.`, "warning");
-			}
-		}
 	});
 	pi.on("session_before_compact", (event, ctx) => {
 		rememberSummarySession(event.signal, ctx.sessionManager.getSessionId());
@@ -1580,7 +1549,7 @@ export default function (pi: ExtensionAPI) {
 		baseUrl: "claude-bridge",
 		apiKey: "not-used",
 		api: "claude-bridge",
-		models: registeredModels,
+		models: MODELS,
 		streamSimple: streamClaudeAgentSdk as any,
 	};
 	if (!g[ACTIVE_STREAM_SIMPLE_KEY]) {

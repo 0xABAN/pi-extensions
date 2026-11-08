@@ -1,51 +1,7 @@
 const TWO_HUNDRED_K_CONTEXT = 200_000;
 const ONE_M_CONTEXT = 1_000_000;
 
-function isDatedAlias(id: string): boolean {
-	return /-20\d{6}$/.test(id);
-}
-
 const FAMILY_ORDER = ["fable", "opus", "sonnet", "haiku"];
-
-function versionRank(id: string): { family: string; tuple: [number, number] } {
-	const [, family, major, minor] = id.split("-");
-	return { family, tuple: [Number(major) || 0, Number(minor) || 0] };
-}
-
-export function buildModels<T extends { id: string; [key: string]: any }>(piAiModels: T[]) {
-	return piAiModels
-		.filter((m) => typeof m.id === "string" && !isDatedAlias(m.id))
-		.sort((a, b) => {
-			const fa = FAMILY_ORDER.indexOf(versionRank(a.id).family);
-			const fb = FAMILY_ORDER.indexOf(versionRank(b.id).family);
-			const ta = fa === -1 ? FAMILY_ORDER.length : fa;
-			const tb = fb === -1 ? FAMILY_ORDER.length : fb;
-			if (ta !== tb) return ta - tb;
-			const ra = versionRank(a.id).tuple;
-			const rb = versionRank(b.id).tuple;
-			if (ra[0] !== rb[0]) return rb[0] - ra[0];
-			if (ra[1] !== rb[1]) return rb[1] - ra[1];
-			return a.id.localeCompare(b.id);
-		})
-		.map(({ id, name, reasoning, input, contextWindow, maxTokens, thinkingLevelMap }) => ({
-			id,
-			name,
-			reasoning, input, contextWindow, maxTokens,
-			thinkingLevelMap,
-			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-		}));
-}
-
-export type LongContextSettings = {
-	plan: "pro" | "max";
-	longContextExtraUsage: boolean;
-	forceTwoHundredK?: string[];
-};
-
-type ClaudeCodeRuntimeModel = {
-	cliModelId: string;
-	contextWindow: number;
-};
 
 const MEASURED_ONE_M = new Set([
 	"claude-fable-5",
@@ -54,49 +10,50 @@ const MEASURED_ONE_M = new Set([
 	"claude-opus-5",
 	"claude-opus-4-8",
 	"claude-opus-4-7",
-  "claude-sonnet-5",
+	"claude-sonnet-5",
 	"claude-sonnet-5-5",
 	"claude-haiku-5-5",
 ]);
 
-const PLAN_GATED_ONE_M: Record<string, (settings: LongContextSettings) => boolean> = {
-	"claude-opus-4-6": (settings) => settings.plan === "max" || settings.longContextExtraUsage,
-	"claude-sonnet-4-6": (settings) => settings.longContextExtraUsage,
-};
-
-export function resolveClaudeCodeRuntimeModel(
-	model: { id: string },
-	settings: LongContextSettings,
-): ClaudeCodeRuntimeModel {
-	const modelId = model.id;
-	if (settings.forceTwoHundredK?.includes(modelId)) {
-		return { cliModelId: modelId, contextWindow: TWO_HUNDRED_K_CONTEXT };
-	}
-	if (MEASURED_ONE_M.has(modelId)) {
-		return { cliModelId: `${modelId}[1m]`, contextWindow: ONE_M_CONTEXT };
-	}
-	const planGate = PLAN_GATED_ONE_M[modelId];
-	if (planGate) {
-		const useOneM = planGate(settings);
-		return {
-			cliModelId: useOneM ? `${modelId}[1m]` : modelId,
-			contextWindow: useOneM ? ONE_M_CONTEXT : TWO_HUNDRED_K_CONTEXT,
-		};
-	}
-	return { cliModelId: modelId, contextWindow: TWO_HUNDRED_K_CONTEXT };
+function isDatedAlias(id: string): boolean {
+	return /-20\d{6}$/.test(id);
 }
 
-export function claudeCodeModelId(model: { id: string }, settings: LongContextSettings): string {
-	return resolveClaudeCodeRuntimeModel(model, settings).cliModelId;
+function versionRank(id: string): { family: number; major: number; minor: number } {
+	const [, family, major, minor] = id.split("-");
+	const familyIndex = FAMILY_ORDER.indexOf(family);
+	return {
+		family: familyIndex === -1 ? FAMILY_ORDER.length : familyIndex,
+		major: Number(major) || 0,
+		minor: Number(minor) || 0,
+	};
 }
 
-export function applyLongContext<T extends { id: string; name: string; contextWindow?: number | null }>(
-	models: T[],
-	settings: LongContextSettings,
-): T[] {
-	return models.map((m) => {
-		const { contextWindow } = resolveClaudeCodeRuntimeModel(m, settings);
-		const name = contextWindow > TWO_HUNDRED_K_CONTEXT && !/\b1M\b/i.test(m.name) ? `${m.name} 1M` : m.name;
-		return contextWindow === m.contextWindow && name === m.name ? m : { ...m, contextWindow, name };
-	});
+function compareModels(a: { id: string }, b: { id: string }): number {
+	const ra = versionRank(a.id);
+	const rb = versionRank(b.id);
+	return ra.family - rb.family || rb.major - ra.major || rb.minor - ra.minor || a.id.localeCompare(b.id);
+}
+
+export function claudeCodeModelId(model: { id: string }): string {
+	return MEASURED_ONE_M.has(model.id) ? `${model.id}[1m]` : model.id;
+}
+
+export function buildModels<T extends { id: string; [key: string]: any }>(piAiModels: T[]) {
+	return piAiModels
+		.filter((model) => !isDatedAlias(model.id))
+		.sort(compareModels)
+		.map(({ id, name, reasoning, input, maxTokens, thinkingLevelMap }) => {
+			const oneM = MEASURED_ONE_M.has(id);
+			return {
+				id,
+				name: oneM && !/\b1M\b/i.test(name) ? `${name} 1M` : name,
+				reasoning,
+				input,
+				contextWindow: oneM ? ONE_M_CONTEXT : TWO_HUNDRED_K_CONTEXT,
+				maxTokens,
+				thinkingLevelMap,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			};
+		});
 }
