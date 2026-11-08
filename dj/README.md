@@ -35,8 +35,6 @@ Defaults: full layout, below the editor, pastel rainbow. Pickers preview live; e
 
 DJ stores preferences and credentials in `~/.pi/agent/dj/` and imports legacy Agent DJ credentials once. Use `/dj auth` to reconnect, not the legacy installer.
 
-For **powerline → DJ → last prompt** ordering, apply the optional [powerline patch](https://github.com/0xABAN/configs/blob/main/pi/agent/patches/powerline-dj.py). Reapply after powerline updates, then `/reload`.
-
 Local development: clone this repo, run `bun install --ignore-scripts`, then `pi install ./dj`. Check with `bun test ./dj` and `bun run typecheck`.
 
 Based on [Agent DJ](https://github.com/AdamPSU/agent-dj) · [Apache-2.0](LICENSE)
