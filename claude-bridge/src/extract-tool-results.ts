@@ -1,10 +1,3 @@
-// Tool-result extraction: walks the context tail to collect this turn's
-// tool results. Pi appends results to context and calls the provider again;
-// this scrapes them back out. Walks past user messages (steer/followUp) that
-// pi may inject between toolResults. Stops at the nearest assistant message
-// (turn boundary).
-// Extracted from index.ts so tests can import without activating the extension.
-
 type McpContent = Array<
 	| { type: "text"; text: string }
 	| { type: "image"; data: string; mimeType: string }
@@ -39,7 +32,6 @@ export function extractAllToolResults(
 		if (msg.role === "toolResult") {
 			results.unshift({ content: toolResultToMcpContent(msg.content as string | Array<{ type: string; text?: string; data?: string; mimeType?: string }>), isError: msg.isError, toolCallId: msg.toolCallId });
 		} else if (msg.role === "assistant") break;
-		// user messages: skip (steer/followUp injected mid-tool-execution)
 	}
 	return results;
 }

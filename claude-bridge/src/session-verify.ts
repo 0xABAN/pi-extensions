@@ -1,7 +1,3 @@
-// Pure session-file integrity check. Returns an array of warning strings;
-// callers decide how to surface them (debug log, piUI, diagDump, etc.).
-// Extracted from index.ts so tests can import without activating the extension.
-
 import { statSync, readFileSync } from "fs";
 
 export function verifyWrittenSession(jsonlPath: string, expectedSessionId: string, expectedRecordCount: number): string[] {

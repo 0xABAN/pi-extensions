@@ -1,8 +1,3 @@
-// Pi session id -> cwd. In the pi CLI process.cwd() is the session's cwd, but a
-// host serving many sessions from one process (pi-web) has a single process cwd,
-// so Claude Code would run in, and load project instructions from, the host's
-// directory. Kept on globalThis because every module instance's session_start
-// only sees its own session while the first instance's streamSimple serves all.
 const SESSION_CWDS_KEY = Symbol.for("claude-bridge:sessionCwds");
 const SUMMARY_SESSIONS_KEY = Symbol.for("claude-bridge:summarySessions");
 
@@ -11,7 +6,6 @@ function summarySessions(): WeakMap<AbortSignal, string> {
 	return (g[SUMMARY_SESSIONS_KEY] ??= new WeakMap<AbortSignal, string>()) as WeakMap<AbortSignal, string>;
 }
 
-// Pi forwards the operation's signal from the before hook to every summary call.
 export function rememberSummarySession(signal: AbortSignal, sessionId: string): void {
 	summarySessions().set(signal, sessionId);
 }

@@ -1,6 +1,3 @@
-// Pi owns context-file discovery; the bridge only formats the list Pi loaded so
-// Claude receives the same instructions, in the same order, that Pi applies.
-
 type ContextFile = { path: string; content: string };
 
 export function formatProjectContext(contextFiles: ContextFile[]): string | undefined {

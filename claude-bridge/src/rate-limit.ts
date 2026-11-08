@@ -1,13 +1,8 @@
-// Claude Code reports plan usage as SDK rate_limit_event messages, not HTTP
-// headers. Rebuilding the unified headers it can supply lets pi's
-// after_provider_response consumers read the bridge like the built-in provider.
-
 import type { ProviderResponse } from "@earendil-works/pi-ai";
 
 const HEADER_PREFIX = "anthropic-ratelimit-unified";
 const HTTP_OK = 200;
 
-/** Claude Code's own window-name → header-abbreviation table. */
 const WINDOW_ABBREVIATIONS: Readonly<Record<string, string>> = {
 	five_hour: "5h",
 	seven_day: "7d",
@@ -25,7 +20,6 @@ export type RateLimitInfo = {
 	unifiedWindows?: Record<string, UsageWindow | undefined>;
 };
 
-/** Always 200: a "rejected" status can still be served from overage, so only the status header says so. */
 export function rateLimitResponse(info: RateLimitInfo): ProviderResponse {
 	const headers: Record<string, string> = {};
 	const set = (name: string, value: string | number | undefined) => {

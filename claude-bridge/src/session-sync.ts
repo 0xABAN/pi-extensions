@@ -1,5 +1,3 @@
-// Content coverage shared by imports and live queries. A null boundary is only
-// an intentional import omission, never an unacknowledged live message.
 import type { Message as PiMessage } from "@earendil-works/pi-ai";
 import { repairWithOrigin, type Session, type ContentBlock, type ToolResultBlock, type UserContentBlock } from "cc-session-io";
 import { convertPiMessages } from "./convert.js";
@@ -16,13 +14,10 @@ export interface SessionState extends Recording {
 	ccSessionId: string;
 	cwd: string;
 	model: string;
-	/** Digest of the system prompt append CC recorded for this session, which it
-	 *  replays on every resume until a full import. */
 	promptDigest: string;
 	dirtyTail: boolean;
 }
 
-/** A recording that breaks the slot invariants; persisted state rejects only this. */
 export class InvalidRecordingError extends Error {}
 
 export function validateRecording(recorded: Recording): void {
@@ -60,8 +55,6 @@ function updatePendingTools(pending: Set<string>, message: PiMessage): void {
 	} else if (message.role === "toolResult") pending.delete(message.toolCallId);
 }
 
-/** Emit the repaired messages ourselves: importMessages hides the write mapping
- * and can emit two records for a mixed user message. Track the actual writes. */
 export function importHistory(session: Session, messages: PiMessage[], names?: Map<string, string>, carried: readonly CarriedAttachment[] = [], results?: ReadonlyMap<string, ToolResultBlock>): Recording {
 	const converted = convertPiMessages(messages, names, results);
 	const repaired = repairWithOrigin(converted.anthropicMessages);
@@ -89,7 +82,6 @@ export function importHistory(session: Session, messages: PiMessage[], names?: M
 			const rest = message.content.filter((b) => b.type !== "tool_result") as UserContentBlock[];
 			if (results.length) {
 				for (const block of results) pending.delete(block.tool_use_id);
-				// Verbatim, so a block copied from CC keeps CC's key order.
 				emit(session.addToolResultBlocks(results), sources);
 			}
 			if (rest.length) emit(session.addUserMessage(rest), sources);
@@ -99,8 +91,6 @@ export function importHistory(session: Session, messages: PiMessage[], names?: M
 	}
 	const recorded: Recording = { digests: digestMessages(messages), uuids: [], cuttable: [] };
 	let boundary = -1;
-	// Repair closes CC's batches with synthetic results, but only a real pi
-	// result closes the logical prefix: a later suffix must retain its call.
 	const piPending = new Set<string>();
 	for (let i = 0; i < messages.length; i++) {
 		updatePendingTools(piPending, messages[i]);
@@ -115,16 +105,11 @@ export function importHistory(session: Session, messages: PiMessage[], names?: M
 
 interface LiveSlot { digest: string; uuid?: string; toolCalls: string[]; resultId?: string; assistant?: boolean; nonCuttable?: boolean; resetTools?: boolean }
 
-/** Pending slots keep their pi positions even when acknowledgements arrive out
- * of order. Only the contiguous acknowledged prefix is exposed as recorded. */
 export class LiveRecording {
 	readonly recorded: Recording;
 	private slots = new Map<number, LiveSlot>();
 	private steers = new Map<string, { first: number; bound: { index: number; slot: LiveSlot }[]; overlaps: boolean; unsafe: boolean; steering: boolean }>();
 	private progress = 0;
-	/** CC consumed a second copy of pi content, so its file holds a record no pi
-	 * slot represents. Receipt order is not disk order, so every cut from the
-	 * copied run on may retain it; only earlier cuts stay valid. */
 	private duplicated = false;
 	private duplicate(first: number): void {
 		this.duplicated = true;
@@ -133,8 +118,6 @@ export class LiveRecording {
 	get hasProgress(): boolean { return this.progress > 0; }
 	get hasGaps(): boolean { return this.duplicated || this.nextIndex > this.recorded.digests.length; }
 	gap(): void { this.nextIndex++; }
-	/** A later-turn steer follows output pi merges into its next assistant.
-	 * Cutting at that steer would keep the unrepresented earlier output twice. */
 	assistantObserved(): void {
 		for (const steer of this.steers.values()) if (steer.steering) steer.unsafe = true;
 	}
@@ -147,11 +130,6 @@ export class LiveRecording {
 		this.nextIndex = this.recorded.digests.length;
 		for (const message of messages.slice(0, this.nextIndex)) updatePendingTools(this.outstanding, message);
 	}
-	/** Where pi's live history first leaves this recording: a message index,
-	 * "duplicate" when CC holds a record no pi slot represents, or undefined while
-	 * the history still continues it. Live equality includes pending slots: a
-	 * missing acknowledgement neither conceals a rewrite nor invalidates an
-	 * unchanged tool continuation. */
 	divergence(messages: PiMessage[]): number | "duplicate" | undefined {
 		if (this.duplicated) return "duplicate";
 		for (let i = 0; i < this.nextIndex; i++) {
@@ -160,9 +138,6 @@ export class LiveRecording {
 		}
 		return undefined;
 	}
-	/** A receipt binds to the exact slots it delivered. An index already covered,
-	 * or pending with other content, keeps its first snapshot; an identical
-	 * pending slot is shared, and whichever receipt is acknowledged first owns it. */
 	users(messages: PiMessage[], start: number, uuid: string, acknowledged: boolean, steering = !acknowledged): void {
 		const bound: { index: number; slot: LiveSlot }[] = [];
 		let overlaps = false, first = messages.length;
@@ -184,7 +159,6 @@ export class LiveRecording {
 		if (acknowledged) this.acknowledge(uuid);
 		else this.flush();
 	}
-	/** Repeated or unknown receipts are no-ops; returns whether this one was pending. */
 	acknowledge(uuid: string): boolean {
 		const steer = this.steers.get(uuid);
 		if (!steer) return false;
@@ -234,9 +208,6 @@ export class LiveRecording {
 			if (slot.resetTools) this.outstanding.clear();
 			for (const id of slot.toolCalls) this.outstanding.add(id);
 			if (slot.resultId) this.outstanding.delete(slot.resultId);
-			// Store each live slot's own anchor. Stream acknowledgement order is
-			// not physical file order; cut resolution derives the group boundary
-			// from all retained anchors, including steer source_uuid aliases.
 			if (i && this.previousUuid === slot.uuid) this.recorded.cuttable[i - 1] = false;
 			const cuttable = this.outstanding.size === 0 && !slot.nonCuttable;
 			this.recorded.digests.push(slot.digest);

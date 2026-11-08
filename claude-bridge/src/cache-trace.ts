@@ -1,25 +1,3 @@
-// Opt-in recorder for diagnosing prompt-cache failures. Private: no extension
-// event, no settings entry, no effect unless the environment asks for it.
-//
-//   CLAUDE_BRIDGE_TRACE_DIR=<dir>    record to <dir>/run-<time>-<pid>/
-//   CLAUDE_BRIDGE_TRACE_RAW=1        also keep the provider inputs themselves as
-//                                    artifacts (conversation content: owner-only files)
-//   CLAUDE_BRIDGE_TRACE_PROXY=<url>  send each Claude Code child's API traffic to
-//                                    diag/capture-proxy.mjs as <url>/q/<queryId>
-//
-// A run directory holds manifest.json, events.jsonl (provider inputs, routing,
-// session decisions, query lifecycle, all linked by ids), artifacts/ (raw mode
-// only, named by digest) and snapshots/ (raw mode only: Claude Code session
-// files copied before the bridge deletes or abandons them). Disabled, every export returns at its first line:
-// no hashing, files, listeners or retained messages.
-//
-// Recorder I/O failure: before a query starts or a session file is replaced,
-// traceAssertReady/traceStrict/traceQueryStart throw, so that operation never
-// begins. Anywhere later (delivery, abort, completion callbacks) traceEvent
-// latches the run as incomplete, stops recording and reports it instead of
-// throwing into a live query; the next strict call then fails its provider call.
-// Serialization errors are programming errors and always throw.
-
 import type { Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { VERSION as PI_VERSION } from "@earendil-works/pi-coding-agent";
 import { createHash, randomBytes } from "node:crypto";
@@ -43,15 +21,11 @@ interface TraceRun {
 	manifest: Record<string, unknown>;
 }
 
-/** One run per process, shared by every module instance (worktree subagents
- *  load this module fresh), so ids and seq stay unique within the run. */
 const RUN_KEY = Symbol.for("claude-bridge:cacheTrace");
-/** Which module instance wrote a record. */
 const INSTANCE = randomBytes(3).toString("hex");
 
 let notify: (message: string) => void = (message) => console.error(message);
 
-/** Where an incomplete trace is reported. index.ts points this at the pi UI. */
 export function setTraceNotifier(fn: (message: string) => void): void {
 	notify = fn;
 }
@@ -63,7 +37,6 @@ function run(): TraceRun | null {
 	return (g[RUN_KEY] as TraceRun | undefined) ?? (g[RUN_KEY] = startRun(root)) as TraceRun;
 }
 
-/** Test-only: forget the process's run so the next call starts a new one. */
 export function resetTraceForTests(): void {
 	delete (globalThis as Record<symbol, unknown>)[RUN_KEY];
 }
@@ -75,7 +48,7 @@ export function packageVersion(name: string): string | null {
 		while (!existsSync(join(dir, "package.json"))) dir = dirname(dir);
 		return JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).version ?? null;
 	} catch {
-		return null; // not resolvable from here: recorded as unknown
+		return null;
 	}
 }
 
@@ -109,8 +82,6 @@ function startRun(root: string): TraceRun {
 		sdk: packageVersion("@anthropic-ai/claude-agent-sdk"),
 		pi: PI_VERSION,
 		recording: r.raw ? "raw" : "shape",
-		// A base URL can itself change what Claude Code sends: traced and untraced
-		// runs are comparable only with that in mind.
 		routing: proxy ? { mode: "per-query-base-url", proxy } : null,
 		limits: { maxArtifactBytes: r.maxArtifactBytes, maxRunBytes: r.maxRunBytes },
 	};
@@ -121,15 +92,11 @@ function startRun(root: string): TraceRun {
 		latch(r, error);
 		return r;
 	}
-	// Claude Code refuses to be routed twice; refusing beats silently overriding
-	// a gateway the user configured.
-	// The configured URL is not repeated: a gateway URL can carry credentials.
 	if (proxy && process.env.ANTHROPIC_BASE_URL) latch(r, new Error("CLAUDE_BRIDGE_TRACE_PROXY set but ANTHROPIC_BASE_URL is already configured"));
 	process.on("exit", () => {
 		try {
 			writeFileSync(join(r.dir, "manifest.json"), JSON.stringify({ ...r.manifest, endedAt: new Date().toISOString(), incomplete: r.incomplete, events: r.seq, artifactBytes: r.artifactBytes }, null, 1));
 		} catch {
-			// A manifest without endedAt is itself the record that the run did not finish cleanly.
 		}
 	});
 	return r;
@@ -138,11 +105,9 @@ function startRun(root: string): TraceRun {
 function latch(r: TraceRun, error: unknown): void {
 	if (r.incomplete) return;
 	r.incomplete = error instanceof Error ? error.message : String(error);
-	// Now, not only at exit: a process that is killed must still read as incomplete.
 	try {
 		writeFileSync(join(r.dir, "manifest.json"), JSON.stringify({ ...r.manifest, incomplete: r.incomplete }, null, 1), { mode: 0o600 });
 	} catch {
-		// The failure being latched may be this very disk; the notice below still reports it.
 	}
 	notify(`Claude bridge cache trace is incomplete and stopped recording: ${r.incomplete} (${r.dir})`);
 }
@@ -166,13 +131,11 @@ function write(r: TraceRun, type: string, fields: Record<string, unknown>, stric
 	}
 }
 
-/** A new id for a provider call, query or side call; undefined when disabled. */
 export function traceId(kind: string): string | undefined {
 	const r = run();
 	return r ? `${kind}-${INSTANCE}-${++r.ids}` : undefined;
 }
 
-/** A stable id for an abort signal, so ownership is recorded without the object. */
 export function traceSignalId(signal: AbortSignal | undefined): string | undefined {
 	const r = run();
 	if (!r || !signal) return undefined;
@@ -181,29 +144,21 @@ export function traceSignalId(signal: AbortSignal | undefined): string | undefin
 	return id;
 }
 
-/** Record after a query started: never throws for recorder I/O. */
 export function traceEvent(type: string, fields: Record<string, unknown>): void {
 	const r = run();
 	if (r) write(r, type, fields, false);
 }
 
-/** Record before a query starts or a session file is replaced: throws if the
- *  trace cannot be written, so the operation never happens unrecorded. */
 export function traceStrict(type: string, fields: Record<string, unknown>): void {
 	const r = run();
 	if (r) write(r, type, fields, true);
 }
 
-/** Throws if an enabled trace cannot record; call before starting a query. */
 export function traceAssertReady(): void {
 	const r = run();
 	if (r?.incomplete) throw new Error(`Claude bridge cache trace is incomplete: ${r.incomplete}`);
 }
 
-/** Record a query about to start and route its child's API traffic through the
- *  capture proxy under /q/<queryId>. Returns `env` untouched when disabled.
- *  `digests` values are recorded as digests, and in raw mode also kept as
- *  artifacts (so a query can be reproduced with them); only when enabled. */
 export function traceQueryStart<E extends Record<string, string | undefined>>(
 	queryId: string | undefined,
 	fields: Record<string, unknown> & { digests?: Record<string, unknown> },
@@ -219,20 +174,14 @@ export function traceQueryStart<E extends Record<string, string | undefined>>(
 			? Object.fromEntries(Object.entries(digests).filter(([, v]) => v !== undefined).map(([k, v]) => [k, artifact(r, v)]))
 			: undefined;
 	} catch (error) {
-		// artifact() writes are recorder I/O; anything else here is a bug.
 		if ((error as NodeJS.ErrnoException)?.code === undefined) throw error;
 		latch(r, error);
 		throw error;
 	}
 	write(r, "query-start", { queryId, ...rest, ...(hashed ? { digests: hashed } : {}), ...(kept ? { artifacts: kept } : {}), route: r.proxy ? queryId : null }, true);
-	// CC treats a base URL other than api.anthropic.com as not first-party and changes
-	// what it sends (no thinking-binding beta, tool search off, ...); the override keeps
-	// a traced request shaped like an untraced one. Mirrored in diag/lib/first-party.mjs.
 	return r.proxy ? { ...env, _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL: "1", ANTHROPIC_BASE_URL: `${r.proxy}/q/${queryId}` } : env;
 }
 
-/** Fields that are pi's bookkeeping rather than history content. Left out of the
- *  source digest so they do not read as edits; still listed in `keys`. */
 const BOOKKEEPING = new Set(["timestamp", "usage", "responseId", "responseModel", "diagnostics", "details", "providerThinkingLevel", "thinkingLevel"]);
 
 function projectMessage(message: Record<string, unknown>): Record<string, unknown> {
@@ -258,8 +207,6 @@ function projectMessage(message: Record<string, unknown>): Record<string, unknow
 	};
 }
 
-/** Content-addressed copy of `value` in raw mode, within the run's limits.
- *  Over a limit the artifact is refused, never truncated. */
 function artifact(r: TraceRun, value: unknown): { artifact?: string; artifactRejected?: string } {
 	if (!r.raw) return {};
 	const text = JSON.stringify(value);
@@ -269,16 +216,12 @@ function artifact(r: TraceRun, value: unknown): { artifact?: string; artifactRej
 	const bytes = Buffer.byteLength(text);
 	if (bytes > r.maxArtifactBytes) return { artifactRejected: "max-artifact-bytes" };
 	if (r.artifactBytes + bytes > r.maxRunBytes) return { artifactRejected: "max-run-bytes" };
-	// Whole or absent: a crash must not leave a truncated file under its digest name.
 	writeFileSync(`${path}.tmp`, text, { mode: 0o600 });
 	renameSync(`${path}.tmp`, path);
 	r.artifactBytes += bytes;
 	return { artifact: name };
 }
 
-/** The provider input as pi handed it over (`source`, before transcript folding)
- *  and as the bridge uses it (`effective`). Hashed (and in raw mode copied) now:
- *  pi may mutate these messages after the call returns. */
 export function traceInput(callId: string | undefined, source: Context, effective: Context, model: Model<any>, options: SimpleStreamOptions | undefined): void {
 	const r = run();
 	if (!r || !callId || r.incomplete) return;
@@ -300,24 +243,13 @@ export function traceInput(callId: string | undefined, source: Context, effectiv
 			},
 		}, false);
 	} catch (error) {
-		// artifact() writes are recorder I/O; anything else here is a bug.
 		if ((error as NodeJS.ErrnoException)?.code === undefined) throw error;
 		latch(r, error);
 	}
 }
 
-/** Who may still be appending to a session file when it is copied.
- *  "no-known-writer" is a settled copy. */
 type SnapshotWriter = "no-known-writer";
 
-/** Copy a Claude Code session's files -- its JSONL and companion directory, the
- *  set deleteSession removes -- before the bridge deletes or abandons them. Raw
- *  mode only; shape mode records that it happened and the file size. Symlinks,
- *  non-files and files over the limits are refused, never followed or truncated,
- *  and leave the snapshot incomplete. Paths the JSONL names under the projects
- *  dir are checked: inside the session's own area they must be in the copy;
- *  anywhere else they are listed as outside the owned area. `strict` as for
- *  traceStrict: true before a delete, false in completion callbacks. */
 export function traceSnapshot(
 	fields: { ccSession: string; cwd: string; mirrorCwd?: string; reason: string; writer: SnapshotWriter; callId?: string; queryId?: string },
 	strict: boolean,
@@ -374,12 +306,10 @@ function snapshot(r: TraceRun, fields: { ccSession: string; cwd: string; mirrorC
 		if (abs === jsonl) jsonlText = data.toString("utf8");
 	};
 	mkdirSync(dir, { recursive: true, mode: 0o700 });
-	// lstat, not exists: a dangling symlink must be refused, not skipped as absent.
 	const jsonlPresent = lstatSync(jsonl, { throwIfNoEntry: false }) !== undefined;
 	if (jsonlPresent) copy(jsonl, basename(jsonl));
 	if (lstatSync(companion, { throwIfNoEntry: false })) copy(companion, basename(companion));
 
-	// References into the projects dir, as the JSONL spells them.
 	const projectsRoot = dirname(projectDir);
 	const missingReferences = new Set<string>();
 	const externalReferences = new Set<string>();
@@ -395,7 +325,6 @@ function snapshot(r: TraceRun, fields: { ccSession: string; cwd: string; mirrorC
 
 	const manifest = {
 		snapshotId, ...fields, jsonl, takenAt: new Date().toISOString(),
-		// External references are data the session needs that a copy of it cannot hold.
 		complete: jsonlPresent && !rejected.length && !missingReferences.size && !externalReferences.size && !changedDuringCopy,
 		jsonlPresent, changedDuringCopy, files, rejected,
 		missingReferences: [...missingReferences], externalReferences: [...externalReferences],

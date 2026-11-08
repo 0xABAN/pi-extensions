@@ -1,5 +1,3 @@
-// The SDK iterator can settle before Claude Code finishes flushing its file.
-// Use the documented custom-spawn hook to observe the real child's close.
 import { spawn } from "node:child_process";
 import type { SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sdk";
 
@@ -16,19 +14,16 @@ export class QueryProcess {
 			cwd: options.cwd, env: options.env, signal: options.signal,
 			stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
 		});
-		// Only a returned child can close; a synchronous spawn failure leaves none.
 		this.started = true;
 		this.child = child;
 		child.stderr.on("data", (data: Buffer) => this.stderr?.(data.toString()));
 		child.once("close", () => this.resolveExit());
 		return child;
 	};
-	/** A query constructor can throw after spawning, before returning a handle. */
 	terminate(): void {
 		this.close();
 		if (this.child && !this.child.killed) this.child.kill("SIGTERM");
 	}
-	/** Called only after closing the SDK query, which forbids a deferred spawn. */
 	close(): void {
 		this.closed = true;
 		if (!this.started) this.resolveExit();

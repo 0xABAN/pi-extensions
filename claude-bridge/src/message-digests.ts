@@ -146,7 +146,6 @@ function writeAssistant(hash: ReturnType<typeof createHash>, message: Extract<Pi
 	hash.update("]assistant");
 }
 
-/** Hash a pi conversation message's conversion-visible content, ignoring metadata. */
 export function digestMessage(message: PiMessage): string {
 	const hash = createHash("sha256");
 	if (message.role === "user") writeUser(hash, message);
@@ -156,7 +155,6 @@ export function digestMessage(message: PiMessage): string {
 	return hash.digest("hex");
 }
 
-/** Return one stable digest per pi conversation message. */
 export function digestMessages(messages: PiMessage[]): string[] {
 	return messages.map(digestMessage);
 }
