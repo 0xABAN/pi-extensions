@@ -25,7 +25,9 @@ async function connect(name: string, sessionId?: string): Promise<Client> {
 }
 
 function nextMessage(client: Client): Promise<{ from: SessionInfo; message: Message }> {
-	return new Promise((resolve) => client.once("message", (from: SessionInfo, message: Message) => resolve({ from, message })));
+	return new Promise((resolve) =>
+		client.once("message", (from: SessionInfo, message: Message) => resolve({ from, message })),
+	);
 }
 
 beforeAll(async () => {

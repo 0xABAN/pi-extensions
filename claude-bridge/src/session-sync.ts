@@ -1,5 +1,11 @@
 import type { Message as PiMessage } from "@earendil-works/pi-ai";
-import { repairWithOrigin, type Session, type ContentBlock, type ToolResultBlock, type UserContentBlock } from "cc-session-io";
+import {
+	repairWithOrigin,
+	type Session,
+	type ContentBlock,
+	type ToolResultBlock,
+	type UserContentBlock,
+} from "cc-session-io";
 import { convertPiMessages } from "./convert.js";
 import { digestMessage, digestMessages } from "./message-digests.js";
 import { placeCarriedAttachments, type CarriedAttachment } from "./attachments.js";
@@ -21,14 +27,23 @@ export interface SessionState extends Recording {
 export class InvalidRecordingError extends Error {}
 
 export function validateRecording(recorded: Recording): void {
-	if (!Array.isArray(recorded.digests) || !Array.isArray(recorded.uuids) || !Array.isArray(recorded.cuttable)
-		|| recorded.digests.length !== recorded.uuids.length || recorded.digests.length !== recorded.cuttable.length) {
+	if (
+		!Array.isArray(recorded.digests) ||
+		!Array.isArray(recorded.uuids) ||
+		!Array.isArray(recorded.cuttable) ||
+		recorded.digests.length !== recorded.uuids.length ||
+		recorded.digests.length !== recorded.cuttable.length
+	) {
 		throw new InvalidRecordingError("Session recording arrays must be present and aligned");
 	}
 	for (let i = 0; i < recorded.digests.length; i++) {
 		const uuid = recorded.uuids[i];
-		if (typeof recorded.digests[i] !== "string" || typeof recorded.cuttable[i] !== "boolean"
-			|| (uuid !== null && (typeof uuid !== "string" || !uuid.length)) || (uuid === null && recorded.cuttable[i])) {
+		if (
+			typeof recorded.digests[i] !== "string" ||
+			typeof recorded.cuttable[i] !== "boolean" ||
+			(uuid !== null && (typeof uuid !== "string" || !uuid.length)) ||
+			(uuid === null && recorded.cuttable[i])
+		) {
 			throw new InvalidRecordingError(`Invalid session recording slot ${i}`);
 		}
 	}
@@ -39,7 +54,10 @@ export function copyRecording(recorded: Recording = { digests: [], uuids: [], cu
 	return { digests: [...recorded.digests], uuids: [...recorded.uuids], cuttable: [...recorded.cuttable] };
 }
 
-export function compareHistory(priors: string[], recorded: Recording): { commonPrefix: number; cutCount: number; equal: boolean } {
+export function compareHistory(
+	priors: string[],
+	recorded: Recording,
+): { commonPrefix: number; cutCount: number; equal: boolean } {
 	validateRecording(recorded);
 	let commonPrefix = 0;
 	while (commonPrefix < priors.length && priors[commonPrefix] === recorded.digests[commonPrefix]) commonPrefix++;
@@ -55,7 +73,13 @@ function updatePendingTools(pending: Set<string>, message: PiMessage): void {
 	} else if (message.role === "toolResult") pending.delete(message.toolCallId);
 }
 
-export function importHistory(session: Session, messages: PiMessage[], names?: Map<string, string>, carried: readonly CarriedAttachment[] = [], results?: ReadonlyMap<string, ToolResultBlock>): Recording {
+export function importHistory(
+	session: Session,
+	messages: PiMessage[],
+	names?: Map<string, string>,
+	carried: readonly CarriedAttachment[] = [],
+	results?: ReadonlyMap<string, ToolResultBlock>,
+): Recording {
 	const converted = convertPiMessages(messages, names, results);
 	const repaired = repairWithOrigin(converted.anthropicMessages);
 	const placed = placeCarriedAttachments(carried, repaired.messages);
@@ -66,13 +90,24 @@ export function importHistory(session: Session, messages: PiMessage[], names?: M
 	const emit = (uuid: string, sources: number[]) => writes.push({ uuid, sources, pending: pending.size });
 	for (const [i, message] of repaired.messages.entries()) {
 		const origin = repaired.origin[i];
-		const sources = origin === null ? previousSources : converted.origins[origin].filter((index) => {
-			const pi = messages[index];
-			return pi.role !== "toolResult" || (Array.isArray(message.content) && message.content.some((b) => b.type === "tool_result" && b.tool_use_id === converted.sanitizedIds.get(pi.toolCallId)));
-		});
+		const sources =
+			origin === null
+				? previousSources
+				: converted.origins[origin].filter((index) => {
+						const pi = messages[index];
+						return (
+							pi.role !== "toolResult" ||
+							(Array.isArray(message.content) &&
+								message.content.some(
+									(b) =>
+										b.type === "tool_result" && b.tool_use_id === converted.sanitizedIds.get(pi.toolCallId),
+								))
+						);
+					});
 		if (origin !== null) sources.forEach((index) => direct.add(index));
 		if (message.role === "assistant") {
-			const blocks: ContentBlock[] = typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content;
+			const blocks: ContentBlock[] =
+				typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content;
 			for (const block of blocks) if (block.type === "tool_use") pending.add(block.id);
 			emit(session.addAssistantMessage(blocks), sources);
 		} else if (typeof message.content === "string") {
@@ -86,7 +121,8 @@ export function importHistory(session: Session, messages: PiMessage[], names?: M
 			}
 			if (rest.length) emit(session.addUserMessage(rest), sources);
 		}
-		for (const attachment of placed.filter((a) => a.afterIndex === i)) emit(session.addAttachment(attachment.attachment), sources);
+		for (const attachment of placed.filter((a) => a.afterIndex === i))
+			emit(session.addAttachment(attachment.attachment), sources);
 		previousSources = sources;
 	}
 	const recorded: Recording = { digests: digestMessages(messages), uuids: [], cuttable: [] };
@@ -97,27 +133,55 @@ export function importHistory(session: Session, messages: PiMessage[], names?: M
 		for (let j = 0; j < writes.length; j++) if (writes[j].sources.includes(i)) boundary = Math.max(boundary, j);
 		const real = direct.has(i) && boundary >= 0;
 		recorded.uuids.push(real ? writes[boundary].uuid : null);
-		recorded.cuttable.push(real && piPending.size === 0 && writes[boundary].pending === 0 && !writes.slice(0, boundary + 1).some((w) => w.sources.some((index) => index > i)));
+		recorded.cuttable.push(
+			real &&
+				piPending.size === 0 &&
+				writes[boundary].pending === 0 &&
+				!writes.slice(0, boundary + 1).some((w) => w.sources.some((index) => index > i)),
+		);
 	}
 	validateRecording(recorded);
 	return recorded;
 }
 
-interface LiveSlot { digest: string; uuid?: string; toolCalls: string[]; resultId?: string; assistant?: boolean; nonCuttable?: boolean; resetTools?: boolean }
+interface LiveSlot {
+	digest: string;
+	uuid?: string;
+	toolCalls: string[];
+	resultId?: string;
+	assistant?: boolean;
+	nonCuttable?: boolean;
+	resetTools?: boolean;
+}
 
 export class LiveRecording {
 	readonly recorded: Recording;
 	private slots = new Map<number, LiveSlot>();
-	private steers = new Map<string, { first: number; bound: { index: number; slot: LiveSlot }[]; overlaps: boolean; unsafe: boolean; steering: boolean }>();
+	private steers = new Map<
+		string,
+		{
+			first: number;
+			bound: { index: number; slot: LiveSlot }[];
+			overlaps: boolean;
+			unsafe: boolean;
+			steering: boolean;
+		}
+	>();
 	private progress = 0;
 	private duplicated = false;
 	private duplicate(first: number): void {
 		this.duplicated = true;
 		for (let i = first; i < this.recorded.cuttable.length; i++) this.recorded.cuttable[i] = false;
 	}
-	get hasProgress(): boolean { return this.progress > 0; }
-	get hasGaps(): boolean { return this.duplicated || this.nextIndex > this.recorded.digests.length; }
-	gap(): void { this.nextIndex++; }
+	get hasProgress(): boolean {
+		return this.progress > 0;
+	}
+	get hasGaps(): boolean {
+		return this.duplicated || this.nextIndex > this.recorded.digests.length;
+	}
+	gap(): void {
+		this.nextIndex++;
+	}
 	assistantObserved(): void {
 		for (const steer of this.steers.values()) if (steer.steering) steer.unsafe = true;
 	}
@@ -140,13 +204,15 @@ export class LiveRecording {
 	}
 	users(messages: PiMessage[], start: number, uuid: string, acknowledged: boolean, steering = !acknowledged): void {
 		const bound: { index: number; slot: LiveSlot }[] = [];
-		let overlaps = false, first = messages.length;
+		let overlaps = false,
+			first = messages.length;
 		for (let i = start; i < messages.length; i++) {
 			if (messages[i].role !== "user") continue;
 			first = Math.min(first, i);
 			const digest = digestMessage(messages[i]);
 			const existing = this.slots.get(i);
-			if (i < this.recorded.digests.length || (existing && (existing.digest !== digest || existing.uuid))) overlaps = true;
+			if (i < this.recorded.digests.length || (existing && (existing.digest !== digest || existing.uuid)))
+				overlaps = true;
 			else if (existing) bound.push({ index: i, slot: existing });
 			else {
 				const slot: LiveSlot = { digest, toolCalls: [] };
@@ -190,7 +256,12 @@ export class LiveRecording {
 		for (let i = this.recorded.digests.length; i < messages.length; i++) {
 			const message = messages[i];
 			if (message.role !== "toolResult" || this.slots.has(i)) continue;
-			this.slots.set(i, { digest: digestMessage(message), uuid: this.resultUuids.get(message.toolCallId), toolCalls: [], resultId: message.toolCallId });
+			this.slots.set(i, {
+				digest: digestMessage(message),
+				uuid: this.resultUuids.get(message.toolCallId),
+				toolCalls: [],
+				resultId: message.toolCallId,
+			});
 		}
 		this.nextIndex = Math.max(this.nextIndex, messages.length);
 		this.flush();

@@ -107,11 +107,7 @@ export class QuestionTabStrategy implements TabContentStrategy {
 
 	midRows(state: DialogState): Component[] {
 		if (state.notesVisible) {
-			return [
-				new Text(this.config.theme.fg("muted", NOTES_HEADER), 1, 0),
-				this.config.notesInput,
-				new Spacer(1),
-			];
+			return [new Text(this.config.theme.fg("muted", NOTES_HEADER), 1, 0), this.config.notesInput, new Spacer(1)];
 		}
 		const note = selectSavedNote(state.notesByTab, state.answers, state.currentTab);
 		if (note === undefined) return [];
@@ -124,13 +120,7 @@ export class QuestionTabStrategy implements TabContentStrategy {
 		const question = this.config.questions[state.currentTab];
 		return [
 			new Spacer(1),
-			new OneLineClippedText(
-				this.config.theme.fg(
-					"dim",
-					buildHintText(question, this.config.isMulti, state),
-				),
-				1,
-			),
+			new OneLineClippedText(this.config.theme.fg("dim", buildHintText(question, this.config.isMulti, state)), 1),
 		];
 	}
 
@@ -158,10 +148,7 @@ export class SubmitTabStrategy implements TabContentStrategy {
 	}
 
 	headingRows(_state: DialogState): Component[] {
-		return [
-			new Text(this.config.theme.bold(this.config.theme.fg("accent", REVIEW_HEADING)), 1, 0),
-			new Spacer(1),
-		];
+		return [new Text(this.config.theme.bold(this.config.theme.fg("accent", REVIEW_HEADING)), 1, 0), new Spacer(1)];
 	}
 
 	bodyComponent(state: DialogState): Component {
@@ -177,13 +164,7 @@ export class SubmitTabStrategy implements TabContentStrategy {
 				new Text(`   ${this.config.theme.fg("muted", "→")} ${this.config.theme.fg("text", answerText)}`, 1, 0),
 			);
 			if (a.notes && a.notes.length > 0) {
-				c.addChild(
-					new Text(
-						this.config.theme.fg("dim", `     ${SAVED_NOTE_LABEL} ${a.notes}`),
-						1,
-						0,
-					),
-				);
+				c.addChild(new Text(this.config.theme.fg("dim", `     ${SAVED_NOTE_LABEL} ${a.notes}`), 1, 0));
 			}
 		}
 		const globalNote = state.notesByTab.get(this.config.questions.length);
@@ -220,10 +201,7 @@ export class SubmitTabStrategy implements TabContentStrategy {
 		const promptText =
 			missing.length === 0
 				? this.config.theme.fg("muted", READY_PROMPT)
-				: this.config.theme.fg(
-						"warning",
-						`${INCOMPLETE_WARNING_PREFIX} ${missing.join(", ")}`,
-					);
+				: this.config.theme.fg("warning", `${INCOMPLETE_WARNING_PREFIX} ${missing.join(", ")}`);
 		const out: Component[] = [new Spacer(1), new OneLineClippedText(promptText, 1)];
 		if (this.config.submitPicker) {
 			out.push(this.config.submitPicker);
@@ -231,9 +209,7 @@ export class SubmitTabStrategy implements TabContentStrategy {
 			out.push(new Spacer(1));
 			out.push(new Spacer(1));
 		}
-		out.push(
-			new OneLineClippedText(this.config.theme.fg("dim", buildSubmitHintText(state)), 1),
-		);
+		out.push(new OneLineClippedText(this.config.theme.fg("dim", buildSubmitHintText(state)), 1));
 		return out;
 	}
 
@@ -242,15 +218,10 @@ export class SubmitTabStrategy implements TabContentStrategy {
 	}
 }
 
-export function buildHintText(
-	question: QuestionData | undefined,
-	isMulti: boolean,
-	state: DialogState,
-): string {
+export function buildHintText(question: QuestionData | undefined, isMulti: boolean, state: DialogState): string {
 	const parts: string[] = [];
 	if (question?.multiSelect === true) parts.push(HINT_PART_TOGGLE);
-	if (question && !state.notesVisible && !state.inputMode)
-		parts.push(HINT_PART_NOTES);
+	if (question && !state.notesVisible && !state.inputMode) parts.push(HINT_PART_NOTES);
 	if (isMulti) parts.push(HINT_PART_TAB);
 	parts.push(HINT_PART_CANCEL);
 	parts.push(HINT_PART_COLLAPSE);

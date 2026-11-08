@@ -25,7 +25,9 @@ const ACTIVE_FORM = "Present-continuous spinner label shown while status is in_p
 
 export const TodoParams = Type.Object({
 	action: StringEnum(["create", "update", "list", "get", "delete", "clear"] as const),
-	subject: Type.Optional(Type.String({ description: "Task subject line (required for create unless tasks[] is set)" })),
+	subject: Type.Optional(
+		Type.String({ description: "Task subject line (required for create unless tasks[] is set)" }),
+	),
 	description: Type.Optional(Type.String({ description: "Long-form task description" })),
 	activeForm: Type.Optional(Type.String({ description: ACTIVE_FORM })),
 	status: Type.Optional(
@@ -66,7 +68,9 @@ export function resultText(op: Op, state: TaskState): string {
 	switch (op.kind) {
 		case "create":
 			return op.ids
-				.map((id) => `Created #${id}: ${displayText(state.tasks.find((task) => task.id === id)!.subject)} (pending)`)
+				.map(
+					(id) => `Created #${id}: ${displayText(state.tasks.find((task) => task.id === id)!.subject)} (pending)`,
+				)
 				.join("\n");
 		case "update":
 			if (!op.changed) return `No change: #${op.id} already matches the requested values (status: ${op.to})`;

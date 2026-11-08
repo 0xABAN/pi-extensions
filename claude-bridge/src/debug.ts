@@ -22,7 +22,11 @@ export function debug(...args: unknown[]) {
 
 let nextCliDebugSeq = 1;
 
-export function makeCliDebugOptions(tag: string): { debug?: boolean; debugFile?: string; stderr?: (data: string) => void } {
+export function makeCliDebugOptions(tag: string): {
+	debug?: boolean;
+	debugFile?: string;
+	stderr?: (data: string) => void;
+} {
 	if (!DEBUG) return {};
 
 	const seq = nextCliDebugSeq++;

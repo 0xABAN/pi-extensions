@@ -1,9 +1,25 @@
-import { createAssistantMessageEventStream, getCurrentSystemMessage, type AssistantMessageEventStream, type Context, type Model, type SimpleStreamOptions, type Tool } from "@earendil-works/pi-ai";
+import {
+	createAssistantMessageEventStream,
+	getCurrentSystemMessage,
+	type AssistantMessageEventStream,
+	type Context,
+	type Model,
+	type SimpleStreamOptions,
+	type Tool,
+} from "@earendil-works/pi-ai";
 import { query, type SettingSource } from "@anthropic-ai/claude-agent-sdk";
 import type { ContentBlockParam } from "@anthropic-ai/sdk/resources";
 import { deleteSession } from "cc-session-io";
 import { createHash, randomUUID } from "node:crypto";
-import { ccChildEnv, CLAUDE_MD_EXCLUDES, effortForReasoning, errorMessage, logServedContextWindow, resultErrorText, thinkingForReasoning } from "./cc-child.js";
+import {
+	ccChildEnv,
+	CLAUDE_MD_EXCLUDES,
+	effortForReasoning,
+	errorMessage,
+	logServedContextWindow,
+	resultErrorText,
+	thinkingForReasoning,
+} from "./cc-child.js";
 import { DEBUG, debug, makeCliDebugOptions } from "./debug.js";
 import { extractAllToolResults as _extractAllToolResults, type McpResult } from "./extract-tool-results.js";
 import { createToolServer, MCP_SERVER_NAME, MCP_TOOL_PREFIX } from "./mcp-server.js";
@@ -14,21 +30,47 @@ import { makePromptStream, userMessage, type PromptStream } from "./prompt-strea
 import { QueryProcess } from "./query-process.js";
 import { activeQueryContexts, newAssistantOutput, QueryContext } from "./query-state.js";
 import { rateLimitResponse } from "./rate-limit.js";
-import { currentCwd, historyRewrittenBySession, sessionStateFor, sessionTag, sessionWriters, setSessionStateFor, sharedSessions, syncSharedSession, waitForSessionWriter } from "./sessions.js";
+import {
+	currentCwd,
+	historyRewrittenBySession,
+	sessionStateFor,
+	sessionTag,
+	sessionWriters,
+	setSessionStateFor,
+	sharedSessions,
+	syncSharedSession,
+	waitForSessionWriter,
+} from "./sessions.js";
 import { saveSessionState } from "./session-store.js";
 import { copyRecording, LiveRecording, type SessionState } from "./session-sync.js";
-import { claimCurrentPiStream, completedStreams, endCurrentPiStream, endStream, finalizeCurrentStream, processAssistantMessage, processStreamEvent, pushTextBlock, recordAssistantEmission, tapRecording } from "./stream-events.js";
+import {
+	claimCurrentPiStream,
+	completedStreams,
+	endCurrentPiStream,
+	endStream,
+	finalizeCurrentStream,
+	processAssistantMessage,
+	processStreamEvent,
+	pushTextBlock,
+	recordAssistantEmission,
+	tapRecording,
+} from "./stream-events.js";
 import { isolatedStreamFn } from "./summary.js";
 import { nonSystemMessages, toBridgeContext } from "./transcript.js";
 import { extractUserPrompt, extractUserPromptBlocks, steerBlocks, turnStart } from "./user-prompt.js";
 
 function extractAllToolResults(context: Context): McpResult[] {
-	const results = _extractAllToolResults(context.messages as unknown as Array<{ role: string; [key: string]: unknown }>);
+	const results = _extractAllToolResults(
+		context.messages as unknown as Array<{ role: string; [key: string]: unknown }>,
+	);
 	if (DEBUG) {
 		debug(`extractAllToolResults: ${results.length} results from ${context.messages.length} msgs`);
 		debug(`extractAllToolResults: all msg roles:`, context.messages.map((m, i) => `[${i}]${m.role}`).join(" "));
 		for (let r = 0; r < results.length; r++) {
-			debug(`extractAllToolResults: result[${r}] id=${results[r].toolCallId}${results[r].isError ? " ERROR" : ""} preview:`, JSON.stringify(results[r].content).slice(0, 150));
+			debug(
+				`extractAllToolResults: result[${r}] id=${results[r].toolCallId}${results[r].isError ? " ERROR" : ""} preview:`,
+				JSON.stringify(results[r].content).slice(0, 150),
+			);
 		}
 	}
 	return results;
@@ -55,8 +97,8 @@ export async function closeSessionQueries(piSessionId: string): Promise<void> {
 	const closing = [...activeQueryContexts].filter((c) => c.piSessionId === piSessionId);
 	for (const c of closing) {
 		debug(
-			`${c.activeQuery ? "session_shutdown: closing parked query" : "WARNING: session_shutdown left a context with no query"} — `
-			+ `pendingToolCalls=${c.pendingToolCalls.size} promptStream=${c.promptStream !== null}`,
+			`${c.activeQuery ? "session_shutdown: closing parked query" : "WARNING: session_shutdown left a context with no query"} — ` +
+				`pendingToolCalls=${c.pendingToolCalls.size} promptStream=${c.promptStream !== null}`,
 		);
 		discardRewrittenQuery(c);
 	}
@@ -69,7 +111,11 @@ function contextForToolResults(results: McpResult[], piSessionId: string | null)
 		if (!id) continue;
 		for (const queryCtx of activeQueryContexts) {
 			if (queryCtx.piSessionId !== piSessionId) continue;
-			if (queryCtx.pendingToolCalls.has(id) || queryCtx.pendingResults.has(id) || queryCtx.turnToolCallIds.includes(id)) {
+			if (
+				queryCtx.pendingToolCalls.has(id) ||
+				queryCtx.pendingResults.has(id) ||
+				queryCtx.turnToolCallIds.includes(id)
+			) {
 				return queryCtx;
 			}
 		}
@@ -96,7 +142,10 @@ function resolveMcpTools(context: Context): {
 	return { mcpTools, customToolNameToSdk, customToolNameToPi };
 }
 
-function buildMcpServers(tools: Tool[], queryCtx: QueryContext): Record<string, ReturnType<typeof createToolServer>> | undefined {
+function buildMcpServers(
+	tools: Tool[],
+	queryCtx: QueryContext,
+): Record<string, ReturnType<typeof createToolServer>> | undefined {
 	if (!tools.length) return undefined;
 	const mcpTools = tools.map((tool) => ({
 		name: tool.name,
@@ -106,7 +155,9 @@ function buildMcpServers(tools: Tool[], queryCtx: QueryContext): Record<string, 
 			if (queryCtx.pendingResults.has(toolCallId)) {
 				const result = queryCtx.pendingResults.get(toolCallId)!;
 				queryCtx.pendingResults.delete(toolCallId);
-				debug(`mcp handler: ${tool.name} [${toolCallId}] → resolved from queue (${queryCtx.pendingResults.size} remaining)`);
+				debug(
+					`mcp handler: ${tool.name} [${toolCallId}] → resolved from queue (${queryCtx.pendingResults.size} remaining)`,
+				);
 				return result;
 			}
 			debug(`mcp handler: ${tool.name} [${toolCallId}] → waiting`);
@@ -164,9 +215,12 @@ async function consumeQuery(
 				queryCtx.lastRateLimitWarnStep = null;
 				queryCtx.lastRateLimitWarnThreshold = undefined;
 				const resetsAt = info.resetsAt ? new Date(info.resetsAt * 1000).toLocaleTimeString() : undefined;
-				notify(info.isUsingOverage
-					? `Claude subscription rate limit reached (${info.rateLimitType ?? "unknown"}) — requests are now billed to Extra Usage${resetsAt ? ` until ${resetsAt}` : ""}`
-					: `Claude subscription rate limit reached (${info.rateLimitType ?? "unknown"}) — resets at ${resetsAt ?? "unknown"}`, "warning");
+				notify(
+					info.isUsingOverage
+						? `Claude subscription rate limit reached (${info.rateLimitType ?? "unknown"}) — requests are now billed to Extra Usage${resetsAt ? ` until ${resetsAt}` : ""}`
+						: `Claude subscription rate limit reached (${info.rateLimitType ?? "unknown"}) — resets at ${resetsAt ?? "unknown"}`,
+					"warning",
+				);
 			} else if (info?.status === "allowed") {
 				queryCtx.lastRateLimitWarnStep = null;
 				queryCtx.lastRateLimitWarnThreshold = undefined;
@@ -192,10 +246,16 @@ async function consumeQuery(
 				processStreamEvent(message, customToolNameToPi, model, queryCtx);
 				break;
 			case "assistant":
-				if (!queryCtx.assistantSteps.get(message.message.id)?.emitted) processAssistantMessage(message, model, customToolNameToPi, queryCtx);
+				if (!queryCtx.assistantSteps.get(message.message.id)?.emitted)
+					processAssistantMessage(message, model, customToolNameToPi, queryCtx);
 				break;
 			case "result": {
-				if (resultError === undefined && !queryCtx.turnSawStreamEvent && !queryCtx.turnStarted && message.subtype === "success") {
+				if (
+					resultError === undefined &&
+					!queryCtx.turnSawStreamEvent &&
+					!queryCtx.turnStarted &&
+					message.subtype === "success"
+				) {
 					pushTextBlock(queryCtx, message.result || "");
 				}
 				break;
@@ -210,7 +270,9 @@ async function consumeQuery(
 		}
 	}
 
-	debug(`consumeQuery: for-await loop exited, wasAborted=${wasAborted()}, capturedSessionId=${capturedSessionId?.slice(0, 8) ?? "none"}`);
+	debug(
+		`consumeQuery: for-await loop exited, wasAborted=${wasAborted()}, capturedSessionId=${capturedSessionId?.slice(0, 8) ?? "none"}`,
+	);
 
 	return { capturedSessionId, failure };
 }
@@ -241,13 +303,19 @@ async function deliverToolResults(
 		}
 	}
 
-	debug(`provider: tool results, ${results.length} results, ${c.pendingToolCalls.size} waiting handlers, ctx.msgs=${contextLength}`);
+	debug(
+		`provider: tool results, ${results.length} results, ${c.pendingToolCalls.size} waiting handlers, ctx.msgs=${contextLength}`,
+	);
 	for (const result of results) {
 		const id = result.toolCallId;
 		if (id && c.pendingToolCalls.has(id)) {
 			const pending = c.pendingToolCalls.get(id)!;
 			c.pendingToolCalls.delete(id);
-			if (DEBUG) debug(`provider: resolving ${pending.toolName} [${id}]${result.isError ? " (error)" : ""}`, JSON.stringify(result.content).slice(0, 200));
+			if (DEBUG)
+				debug(
+					`provider: resolving ${pending.toolName} [${id}]${result.isError ? " (error)" : ""}`,
+					JSON.stringify(result.content).slice(0, 200),
+				);
 			pending.resolve(result);
 		} else if (id) {
 			c.pendingResults.set(id, result);
@@ -260,8 +328,13 @@ async function deliverToolResults(
 		}
 	}
 	if (c.pendingToolCalls.size > 0) {
-		debug(`WARNING: ${c.pendingToolCalls.size} MCP handlers still waiting after delivering ${results.length} results`);
-		notify(`Claude bridge: ${c.pendingToolCalls.size} tool handler(s) still waiting — provider may be stuck`, "warning");
+		debug(
+			`WARNING: ${c.pendingToolCalls.size} MCP handlers still waiting after delivering ${results.length} results`,
+		);
+		notify(
+			`Claude bridge: ${c.pendingToolCalls.size} tool handler(s) still waiting — provider may be stuck`,
+			"warning",
+		);
 	}
 }
 
@@ -271,16 +344,19 @@ function drainForAbort(c: QueryContext, promptStream: PromptStream): void {
 }
 
 const CONTINUE_AFTER_REWRITE_PROMPT =
-	"[Your context was compacted. What precedes this is a summary plus the most recent messages, "
-	+ "ending with the tool result you were waiting for. Continue the task from there.]";
+	"[Your context was compacted. What precedes this is a summary plus the most recent messages, " +
+	"ending with the tool result you were waiting for. Continue the task from there.]";
 
 const CONTINUE_AFTER_RESUME_PROMPT =
-	"[Your session was interrupted and resumed. What precedes this ends with the tool result "
-	+ "you were waiting for. Continue the task from there.]";
+	"[Your session was interrupted and resumed. What precedes this ends with the tool result " +
+	"you were waiting for. Continue the task from there.]";
 
 function discardRewrittenQuery(c: QueryContext): void {
-	try { c.commitRecording?.(true); }
-	finally { dropParkedQuery(c); }
+	try {
+		c.commitRecording?.(true);
+	} finally {
+		dropParkedQuery(c);
+	}
 }
 
 function dropParkedQuery(c: QueryContext): void {
@@ -301,12 +377,18 @@ function dropParkedQuery(c: QueryContext): void {
 	debug("provider: discarded parked query; its recorded prefix remains available for a fork");
 }
 
-export function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: SimpleStreamOptions): AssistantMessageEventStream {
+export function streamClaudeAgentSdk(
+	model: Model<any>,
+	context: Context,
+	options?: SimpleStreamOptions,
+): AssistantMessageEventStream {
 	const system = getCurrentSystemMessage(context.messages);
 	context = toBridgeContext(context);
 
 	if (options?.cacheRetention === "none") {
-		debug(`provider: one-off summarizer call (cacheRetention none) routed to isolated summary, msgs=${context.messages.length}`);
+		debug(
+			`provider: one-off summarizer call (cacheRetention none) routed to isolated summary, msgs=${context.messages.length}`,
+		);
 		return isolatedStreamFn(model, context, options);
 	}
 
@@ -318,7 +400,9 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 	};
 
 	const lastMsgRole = context.messages[context.messages.length - 1]?.role;
-	debug(`provider: streamClaudeAgentSdk called, activeContexts=${activeQueryContexts.size}, lastMsgRole=${lastMsgRole}`);
+	debug(
+		`provider: streamClaudeAgentSdk called, activeContexts=${activeQueryContexts.size}, lastMsgRole=${lastMsgRole}`,
+	);
 
 	let activeQuery = activeQueryContexts.size > 0;
 	const allResults = activeQueryContexts.size > 0 ? extractAllToolResults(context) : [];
@@ -326,23 +410,34 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 
 	let divergence: ReturnType<LiveRecording["divergence"]>;
 	try {
-		divergence = resultCtx && !resultCtx.historyStale ? resultCtx.recording.divergence(nonSystemMessages(context.messages)) : undefined;
+		divergence =
+			resultCtx && !resultCtx.historyStale
+				? resultCtx.recording.divergence(nonSystemMessages(context.messages))
+				: undefined;
 	} catch (error) {
-		try { discardRewrittenQuery(resultCtx!); }
-		catch (discardError) { return failBeforeQuery(discardError); }
+		try {
+			discardRewrittenQuery(resultCtx!);
+		} catch (discardError) {
+			return failBeforeQuery(discardError);
+		}
 		return failBeforeQuery(error);
 	}
 	const rewrittenUnderQuery = Boolean(resultCtx && (resultCtx.historyStale || divergence !== undefined));
 	if (resultCtx && rewrittenUnderQuery) {
-		try { discardRewrittenQuery(resultCtx); }
-		catch (error) { return failBeforeQuery(error); }
+		try {
+			discardRewrittenQuery(resultCtx);
+		} catch (error) {
+			return failBeforeQuery(error);
+		}
 		resultCtx = undefined;
 		activeQuery = activeQueryContexts.size > 0;
 	}
 
 	const isReentrantUserQuery = activeQuery && lastMsgRole === "user" && allResults.length === 0;
 	if (isReentrantUserQuery) {
-		debug(`provider: active query user-only call treated as reentrant fresh query, ctx.msgs=${context.messages.length}`);
+		debug(
+			`provider: active query user-only call treated as reentrant fresh query, ctx.msgs=${context.messages.length}`,
+		);
 	}
 
 	if (resultCtx) {
@@ -364,10 +459,13 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 	}
 
 	try {
-		if (options?.sessionId) for (const parked of [...activeQueryContexts]) {
-			if (parked.piSessionId === options.sessionId) discardRewrittenQuery(parked);
-		}
-	} catch (error) { return failBeforeQuery(error); }
+		if (options?.sessionId)
+			for (const parked of [...activeQueryContexts]) {
+				if (parked.piSessionId === options.sessionId) discardRewrittenQuery(parked);
+			}
+	} catch (error) {
+		return failBeforeQuery(error);
+	}
 
 	const isReentrant = activeQuery;
 	const queryCtx = new QueryContext();
@@ -390,17 +488,29 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 		await waitForSessionWriter(sessionStateFor(queryCtx.piSessionId)?.ccSessionId, options?.signal);
 		if (queryCtx.discarded) return;
 
-
 		const cwd = currentCwd();
 		const cliModel = claudeCodeModelId(model);
 		const piSessionId = options?.sessionId ?? null;
-		const historyRewritten = rewrittenUnderQuery || (piSessionId !== null && historyRewrittenBySession.has(piSessionId));
-		const promptDigest = createHash("sha256").update(systemPromptAppend ?? "").digest("hex");
-		const syncResult = syncSharedSession(context.messages, cwd, customToolNameToSdk, cliModel, piSessionId, promptDigest);
+		const historyRewritten =
+			rewrittenUnderQuery || (piSessionId !== null && historyRewrittenBySession.has(piSessionId));
+		const promptDigest = createHash("sha256")
+			.update(systemPromptAppend ?? "")
+			.digest("hex");
+		const syncResult = syncSharedSession(
+			context.messages,
+			cwd,
+			customToolNameToSdk,
+			cliModel,
+			piSessionId,
+			promptDigest,
+		);
 		if (syncResult.created) createdBeforeLaunch = { id: syncResult.targetSessionId, cwd };
 		if (piSessionId) historyRewrittenBySession.delete(piSessionId);
 		const { sessionId: resumeSessionId } = syncResult;
-		const recording = queryCtx.recording = new LiveRecording(syncResult.recorded, nonSystemMessages(context.messages));
+		const recording = (queryCtx.recording = new LiveRecording(
+			syncResult.recorded,
+			nonSystemMessages(context.messages),
+		));
 		const promptBlocks = extractUserPromptBlocks(context.messages);
 		let promptText = extractUserPrompt(context.messages) ?? "";
 
@@ -430,11 +540,11 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 		const promptUuid = randomUUID();
 		recording.users(context.messages, turnStart(context.messages), promptUuid, false, false);
 		queryCtx.turnOpener = promptUuid;
-		void promptStream.push({ ...userMessage(promptBlocks ?? [{ type: "text", text: promptText }]), uuid: promptUuid })
+		void promptStream
+			.push({ ...userMessage(promptBlocks ?? [{ type: "text", text: promptText }]), uuid: promptUuid })
 			.catch((error) => debug(`provider: initial prompt push rejected:`, error));
 		queryCtx.promptStream = promptStream;
 		const mcpServers = buildMcpServers(mcpTools, queryCtx);
-
 
 		const effort = effortForReasoning(model, options?.reasoning);
 		const thinking = thinkingForReasoning(model, options?.reasoning);
@@ -459,7 +569,8 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 				outputStyle: "default",
 			},
 			systemPrompt: {
-				type: "preset", preset: "claude_code",
+				type: "preset",
+				preset: "claude_code",
 				append: systemPromptAppend ? systemPromptAppend : undefined,
 				snapshot: false,
 			},
@@ -471,25 +582,33 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 			...(mcpServers ? { mcpServers } : {}),
 			...(resumeSessionId ? { resume: resumeSessionId } : {}),
 			...(syncResult.forkAt ? { forkSession: true, resumeSessionAt: syncResult.forkAt } : {}),
-			...(syncResult.created && (!resumeSessionId || syncResult.forkAt) ? { sessionId: syncResult.targetSessionId } : {}),
+			...(syncResult.created && (!resumeSessionId || syncResult.forkAt)
+				? { sessionId: syncResult.targetSessionId }
+				: {}),
 			...cliDebug,
 			spawnClaudeCodeProcess: childProcess.spawn,
 		};
 
-		debug("provider: fresh query",
+		debug(
+			"provider: fresh query",
 			`model=${cliModel} msgs=${context.messages.length} tools=${mcpTools.length}`,
 			`resume=${resumeSessionId?.slice(0, 8) ?? "none"} effort=${effort ?? "default"}`,
 			sessionTag(queryCtx.piSessionId),
-			`prompt=${promptText.slice(0, 60)}${promptBlocks ? " [+images]" : ""}`);
+			`prompt=${promptText.slice(0, 60)}${promptBlocks ? " [+images]" : ""}`,
+		);
 
 		let wasAborted = false;
-		const stopWriting = () => { sessionWriters.set(syncResult.targetSessionId, childProcess.exited); };
+		const stopWriting = () => {
+			sessionWriters.set(syncResult.targetSessionId, childProcess.exited);
+		};
 		const releaseWriter = () => {
-			if (sessionWriters.get(syncResult.targetSessionId) === childProcess.exited) sessionWriters.delete(syncResult.targetSessionId);
+			if (sessionWriters.get(syncResult.targetSessionId) === childProcess.exited)
+				sessionWriters.delete(syncResult.targetSessionId);
 		};
 		let sdkQuery: ReturnType<typeof query>;
-		try { sdkQuery = query({ prompt: promptStream.stream, options: queryOptions }); }
-		catch (error) {
+		try {
+			sdkQuery = query({ prompt: promptStream.stream, options: queryOptions });
+		} catch (error) {
 			stopWriting();
 			childProcess.terminate();
 			await childProcess.exited;
@@ -501,10 +620,22 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 		let unsaved: SessionState | null = null;
 		const commitRecording = (dirty: boolean) => {
 			stopWriting();
-			if (!dirty && (recording.hasGaps || (syncResult.created && !recording.hasProgress))) debug(`recording: clean end left messages unrecorded ${sessionTag(piSessionId)}`);
-			if (piSessionId == null || sessionStateFor(piSessionId) !== expectedState || (syncResult.created && !recording.hasProgress)) return;
-			const state: SessionState = { ...copyRecording(recording.recorded), ccSessionId: syncResult.targetSessionId, cwd, model: cliModel, promptDigest,
-				dirtyTail: dirty || queryCtx.historyStale || recording.hasGaps };
+			if (!dirty && (recording.hasGaps || (syncResult.created && !recording.hasProgress)))
+				debug(`recording: clean end left messages unrecorded ${sessionTag(piSessionId)}`);
+			if (
+				piSessionId == null ||
+				sessionStateFor(piSessionId) !== expectedState ||
+				(syncResult.created && !recording.hasProgress)
+			)
+				return;
+			const state: SessionState = {
+				...copyRecording(recording.recorded),
+				ccSessionId: syncResult.targetSessionId,
+				cwd,
+				model: cliModel,
+				promptDigest,
+				dirtyTail: dirty || queryCtx.historyStale || recording.hasGaps,
+			};
 			setSessionStateFor(piSessionId, state);
 			expectedState = unsaved = state;
 		};
@@ -524,15 +655,18 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 		const requestAbort = () => {
 			stopWriting();
 			void sdkQuery.interrupt().catch(() => {});
-			try { sdkQuery.close(); } catch {}
+			try {
+				sdkQuery.close();
+			} catch {}
 			childProcess.close();
 		};
 		queryCtx.stopProcess = requestAbort;
 		const onAbort = () => {
 			if (wasAborted) return;
 			wasAborted = true;
-			try { commitRecording(true); }
-			finally {
+			try {
+				commitRecording(true);
+			} finally {
 				activeQueryContexts.delete(abortCtx);
 				abortCtx.turnToolCallIds = [];
 				drainForAbort(abortCtx, promptStream);
@@ -563,20 +697,29 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 			if (queryCtx.turnOutput && queryCtx.currentPiStream) {
 				queryCtx.turnOutput.stopReason = wasAborted ? "aborted" : "error";
 				queryCtx.turnOutput.errorMessage ??= errorMessage(error);
-				endCurrentPiStream(queryCtx, { type: "error", reason: wasAborted ? "aborted" : "error", error: queryCtx.turnOutput });
+				endCurrentPiStream(queryCtx, {
+					type: "error",
+					reason: wasAborted ? "aborted" : "error",
+					error: queryCtx.turnOutput,
+				});
 			}
 		};
 		const failQuery = (error: unknown) => {
 			if (queryCtx.discarded) return;
-			try { if (!wasAborted) commitRecording(true); }
-			finally { failStream(error); }
+			try {
+				if (!wasAborted) commitRecording(true);
+			} finally {
+				failStream(error);
+			}
 		};
 
 		queryCtx.settled = consumeQuery(sdkQuery, customToolNameToPi, model, () => wasAborted, queryCtx)
 			.then(async ({ capturedSessionId, failure }) => {
 				if (queryCtx.discarded) return;
 				if (capturedSessionId && capturedSessionId !== syncResult.targetSessionId) {
-					const error = new Error(`Claude Code initialized unexpected session ${capturedSessionId}; expected ${syncResult.targetSessionId}`);
+					const error = new Error(
+						`Claude Code initialized unexpected session ${capturedSessionId}; expected ${syncResult.targetSessionId}`,
+					);
 					failStream(error);
 					throw error;
 				}
@@ -584,8 +727,9 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 				if (wasAborted || options?.signal?.aborted) return failQuery(new Error("Operation aborted"));
 				if (queryCtx.currentPiStream) recordAssistantEmission(queryCtx);
 				commitRecording(!queryCtx.sawResult);
-				try { await persistRecording(); }
-				catch (error) {
+				try {
+					await persistRecording();
+				} catch (error) {
 					failStream(error);
 					throw error;
 				}
@@ -606,15 +750,17 @@ export function streamClaudeAgentSdk(model: Model<any>, context: Context, option
 				queryCtx.activeQuery = null;
 				activeQueryContexts.delete(queryCtx);
 				stopWriting();
-				try { await persistRecording(); }
-				finally {
-					if (syncResult.created && !recording.hasProgress) deleteSession(syncResult.targetSessionId, cwd, process.env.CLAUDE_CONFIG_DIR);
+				try {
+					await persistRecording();
+				} finally {
+					if (syncResult.created && !recording.hasProgress)
+						deleteSession(syncResult.targetSessionId, cwd, process.env.CLAUDE_CONFIG_DIR);
 					releaseWriter();
 				}
 			});
-
 	})().catch((error) => {
-		if (createdBeforeLaunch) deleteSession(createdBeforeLaunch.id, createdBeforeLaunch.cwd, process.env.CLAUDE_CONFIG_DIR);
+		if (createdBeforeLaunch)
+			deleteSession(createdBeforeLaunch.id, createdBeforeLaunch.cwd, process.env.CLAUDE_CONFIG_DIR);
 		queryCtx.promptStream?.fail(error instanceof Error ? error : new Error(errorMessage(error)));
 		queryCtx.promptStream = null;
 		if (queryCtx.discarded) return;

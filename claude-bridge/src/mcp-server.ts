@@ -38,7 +38,8 @@ function resolveLocalRef(branch: unknown, root: Record<string, unknown>): unknow
 function branchGroup(branch: unknown): string | null {
 	if (!isRecord(branch)) return null;
 	const { required, properties } = branch;
-	if (Array.isArray(required) && required.length > 0 && required.every((key) => typeof key === "string")) return required.join(", ");
+	if (Array.isArray(required) && required.length > 0 && required.every((key) => typeof key === "string"))
+		return required.join(", ");
 	const keys = isRecord(properties) ? Object.keys(properties) : [];
 	return keys.length > 0 ? keys.join(", ") : null;
 }
@@ -49,8 +50,15 @@ function combinatorNote(combinators: readonly string[], branchesOf: (key: string
 	}
 	const key = combinators.includes("oneOf") ? "oneOf" : "anyOf";
 	const rule = key === "oneOf" ? "Provide parameters for exactly one of" : "Provide parameters for at least one of";
-	const groups = [...new Set(branchesOf(key).map(branchGroup).filter((group) => group !== null))];
-	if (groups.length === 0) return `Input constraint: ${rule} the documented parameter groups (flattened from a JSON Schema ${key}).`;
+	const groups = [
+		...new Set(
+			branchesOf(key)
+				.map(branchGroup)
+				.filter((group) => group !== null),
+		),
+	];
+	if (groups.length === 0)
+		return `Input constraint: ${rule} the documented parameter groups (flattened from a JSON Schema ${key}).`;
 	return `Input constraint: ${rule}: ${groups.map((group) => `(${group})`).join(" or ")}.`;
 }
 
@@ -106,7 +114,9 @@ export function createToolServer(name: string, tools: McpToolDef[]) {
 		if (!tool) throw new Error(`Unknown tool: ${request.params.name}`);
 		const toolCallId = request.params._meta?.[TOOL_USE_ID_META];
 		if (typeof toolCallId !== "string") {
-			throw new Error(`${tool.name}: tools/call is missing _meta["${TOOL_USE_ID_META}"] — cannot pair the result with its tool call`);
+			throw new Error(
+				`${tool.name}: tools/call is missing _meta["${TOOL_USE_ID_META}"] — cannot pair the result with its tool call`,
+			);
 		}
 		const { content, isError } = await tool.handler(toolCallId);
 		return { content, isError };

@@ -1,6 +1,19 @@
-import { createAssistantMessageEventStream, type AssistantMessageEventStream, type Context, type Model, type SimpleStreamOptions } from "@earendil-works/pi-ai";
+import {
+	createAssistantMessageEventStream,
+	type AssistantMessageEventStream,
+	type Context,
+	type Model,
+	type SimpleStreamOptions,
+} from "@earendil-works/pi-ai";
 import { query, type SettingSource } from "@anthropic-ai/claude-agent-sdk";
-import { ccChildEnv, effortForReasoning, errorMessage, logServedContextWindow, resultErrorText, thinkingForReasoning } from "./cc-child.js";
+import {
+	ccChildEnv,
+	effortForReasoning,
+	errorMessage,
+	logServedContextWindow,
+	resultErrorText,
+	thinkingForReasoning,
+} from "./cc-child.js";
 import { debug, makeCliDebugOptions } from "./debug.js";
 import { claudeCodeModelId } from "./models.js";
 import { newAssistantOutput } from "./query-state.js";
@@ -8,7 +21,11 @@ import { currentCwd } from "./sessions.js";
 import { endStream } from "./stream-events.js";
 import { extractUserPrompt } from "./user-prompt.js";
 
-export function isolatedStreamFn(model: Model<any>, context: Context, options?: SimpleStreamOptions): AssistantMessageEventStream {
+export function isolatedStreamFn(
+	model: Model<any>,
+	context: Context,
+	options?: SimpleStreamOptions,
+): AssistantMessageEventStream {
 	const stream = createAssistantMessageEventStream();
 	void runIsolatedSummary(model, context, options, stream);
 	return stream;
@@ -25,17 +42,22 @@ async function runIsolatedSummary(
 	const onAbort = () => {
 		wasAborted = true;
 		void sdkQuery?.interrupt().catch(() => {});
-		try { sdkQuery?.close(); } catch {}
+		try {
+			sdkQuery?.close();
+		} catch {}
 	};
 
 	try {
 		const promptText = extractUserPrompt(context.messages);
-		if (!promptText) throw new Error("runIsolatedSummary: one-off summary without a user prompt (last message is not user?)");
+		if (!promptText)
+			throw new Error("runIsolatedSummary: one-off summary without a user prompt (last message is not user?)");
 		const cwd = currentCwd();
 		const cliModel = claudeCodeModelId(model);
 		const effort = effortForReasoning(model, options?.reasoning);
 		const thinking = thinkingForReasoning(model, options?.reasoning);
-		debug(`compact summary: spawn model=${cliModel} registeredModel=${model.id} effort=${effort ?? "default"}${thinking ? " thinking=disabled" : ""} promptLen=${promptText.length}`);
+		debug(
+			`compact summary: spawn model=${cliModel} registeredModel=${model.id} effort=${effort ?? "default"}${thinking ? " thinking=disabled" : ""} promptLen=${promptText.length}`,
+		);
 
 		sdkQuery = query({
 			prompt: promptText,
@@ -108,6 +130,8 @@ async function runIsolatedSummary(
 		endStream(stream, { type: "error", reason: "error", error: newAssistantOutput(model, "", "error", msg) });
 	} finally {
 		options?.signal?.removeEventListener("abort", onAbort);
-		try { sdkQuery?.close(); } catch {}
+		try {
+			sdkQuery?.close();
+		} catch {}
 	}
 }

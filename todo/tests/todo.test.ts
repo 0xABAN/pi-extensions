@@ -38,10 +38,16 @@ function fakePi() {
 	};
 	todoExtension(pi as never);
 
-	const call = (params: Record<string, unknown>) => tools.get("todo")!.execute("call", params, undefined, undefined, ctx);
+	const call = (params: Record<string, unknown>) =>
+		tools.get("todo")!.execute("call", params, undefined, undefined, ctx);
 	const turn = async () => {
 		const result = await handlers.get("before_agent_start")!({}, ctx);
-		if (result) branch.push({ type: "custom_message", customType: result.message.customType, content: result.message.content });
+		if (result)
+			branch.push({
+				type: "custom_message",
+				customType: result.message.customType,
+				content: result.message.content,
+			});
 		return result?.message.content as string | undefined;
 	};
 	const event = (name: string) => handlers.get(name)!({}, ctx);
@@ -67,17 +73,32 @@ test("creates, updates and deletes tasks within the allowed transitions", () => 
 		kind: "error",
 		message: "illegal transition completed → in_progress",
 	});
-	expect(applyTaskAction(completed, { action: "update", id: 1, status: "completed" }).op).toMatchObject({ changed: false });
+	expect(applyTaskAction(completed, { action: "update", id: 1, status: "completed" }).op).toMatchObject({
+		changed: false,
+	});
 	expect(applyTaskAction(emptyState(), { action: "create", subject: "a", tasks: [] }).op.kind).toBe("error");
 });
 
 test("replays the latest state entry, falling back to old tool results", () => {
-	const snapshot = (subject: string) => ({ action: "create", params: {}, tasks: [{ id: 1, subject, status: "pending" }], nextId: 2 });
-	const toolResult = { type: "message", message: { role: "toolResult", toolName: "todo", details: snapshot("from result") } };
+	const snapshot = (subject: string) => ({
+		action: "create",
+		params: {},
+		tasks: [{ id: 1, subject, status: "pending" }],
+		nextId: 2,
+	});
+	const toolResult = {
+		type: "message",
+		message: { role: "toolResult", toolName: "todo", details: snapshot("from result") },
+	};
 
 	expect(replay([toolResult] as never).tasks[0]!.subject).toBe("from result");
-	expect(replay([{ type: "custom", customType: "rpiv-todo-state", data: snapshot("from entry") }, toolResult] as never).tasks[0]!.subject).toBe("from entry");
-	expect(replay([{ type: "custom", customType: "rpiv-todo-state", data: { tasks: ["broken"], nextId: 2 } }] as never)).toEqual(emptyState());
+	expect(
+		replay([{ type: "custom", customType: "rpiv-todo-state", data: snapshot("from entry") }, toolResult] as never)
+			.tasks[0]!.subject,
+	).toBe("from entry");
+	expect(
+		replay([{ type: "custom", customType: "rpiv-todo-state", data: { tasks: ["broken"], nextId: 2 } }] as never),
+	).toEqual(emptyState());
 });
 
 test("reminds the model of open todos only when the list changed", async () => {
@@ -127,8 +148,12 @@ test("summarizes each action with the task it acts on", () => {
 	const state = { tasks: [{ id: 3, subject: "Read notes", status: "pending" as const }], nextId: 4 };
 
 	expect(summarizeTodo({ action: "create", subject: "Say hi" }, state).target).toBe("create Say hi");
-	expect(summarizeTodo({ action: "create", tasks: [{ subject: "a" }, { subject: "b" }] }, state).target).toBe("create 2 tasks");
-	expect(summarizeTodo({ action: "update", id: 3, status: "in_progress" }, state).target).toBe("update Read notes → in progress");
+	expect(summarizeTodo({ action: "create", tasks: [{ subject: "a" }, { subject: "b" }] }, state).target).toBe(
+		"create 2 tasks",
+	);
+	expect(summarizeTodo({ action: "update", id: 3, status: "in_progress" }, state).target).toBe(
+		"update Read notes → in progress",
+	);
 	expect(summarizeTodo({ action: "clear" }, state)).toEqual({ label: "Tasks", icon: "☷", target: "clear" });
 });
 

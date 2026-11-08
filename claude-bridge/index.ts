@@ -22,7 +22,10 @@ export default function claudeBridge(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_compact", (event, ctx) => {
-		markRebuildForSession(ctx.sessionManager.getSessionId(), `session_compact:${event.reason}:willRetry=${event.willRetry}`);
+		markRebuildForSession(
+			ctx.sessionManager.getSessionId(),
+			`session_compact:${event.reason}:willRetry=${event.willRetry}`,
+		);
 	});
 
 	pi.on("session_tree", (_event, ctx) => {
@@ -31,7 +34,12 @@ export default function claudeBridge(pi: ExtensionAPI) {
 
 	pi.on("tool_call", (event, ctx) => {
 		const background = (event.input as { background?: unknown }).background === true;
-		if (isToolCallEventType("bash", event) && event.input.timeout == null && ctx.model?.provider === PROVIDER_ID && !background) {
+		if (
+			isToolCallEventType("bash", event) &&
+			event.input.timeout == null &&
+			ctx.model?.provider === PROVIDER_ID &&
+			!background
+		) {
 			event.input.timeout = 120;
 		}
 	});

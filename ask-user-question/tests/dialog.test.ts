@@ -11,7 +11,15 @@ const KEY = {
 	collapse: "\x1d",
 };
 
-const theme = new Proxy({}, { get: () => (...args: string[]) => args.at(-1) });
+const theme = new Proxy(
+	{},
+	{
+		get:
+			() =>
+			(...args: string[]) =>
+				args.at(-1),
+	},
+);
 
 const database = {
 	question: "Which database should the service use?",

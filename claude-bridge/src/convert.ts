@@ -29,8 +29,12 @@ export function messageContentToText(
 	const parts = [];
 	let hasText = false;
 	for (const block of content) {
-		if (block.type === "text" && block.text) { parts.push(block.text); hasText = true; }
-		else if (block.type !== "text" && block.type !== "image") { parts.push(`[${block.type}]`); }
+		if (block.type === "text" && block.text) {
+			parts.push(block.text);
+			hasText = true;
+		} else if (block.type !== "text" && block.type !== "image") {
+			parts.push(`[${block.type}]`);
+		}
 	}
 	return hasText ? parts.join("\n") : "";
 }
@@ -59,7 +63,9 @@ function nonEmptyToolResultContent(
 ): string | Array<Record<string, unknown>> {
 	const content = toolResultContent(msg.content);
 	if (typeof content !== "string" || content.trim()) return content;
-	return msg.isError ? "Command failed with no output" : `(${mapPiToolNameToSdk(msg.toolName, customToolNameToSdk)} completed with no output)`;
+	return msg.isError
+		? "Command failed with no output"
+		: `(${mapPiToolNameToSdk(msg.toolName, customToolNameToSdk)} completed with no output)`;
 }
 
 export function convertPiMessages(
@@ -86,7 +92,10 @@ export function convertPiMessages(
 				for (const block of msg.content) {
 					if (block.type === "text" && block.text) parts.push({ type: "text", text: block.text });
 					else if (block.type === "image" && block.data && block.mimeType) {
-						parts.push({ type: "image", source: { type: "base64", media_type: block.mimeType, data: block.data } });
+						parts.push({
+							type: "image",
+							source: { type: "base64", media_type: block.mimeType, data: block.data },
+						});
 					}
 				}
 				append({ role: "user", content: parts.length ? parts : "[image]" } as SessionMessage, piIndex);
@@ -106,7 +115,12 @@ export function convertPiMessages(
 					}
 				} else if (block.type === "toolCall") {
 					const toolName = mapPiToolNameToSdk(block.name, customToolNameToSdk);
-					blocks.push({ type: "tool_use", id: sanitizeToolId(block.id, sanitizedIds), name: toolName, input: block.arguments ?? {} });
+					blocks.push({
+						type: "tool_use",
+						id: sanitizeToolId(block.id, sanitizedIds),
+						name: toolName,
+						input: block.arguments ?? {},
+					});
 				}
 			}
 			if (!content.length) continue;
@@ -116,15 +130,23 @@ export function convertPiMessages(
 			append({ role: "assistant", content: blocks } as SessionMessage, piIndex);
 		} else if (msg.role === "toolResult") {
 			const id = sanitizeToolId(msg.toolCallId, sanitizedIds);
-			const block = recorded.get(msg.toolCallId)
-				?? { type: "tool_result", tool_use_id: id, content: nonEmptyToolResultContent(msg, customToolNameToSdk), ...(msg.isError ? { is_error: true } : {}) };
+			const block = recorded.get(msg.toolCallId) ?? {
+				type: "tool_result",
+				tool_use_id: id,
+				content: nonEmptyToolResultContent(msg, customToolNameToSdk),
+				...(msg.isError ? { is_error: true } : {}),
+			};
 			if (turnResults) {
 				turnResults.content.push(block);
 				sources.get(turnResults as unknown as SessionMessage)!.push(piIndex);
 			} else {
 				turnResults = { role: "user", content: [block] };
 				sources.set(turnResults as unknown as SessionMessage, [piIndex]);
-				anthropicMessages.splice(turnAssistantIdx === null ? anthropicMessages.length : turnAssistantIdx + 1, 0, turnResults as unknown as SessionMessage);
+				anthropicMessages.splice(
+					turnAssistantIdx === null ? anthropicMessages.length : turnAssistantIdx + 1,
+					0,
+					turnResults as unknown as SessionMessage,
+				);
 			}
 		}
 	}

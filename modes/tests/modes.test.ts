@@ -18,7 +18,11 @@ const KEY_IDS: Record<string, string> = {
 	"tui.select.cancel": KEY.escape,
 };
 const KEYBINDINGS = { matches: (data: string, id: string) => KEY_IDS[id] === data };
-const PLAIN_THEME = { fg: (_color: string, text: string) => text, bg: (_color: string, text: string) => text, bold: (text: string) => text };
+const PLAIN_THEME = {
+	fg: (_color: string, text: string) => text,
+	bg: (_color: string, text: string) => text,
+	bold: (text: string) => text,
+};
 
 type Entry = { type: string; customType: string; data: any };
 
@@ -94,7 +98,8 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 		commands,
 		shortcuts,
 		planTool: registeredTools.get("plan"),
-		callPlan: () => registeredTools.get("plan").execute("call-1", { topic: "Greeting file" }, undefined, undefined, ctx),
+		callPlan: () =>
+			registeredTools.get("plan").execute("call-1", { topic: "Greeting file" }, undefined, undefined, ctx),
 		shiftTab: () => shortcuts.get("shift+tab")!.handler(ctx),
 		tools: () => activeTools,
 		entries: () => branch,
@@ -133,10 +138,17 @@ test("shift+tab is the only mode control", async () => {
 test("plan and learn share one read-only tool set, and only plan gets the plan tool", async () => {
 	const h = await harness();
 	const readOnly = [
-		"read", "grep", "find", "ls", "bash",
+		"read",
+		"grep",
+		"find",
+		"ls",
+		"bash",
 		"codemode",
-		"web_search", "fetch_content", "get_search_content",
-		"ask_user_question", "intercom",
+		"web_search",
+		"fetch_content",
+		"get_search_content",
+		"ask_user_question",
+		"intercom",
 	];
 
 	expect(h.planTool.defaultActive).toBe(false);
@@ -150,12 +162,26 @@ test("plan and learn share one read-only tool set, and only plan gets the plan t
 	expect(h.tools()).toEqual(readOnly);
 });
 
-for (const [mode, presses] of [["plan", 1], ["learn", 2]] as const) {
+for (const [mode, presses] of [
+	["plan", 1],
+	["learn", 2],
+] as const) {
 	test(`${mode} blocks every other tool and unsafe bash, including nested calls`, async () => {
 		const h = await harness();
 		for (let i = 0; i < presses; i++) await h.shiftTab();
 
-		const blocked = ["powershell", "edit", "write", "tool_search", "todo", "Agent", "SubagentWorkflow", "source_check", "custom_tool", "mcp_write"];
+		const blocked = [
+			"powershell",
+			"edit",
+			"write",
+			"tool_search",
+			"todo",
+			"Agent",
+			"SubagentWorkflow",
+			"source_check",
+			"custom_tool",
+			"mcp_write",
+		];
 		if (mode === "learn") blocked.push("plan");
 		for (const toolName of blocked) {
 			for (const parentToolCallId of [undefined, "outer-tool"]) {
@@ -167,12 +193,18 @@ for (const [mode, presses] of [["plan", 1], ["learn", 2]] as const) {
 
 		for (const toolName of READ_ONLY_TOOLS) {
 			for (const parentToolCallId of [undefined, "outer-tool"]) {
-				expect(await h.emit("tool_call", { toolName, input: { command: "git status" }, parentToolCallId })).toBeUndefined();
+				expect(
+					await h.emit("tool_call", { toolName, input: { command: "git status" }, parentToolCallId }),
+				).toBeUndefined();
 			}
 		}
 
 		for (const parentToolCallId of [undefined, "outer-tool"]) {
-			const result = await h.emit("tool_call", { toolName: "bash", input: { command: "rm file" }, parentToolCallId });
+			const result = await h.emit("tool_call", {
+				toolName: "bash",
+				input: { command: "rm file" },
+				parentToolCallId,
+			});
 			expect(result.block).toBe(true);
 			expect(result.reason).toStartWith(`${mode} mode: command blocked`);
 			expect(result.reason).toContain("press Shift+Tab");
@@ -445,7 +477,9 @@ test("mode icons share one neutral color, and everforest learn uses muted teal",
 		}
 	}
 
-	expect(formatModeStatus("learn", "xhigh", "everforest-dark-hard")).toEqual(formatModeStatus("learn", "xhigh", "everforest-dark-medium"));
+	expect(formatModeStatus("learn", "xhigh", "everforest-dark-hard")).toEqual(
+		formatModeStatus("learn", "xhigh", "everforest-dark-medium"),
+	);
 	expect(stripColor(formatModeStatus("learn").thinking)).toBe("think:off");
 });
 

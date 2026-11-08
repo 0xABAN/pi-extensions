@@ -8,9 +8,18 @@ function writeString(hash: ReturnType<typeof createHash>, value: string): void {
 }
 
 function writeJson(hash: ReturnType<typeof createHash>, value: unknown, parents = new Set<object>()): void {
-	if (value === null) { hash.update("null;"); return; }
-	if (typeof value === "string") { writeString(hash, value); return; }
-	if (typeof value === "boolean") { hash.update(value ? "b1" : "b0"); return; }
+	if (value === null) {
+		hash.update("null;");
+		return;
+	}
+	if (typeof value === "string") {
+		writeString(hash, value);
+		return;
+	}
+	if (typeof value === "boolean") {
+		hash.update(value ? "b1" : "b0");
+		return;
+	}
 	if (typeof value === "number") {
 		if (!Number.isFinite(value)) throw new TypeError("Tool arguments must contain finite JSON numbers");
 		const number = Object.is(value, -0) ? "0" : String(value);
@@ -27,7 +36,8 @@ function writeJson(hash: ReturnType<typeof createHash>, value: unknown, parents 
 		hash.update("]a");
 	} else {
 		const prototype = Object.getPrototypeOf(value);
-		if (prototype !== Object.prototype && prototype !== null) throw new TypeError("Tool arguments must use plain objects");
+		if (prototype !== Object.prototype && prototype !== null)
+			throw new TypeError("Tool arguments must use plain objects");
 		hash.update("o{");
 		const object = value as Record<string, unknown>;
 		for (const key of Object.keys(object).sort()) {
@@ -43,7 +53,7 @@ type ContentPart = { type: string; text?: string; data?: string; mimeType?: stri
 type AssistantContent = Extract<PiMessage, { role: "assistant" }>["content"][number];
 
 function contentParts(content: unknown): ContentPart[] {
-	return Array.isArray(content) ? content as ContentPart[] : [];
+	return Array.isArray(content) ? (content as ContentPart[]) : [];
 }
 
 function isReplayableThinking(
@@ -65,8 +75,10 @@ function writeUser(hash: ReturnType<typeof createHash>, message: Extract<PiMessa
 		return;
 	}
 	const content = contentParts(message.content);
-	const hasParts = content.some((block) => (block.type === "text" && !!block.text)
-		|| (block.type === "image" && !!block.data && !!block.mimeType));
+	const hasParts = content.some(
+		(block) =>
+			(block.type === "text" && !!block.text) || (block.type === "image" && !!block.data && !!block.mimeType),
+	);
 	if (!hasParts) {
 		hash.update("user:fallback:");
 		writeString(hash, "[image]");
@@ -86,10 +98,7 @@ function writeUser(hash: ReturnType<typeof createHash>, message: Extract<PiMessa
 	hash.update("]user");
 }
 
-function writeToolResultBlocks(
-	hash: ReturnType<typeof createHash>,
-	content: unknown,
-): void {
+function writeToolResultBlocks(hash: ReturnType<typeof createHash>, content: unknown): void {
 	hash.update("tool-content:blocks[");
 	for (const block of contentParts(content)) {
 		if (block.type === "text" && block.text) {
@@ -107,7 +116,10 @@ function writeToolResultBlocks(
 	hash.update("]tool-content");
 }
 
-function writeToolResult(hash: ReturnType<typeof createHash>, message: Extract<PiMessage, { role: "toolResult" }>): void {
+function writeToolResult(
+	hash: ReturnType<typeof createHash>,
+	message: Extract<PiMessage, { role: "toolResult" }>,
+): void {
 	hash.update("toolResult:");
 	writeString(hash, message.toolCallId);
 	hash.update(message.isError ? "b1" : "b0");
@@ -122,11 +134,18 @@ function writeToolResult(hash: ReturnType<typeof createHash>, message: Extract<P
 
 function writeAssistant(hash: ReturnType<typeof createHash>, message: Extract<PiMessage, { role: "assistant" }>): void {
 	const content = Array.isArray(message.content) ? message.content : [];
-	if (!content.length) { hash.update("assistant:omitted"); return; }
-	const converted = content.some((block) => (block.type === "text" && !!block.text)
-		|| block.type === "toolCall"
-		|| isReplayableThinking(message, block));
-	if (!converted) { hash.update("assistant:placeholder"); return; }
+	if (!content.length) {
+		hash.update("assistant:omitted");
+		return;
+	}
+	const converted = content.some(
+		(block) =>
+			(block.type === "text" && !!block.text) || block.type === "toolCall" || isReplayableThinking(message, block),
+	);
+	if (!converted) {
+		hash.update("assistant:placeholder");
+		return;
+	}
 	hash.update("assistant:blocks[");
 	for (const block of content) {
 		if (block.type === "text" && block.text) {

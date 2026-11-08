@@ -7,22 +7,36 @@ import { digestMessage } from "./message-digests.js";
 import { validateRecording, type Recording, type SessionState } from "./session-sync.js";
 
 const AUDIT = new Set(["api-request", "api-request-shape", "api-request-blob"]);
-type RecordEntry = JsonlRecord & { uuid?: string; parentUuid?: string | null; attachment?: { type: string; source_uuid?: string } };
-const chainEntry = (record: RecordEntry): boolean => ["user", "assistant", "attachment", "system"].includes(record.type) && typeof record.uuid === "string" && (typeof record.parentUuid === "string" || record.parentUuid === null);
+type RecordEntry = JsonlRecord & {
+	uuid?: string;
+	parentUuid?: string | null;
+	attachment?: { type: string; source_uuid?: string };
+};
+const chainEntry = (record: RecordEntry): boolean =>
+	["user", "assistant", "attachment", "system"].includes(record.type) &&
+	typeof record.uuid === "string" &&
+	(typeof record.parentUuid === "string" || record.parentUuid === null);
 
 export function readTranscript(state: Pick<SessionState, "ccSessionId" | "cwd">): RecordEntry[] {
 	const text = readFileSync(getSessionPath(state.ccSessionId, state.cwd, process.env.CLAUDE_CONFIG_DIR), "utf8");
 	const end = text.lastIndexOf("\n") + 1;
 	const records = parseJsonl(text.slice(0, end));
 	if (text.slice(end).trim()) {
-		try { records.push(JSON.parse(text.slice(end))); }
-		catch (error) { if (!(error instanceof SyntaxError)) throw error; }
+		try {
+			records.push(JSON.parse(text.slice(end)));
+		} catch (error) {
+			if (!(error instanceof SyntaxError)) throw error;
+		}
 	}
 	return records.filter((r) => !AUDIT.has(r.type)) as RecordEntry[];
 }
 
 function findBoundary(records: readonly RecordEntry[], uuid: string): number {
-	return records.findIndex((r) => r.uuid === uuid || (r.type === "attachment" && r.attachment?.type === "queued_command" && r.attachment.source_uuid === uuid));
+	return records.findIndex(
+		(r) =>
+			r.uuid === uuid ||
+			(r.type === "attachment" && r.attachment?.type === "queued_command" && r.attachment.source_uuid === uuid),
+	);
 }
 
 function boundaryIndex(records: readonly RecordEntry[], uuid: string | null): number {
@@ -56,9 +70,14 @@ function resolveCut(records: readonly RecordEntry[], uuid: string | null): { uui
 	return { uuid: resolved, index: end };
 }
 
-export function resolveRecordingCut(records: readonly RecordEntry[], recorded: Recording, count: number): { uuid: string; index: number } {
+export function resolveRecordingCut(
+	records: readonly RecordEntry[],
+	recorded: Recording,
+	count: number,
+): { uuid: string; index: number } {
 	validateRecording(recorded);
-	if (!count || count > recorded.digests.length || !recorded.cuttable[count - 1]) throw new Error(`Invalid session cut count ${count}`);
+	if (!count || count > recorded.digests.length || !recorded.cuttable[count - 1])
+		throw new Error(`Invalid session cut count ${count}`);
 	const retained = recorded.uuids.slice(0, count).filter((uuid): uuid is string => uuid !== null);
 	const index = Math.max(...retained.map((uuid) => boundaryIndex(records, uuid)));
 	const cut = resolveCut(records, records[index].uuid!);
@@ -69,10 +88,15 @@ export function resolveRecordingCut(records: readonly RecordEntry[], recorded: R
 	return cut;
 }
 
-export function recordedToolResults(records: readonly RecordEntry[], recordedDigests: readonly string[], messages: readonly PiMessage[]): Map<string, ToolResultBlock> {
+export function recordedToolResults(
+	records: readonly RecordEntry[],
+	recordedDigests: readonly string[],
+	messages: readonly PiMessage[],
+): Map<string, ToolResultBlock> {
 	const byId = new Map<string, ToolResultBlock>();
 	for (const record of records) {
-		const content = record.type === "user" ? (record.message as { content?: unknown } | undefined)?.content : undefined;
+		const content =
+			record.type === "user" ? (record.message as { content?: unknown } | undefined)?.content : undefined;
 		if (!Array.isArray(content)) continue;
 		for (const block of content) if (block?.type === "tool_result") byId.set(block.tool_use_id, block);
 	}
@@ -89,8 +113,10 @@ export function recordedToolResults(records: readonly RecordEntry[], recordedDig
 
 export function savePrefixSession(session: Session, prefix: readonly JsonlRecord[], parentUuid: string): number {
 	const kept = prefix.map((record) => ({ ...record, sessionId: session.sessionId }));
-	const suffix = session.records.map((record, index) => index === 0 ? { ...record, parentUuid } : record);
+	const suffix = session.records.map((record, index) => (index === 0 ? { ...record, parentUuid } : record));
 	mkdirSync(dirname(session.jsonlPath), { recursive: true });
-	writeFileSync(session.jsonlPath, [...kept, ...suffix].map((record) => JSON.stringify(record) + "\n").join(""), { flag: "wx" });
+	writeFileSync(session.jsonlPath, [...kept, ...suffix].map((record) => JSON.stringify(record) + "\n").join(""), {
+		flag: "wx",
+	});
 	return kept.length + suffix.length;
 }

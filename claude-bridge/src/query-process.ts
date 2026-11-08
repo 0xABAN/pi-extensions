@@ -7,7 +7,9 @@ export class QueryProcess {
 	private closed = false;
 	private resolveExit!: () => void;
 	private readonly stderr: ((data: string) => void) | undefined;
-	readonly exited = new Promise<void>((resolve) => { this.resolveExit = resolve; });
+	readonly exited = new Promise<void>((resolve) => {
+		this.resolveExit = resolve;
+	});
 
 	constructor(stderr?: (data: string) => void) {
 		this.stderr = stderr;
@@ -16,8 +18,11 @@ export class QueryProcess {
 	spawn = (options: SpawnOptions): SpawnedProcess => {
 		if (this.closed || this.started) throw new Error("Query process spawned after close or more than once");
 		const child = spawn(options.command, options.args, {
-			cwd: options.cwd, env: options.env, signal: options.signal,
-			stdio: ["pipe", "pipe", "pipe"], windowsHide: true,
+			cwd: options.cwd,
+			env: options.env,
+			signal: options.signal,
+			stdio: ["pipe", "pipe", "pipe"],
+			windowsHide: true,
 		});
 		this.started = true;
 		this.child = child;

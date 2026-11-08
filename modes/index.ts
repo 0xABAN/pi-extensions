@@ -19,8 +19,7 @@ const MODE_PROMPTS = {
 
 const MODE_NOTES = {
 	plan: "Plan mode: follow the <plan_mode> rules. Read-only; call the plan tool when proposing a change.",
-	learn:
-		"Learn mode: follow the <learn_mode> rules. Guide, don't solve: no code, fixes, or solution steps. Under 100 words, at most one question.",
+	learn: "Learn mode: follow the <learn_mode> rules. Guide, don't solve: no code, fixes, or solution steps. Under 100 words, at most one question.",
 };
 
 const NOTE_TYPES = new Set(["plan-mode-context", "learn-mode-context"]);
@@ -92,9 +91,9 @@ export default function modesExtension(pi: ExtensionAPI): void {
 
 	function restoreState(ctx: ExtensionContext): void {
 		mode = "build";
-		const entry = ctx.sessionManager.getBranch().findLast(
-			(e) => e.type === "custom" && e.customType === "agent-mode",
-		);
+		const entry = ctx.sessionManager
+			.getBranch()
+			.findLast((e) => e.type === "custom" && e.customType === "agent-mode");
 
 		if (entry?.type === "custom") {
 			const state = entry.data as ModeState;

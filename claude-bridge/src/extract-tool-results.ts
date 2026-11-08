@@ -1,7 +1,4 @@
-type McpContent = Array<
-	| { type: "text"; text: string }
-	| { type: "image"; data: string; mimeType: string }
->;
+type McpContent = Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>;
 
 export interface McpResult {
 	content: McpContent;
@@ -18,7 +15,8 @@ function toolResultToMcpContent(
 	const blocks: McpContent = [];
 	for (const block of content) {
 		if (block.type === "text" && block.text) blocks.push({ type: "text", text: block.text });
-		else if (block.type === "image" && block.data && block.mimeType) blocks.push({ type: "image", data: block.data, mimeType: block.mimeType });
+		else if (block.type === "image" && block.data && block.mimeType)
+			blocks.push({ type: "image", data: block.data, mimeType: block.mimeType });
 	}
 	return blocks.length ? blocks : [{ type: "text", text: "" }];
 }
@@ -30,7 +28,13 @@ export function extractAllToolResults(
 	for (let i = messages.length - 1; i >= 0; i--) {
 		const msg = messages[i];
 		if (msg.role === "toolResult") {
-			results.unshift({ content: toolResultToMcpContent(msg.content as string | Array<{ type: string; text?: string; data?: string; mimeType?: string }>), isError: msg.isError, toolCallId: msg.toolCallId });
+			results.unshift({
+				content: toolResultToMcpContent(
+					msg.content as string | Array<{ type: string; text?: string; data?: string; mimeType?: string }>,
+				),
+				isError: msg.isError,
+				toolCallId: msg.toolCallId,
+			});
 		} else if (msg.role === "assistant") break;
 	}
 	return results;

@@ -4,87 +4,93 @@ import { keyHint, renderToolRow, type Theme, transcriptBodyPadding } from "@eare
 import type { SessionInfo, Message } from "../types.ts";
 
 export class InlineMessageComponent implements Component {
-  private from: SessionInfo;
-  private message: Message;
-  private theme: Theme;
-  private replyCommand?: string;
-  private bodyText?: string;
-  private outputPad: number;
-  private collapsedPreview?: string;
-  private wrappedBody?: { width: number; lines: string[] };
-  private expansionState: { expanded: boolean };
+	private from: SessionInfo;
+	private message: Message;
+	private theme: Theme;
+	private replyCommand?: string;
+	private bodyText?: string;
+	private outputPad: number;
+	private collapsedPreview?: string;
+	private wrappedBody?: { width: number; lines: string[] };
+	private expansionState: { expanded: boolean };
 
-  constructor(
-    from: SessionInfo,
-    message: Message,
-    theme: Theme,
-    replyCommand?: string,
-    bodyText?: string,
-    collapsed = false,
-    expansionState: { expanded: boolean } = { expanded: !collapsed },
-    outputPad = 1,
-  ) {
-    this.from = from;
-    this.message = message;
-    this.theme = theme;
-    this.replyCommand = replyCommand;
-    this.bodyText = bodyText;
-    this.outputPad = outputPad;
-    this.expansionState = expansionState;
-  }
+	constructor(
+		from: SessionInfo,
+		message: Message,
+		theme: Theme,
+		replyCommand?: string,
+		bodyText?: string,
+		collapsed = false,
+		expansionState: { expanded: boolean } = { expanded: !collapsed },
+		outputPad = 1,
+	) {
+		this.from = from;
+		this.message = message;
+		this.theme = theme;
+		this.replyCommand = replyCommand;
+		this.bodyText = bodyText;
+		this.outputPad = outputPad;
+		this.expansionState = expansionState;
+	}
 
-  invalidate(): void {}
+	invalidate(): void {}
 
-  handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
-    if (event.type !== "click" || event.button !== "left"
-      || event.shift || event.alt || event.ctrl || (event.clickCount ?? 1) !== 1) {
-      return undefined;
-    }
-    this.expansionState.expanded = !this.expansionState.expanded;
-    return { handled: true, render: true };
-  }
+	handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+		if (
+			event.type !== "click" ||
+			event.button !== "left" ||
+			event.shift ||
+			event.alt ||
+			event.ctrl ||
+			(event.clickCount ?? 1) !== 1
+		) {
+			return undefined;
+		}
+		this.expansionState.expanded = !this.expansionState.expanded;
+		return { handled: true, render: true };
+	}
 
-  render(width: number): string[] {
-    const padding = transcriptBodyPadding(this.outputPad, width);
-    const indent = " ".repeat(padding);
-    const bodyIndent = indent + "  ";
-    const bodyWidth = width - bodyIndent.length;
+	render(width: number): string[] {
+		const padding = transcriptBodyPadding(this.outputPad, width);
+		const indent = " ".repeat(padding);
+		const bodyIndent = indent + "  ";
+		const bodyWidth = width - bodyIndent.length;
 
-    const senderName = this.from.name || this.from.id.slice(0, 8);
-    const replyLabel = "To reply:";
+		const senderName = this.from.name || this.from.id.slice(0, 8);
+		const replyLabel = "To reply:";
 
-    const summary = { label: "Chat", icon: "⇄", target: `From ${senderName}` };
-    const lines = renderToolRow(summary, { status: "done" }, width - padding).map((line) => indent + line);
-    const add = (text: string) => {
-      for (const line of wrapTextWithAnsi(text, bodyWidth)) {
-        lines.push(bodyIndent + this.theme.fg("dim", line));
-      }
-    };
+		const summary = { label: "Chat", icon: "⇄", target: `From ${senderName}` };
+		const lines = renderToolRow(summary, { status: "done" }, width - padding).map((line) => indent + line);
+		const add = (text: string) => {
+			for (const line of wrapTextWithAnsi(text, bodyWidth)) {
+				lines.push(bodyIndent + this.theme.fg("dim", line));
+			}
+		};
 
-    if (!this.expansionState.expanded) {
-      this.collapsedPreview ??= (this.bodyText || this.message.content.text).replace(/\s+/g, " ").trim();
-      lines.push(bodyIndent + this.theme.fg("text", truncateToWidth(this.collapsedPreview, bodyWidth, "…")));
-      lines.push(bodyIndent + truncateToWidth(keyHint("app.tools.expand", "to expand"), bodyWidth, "…"));
-      return lines;
-    }
+		if (!this.expansionState.expanded) {
+			this.collapsedPreview ??= (this.bodyText || this.message.content.text).replace(/\s+/g, " ").trim();
+			lines.push(bodyIndent + this.theme.fg("text", truncateToWidth(this.collapsedPreview, bodyWidth, "…")));
+			lines.push(bodyIndent + truncateToWidth(keyHint("app.tools.expand", "to expand"), bodyWidth, "…"));
+			return lines;
+		}
 
-    if (this.wrappedBody?.width !== bodyWidth) {
-      this.wrappedBody = {
-        width: bodyWidth,
-        lines: wrapTextWithAnsi(this.bodyText || this.message.content.text, bodyWidth),
-      };
-    }
-    for (const line of this.wrappedBody.lines) {
-      lines.push(bodyIndent + this.theme.fg("text", line));
-    }
+		if (this.wrappedBody?.width !== bodyWidth) {
+			this.wrappedBody = {
+				width: bodyWidth,
+				lines: wrapTextWithAnsi(this.bodyText || this.message.content.text, bodyWidth),
+			};
+		}
+		for (const line of this.wrappedBody.lines) {
+			lines.push(bodyIndent + this.theme.fg("text", line));
+		}
 
-    add(`Sender: ${this.from.id} · ${this.from.cwd}`);
-    add(`Message: ${this.message.id}`);
-    if (this.replyCommand) add(`${replyLabel} ${this.replyCommand}`);
-    if (this.message.replyTo && !this.message.expectsReply) add(`Reply to ${this.message.replyTo.slice(0, 8)}`);
-    for (const attachment of this.message.content.attachments ?? []) {
-      add(`Attachment: ${attachment.name}`);
-    }
-    return lines;
-  }
+		add(`Sender: ${this.from.id} · ${this.from.cwd}`);
+		add(`Message: ${this.message.id}`);
+		if (this.replyCommand) add(`${replyLabel} ${this.replyCommand}`);
+		if (this.message.replyTo && !this.message.expectsReply) add(`Reply to ${this.message.replyTo.slice(0, 8)}`);
+		for (const attachment of this.message.content.attachments ?? []) {
+			add(`Attachment: ${attachment.name}`);
+		}
+		return lines;
+	}
 }

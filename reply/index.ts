@@ -148,9 +148,16 @@ export class QuotePicker implements Component {
 			filtered.slice(start, start + MAX_VISIBLE_ITEMS).forEach((candidate, offset) => {
 				lines.push(this.row(inner, this.candidateLine(inner, candidate, start + offset === this.selected)));
 			});
-			if (filtered.length > MAX_VISIBLE_ITEMS) lines.push(this.empty(inner), this.row(inner, this.scrollLine(filtered.length)));
+			if (filtered.length > MAX_VISIBLE_ITEMS)
+				lines.push(this.empty(inner), this.row(inner, this.scrollLine(filtered.length)));
 		}
-		lines.push(this.empty(inner), this.divider(inner), this.empty(inner), this.row(inner, this.help()), this.bottom(inner));
+		lines.push(
+			this.empty(inner),
+			this.divider(inner),
+			this.empty(inner),
+			this.row(inner, this.help()),
+			this.bottom(inner),
+		);
 		return lines;
 	}
 
@@ -166,7 +173,10 @@ export class QuotePicker implements Component {
 		const meta = this.theme.fg("dim", `${candidate.id}  ${formatTime(candidate.timestamp)}`);
 		const head = `${marker} ${selected ? this.theme.bold(role) : role} ${meta}`;
 		const room = inner - visibleWidth(head) - 8;
-		const preview = room > 18 ? `  ${this.theme.fg("borderMuted", "—")}  ${this.theme.fg("muted", excerpt(candidate.text, room))}` : "";
+		const preview =
+			room > 18
+				? `  ${this.theme.fg("borderMuted", "—")}  ${this.theme.fg("muted", excerpt(candidate.text, room))}`
+				: "";
 		return selected ? this.theme.fg("accent", head + preview) : head + preview;
 	}
 
@@ -180,7 +190,10 @@ export class QuotePicker implements Component {
 
 	private help(): string {
 		const key = (text: string) => this.theme.italic(text);
-		return this.theme.fg("dim", `${key("↑↓")} navigate  ${key("enter")} quote  ${key("esc")} cancel  ${key("⌫")} edit`);
+		return this.theme.fg(
+			"dim",
+			`${key("↑↓")} navigate  ${key("enter")} quote  ${key("esc")} cancel  ${key("⌫")} edit`,
+		);
 	}
 
 	private border(text: string): string {
@@ -191,7 +204,9 @@ export class QuotePicker implements Component {
 		const title = " Reply ";
 		const rule = Math.max(0, inner - visibleWidth(title));
 		const left = Math.floor(rule / 2);
-		return this.border(`╭${"─".repeat(left)}`) + this.theme.fg("dim", title) + this.border(`${"─".repeat(rule - left)}╮`);
+		return (
+			this.border(`╭${"─".repeat(left)}`) + this.theme.fg("dim", title) + this.border(`${"─".repeat(rule - left)}╮`)
+		);
 	}
 
 	private divider(inner: number): string {

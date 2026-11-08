@@ -1,6 +1,10 @@
 import { statSync, readFileSync } from "fs";
 
-export function verifyWrittenSession(jsonlPath: string, expectedSessionId: string, expectedRecordCount: number): string[] {
+export function verifyWrittenSession(
+	jsonlPath: string,
+	expectedSessionId: string,
+	expectedRecordCount: number,
+): string[] {
 	const warnings = [];
 	let st;
 	try {
@@ -18,14 +22,18 @@ export function verifyWrittenSession(jsonlPath: string, expectedSessionId: strin
 	}
 	const lines = content.split("\n").filter((l) => l.trim().length > 0);
 	if (lines.length !== expectedRecordCount) {
-		warnings.push(`record count mismatch — expected=${expectedRecordCount} actual=${lines.length} path=${jsonlPath} bytes=${content.length}`);
+		warnings.push(
+			`record count mismatch — expected=${expectedRecordCount} actual=${lines.length} path=${jsonlPath} bytes=${content.length}`,
+		);
 		return warnings;
 	}
 	try {
 		const firstRec = JSON.parse(lines[0]);
 		const lastRec = JSON.parse(lines[lines.length - 1]);
 		if (firstRec.sessionId !== expectedSessionId || lastRec.sessionId !== expectedSessionId) {
-			warnings.push(`sessionId drift — expected=${expectedSessionId} first=${firstRec.sessionId} last=${lastRec.sessionId}`);
+			warnings.push(
+				`sessionId drift — expected=${expectedSessionId} first=${firstRec.sessionId} last=${lastRec.sessionId}`,
+			);
 		}
 	} catch (e) {
 		warnings.push(`malformed JSONL — path=${jsonlPath} err=${(e as Error).message}`);

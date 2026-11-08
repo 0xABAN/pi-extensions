@@ -3,20 +3,33 @@ import { chmodSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkS
 import { join } from "path";
 import { randomUUID } from "crypto";
 import { writeMessage, createMessageReader, MAX_FRAME_BYTES } from "./framing.ts";
-import { isMessage, isMessageReceipt, isSessionId, isSessionRegistration, messageDeliveryFingerprint } from "./protocol.ts";
 import {
-  ensureIntercomRuntimeDir,
-  getBrokerSocketPath,
-  getIntercomDirPath,
-  INTERCOM_DIR_MODE,
-  INTERCOM_PROTOCOL_NAME,
-  INTERCOM_PROTOCOL_VERSION,
-  INTERCOM_RUNTIME_FILE_MODE,
-  restrictIntercomRuntimeFile,
+	isMessage,
+	isMessageReceipt,
+	isSessionId,
+	isSessionRegistration,
+	messageDeliveryFingerprint,
+} from "./protocol.ts";
+import {
+	ensureIntercomRuntimeDir,
+	getBrokerSocketPath,
+	getIntercomDirPath,
+	INTERCOM_DIR_MODE,
+	INTERCOM_PROTOCOL_NAME,
+	INTERCOM_PROTOCOL_VERSION,
+	INTERCOM_RUNTIME_FILE_MODE,
+	restrictIntercomRuntimeFile,
 } from "./paths.ts";
 import { sameCwd } from "../cwd.ts";
 import { ASK_TIMEOUT_MS, EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE } from "../types.ts";
-import type { DeliveryState, SessionInfo, Message, BrokerMessage, MessageControl, MessageReceiptStatus } from "../types.ts";
+import type {
+	DeliveryState,
+	SessionInfo,
+	Message,
+	BrokerMessage,
+	MessageControl,
+	MessageReceiptStatus,
+} from "../types.ts";
 import { assertNoLiveBroker } from "./runtime-claim.ts";
 import { resolveHerdrLocations } from "../herdr-location.ts";
 
@@ -37,1226 +50,1458 @@ const MAX_MAILBOX_MESSAGES = 256;
 const DELIVERY_RECORD_RETENTION_MS = 60 * 60 * 1000;
 const MAX_DELIVERY_RECORDS = 4096;
 const RECEIPT_TIMEOUT_MS = readPositiveIntEnv(process.env.PI_INTERCOM_RECEIPT_TIMEOUT_MS, 5000, 10_000);
-const RECEIPT_PROOF_STATUSES = new Set<MessageReceiptStatus>(["receiver_received", "acknowledged", "queued", "injected"]);
+const RECEIPT_PROOF_STATUSES = new Set<MessageReceiptStatus>([
+	"receiver_received",
+	"acknowledged",
+	"queued",
+	"injected",
+]);
 const LIVENESS_MISSED_INTERVALS = 3;
 const LIVENESS_SWEEP_MS = readPositiveIntEnv(process.env.PI_INTERCOM_LIVENESS_SWEEP_MS, 10_000);
 
 function readPositiveIntEnv(raw: string | undefined, fallback: number, limit = Infinity): number {
-  const value = Number(raw);
-  return Number.isSafeInteger(value) && value > 0 && value < limit ? value : fallback;
+	const value = Number(raw);
+	return Number.isSafeInteger(value) && value > 0 && value < limit ? value : fallback;
 }
 
 interface ConnectedSession {
-  socket: net.Socket;
-  info: SessionInfo;
-  key: string;
-  lastPresenceBroadcastAt: number;
-  herdrSessionPath?: string;
-  acknowledgesReceipts: boolean;
-  livenessIntervalMs?: number;
-  lastInboundAt: number;
+	socket: net.Socket;
+	info: SessionInfo;
+	key: string;
+	lastPresenceBroadcastAt: number;
+	herdrSessionPath?: string;
+	acknowledgesReceipts: boolean;
+	livenessIntervalMs?: number;
+	lastInboundAt: number;
 }
 
 interface PendingReceipt {
-  senderSocket: net.Socket;
-  fromKey: string;
-  messageId: string;
-  targetSocket: net.Socket;
-  replyTo?: string;
-  timer: NodeJS.Timeout;
+	senderSocket: net.Socket;
+	fromKey: string;
+	messageId: string;
+	targetSocket: net.Socket;
+	replyTo?: string;
+	timer: NodeJS.Timeout;
 }
 
 interface DeliveryRecord {
-  fingerprint: string;
-  state: DeliveryState;
-  reason?: string;
-  code?: string;
-  retryable: boolean;
-  createdAt: number;
+	fingerprint: string;
+	state: DeliveryState;
+	reason?: string;
+	code?: string;
+	retryable: boolean;
+	createdAt: number;
 }
 
 interface ConnectionState {
-  socket: net.Socket;
-  tokens: number;
-  lastRefillAt: number;
+	socket: net.Socket;
+	tokens: number;
+	lastRefillAt: number;
 }
 
 interface AskEdge {
-  from: string;
-  to: string;
-  createdAt: number;
+	from: string;
+	to: string;
+	createdAt: number;
 }
 
 interface PendingAskRecord {
-  askId: string;
-  messageId: string;
-  asker: { sessionId: string; name: string | null };
-  target: { sessionId: string; name: string | null };
-  question: string;
-  createdAt: number;
-  expiresAt: number;
+	askId: string;
+	messageId: string;
+	asker: { sessionId: string; name: string | null };
+	target: { sessionId: string; name: string | null };
+	question: string;
+	createdAt: number;
+	expiresAt: number;
 }
 
 interface MessageReceiptRoute {
-  from: string;
-  to: string;
-  createdAt: number;
+	from: string;
+	to: string;
+	createdAt: number;
 }
 
 interface DisconnectedSession {
-  info: SessionInfo;
-  key: string;
-  disconnectedAt: number;
+	info: SessionInfo;
+	key: string;
+	disconnectedAt: number;
 }
 
 interface MailboxMessage {
-  from: SessionInfo;
-  fromKey: string;
-  target: SessionInfo;
-  targetKey: string;
-  message: Message;
-  queuedAt: number;
+	from: SessionInfo;
+	fromKey: string;
+	target: SessionInfo;
+	targetKey: string;
+	message: Message;
+	queuedAt: number;
 }
 
 function isProcessAlive(pid: number): boolean {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return isRecord(error) && error.code === "EPERM";
-  }
+	if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		return isRecord(error) && error.code === "EPERM";
+	}
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isPendingAskRecord(value: unknown): value is PendingAskRecord {
-  if (!isRecord(value) || !isRecord(value.asker) || !isRecord(value.target)) {
-    return false;
-  }
-  return typeof value.askId === "string"
-    && typeof value.messageId === "string"
-    && typeof value.asker.sessionId === "string"
-    && (typeof value.asker.name === "string" || value.asker.name === null)
-    && typeof value.target.sessionId === "string"
-    && (typeof value.target.name === "string" || value.target.name === null)
-    && typeof value.question === "string"
-    && typeof value.createdAt === "number"
-    && typeof value.expiresAt === "number"
-    && Number.isSafeInteger(value.createdAt)
-    && Number.isSafeInteger(value.expiresAt)
-    && value.expiresAt >= value.createdAt;
+	if (!isRecord(value) || !isRecord(value.asker) || !isRecord(value.target)) {
+		return false;
+	}
+	return (
+		typeof value.askId === "string" &&
+		typeof value.messageId === "string" &&
+		typeof value.asker.sessionId === "string" &&
+		(typeof value.asker.name === "string" || value.asker.name === null) &&
+		typeof value.target.sessionId === "string" &&
+		(typeof value.target.name === "string" || value.target.name === null) &&
+		typeof value.question === "string" &&
+		typeof value.createdAt === "number" &&
+		typeof value.expiresAt === "number" &&
+		Number.isSafeInteger(value.createdAt) &&
+		Number.isSafeInteger(value.expiresAt) &&
+		value.expiresAt >= value.createdAt
+	);
 }
 
 function pendingAskRecordPath(messageId: string): string {
-  return join(PENDING_ASKS_DIR, `${encodeURIComponent(messageId)}.json`);
+	return join(PENDING_ASKS_DIR, `${encodeURIComponent(messageId)}.json`);
 }
 
 function ensurePendingAskRecordDir(): void {
-  mkdirSync(PENDING_ASKS_DIR, { recursive: true, mode: INTERCOM_DIR_MODE });
-  chmodSync(PENDING_ASKS_DIR, INTERCOM_DIR_MODE);
+	mkdirSync(PENDING_ASKS_DIR, { recursive: true, mode: INTERCOM_DIR_MODE });
+	chmodSync(PENDING_ASKS_DIR, INTERCOM_DIR_MODE);
 }
 
 class IntercomBroker {
-  private sessions = new Map<string, ConnectedSession>();
-  private askEdges = new Map<string, AskEdge>();
-  private messageReceiptRoutes = new Map<string, MessageReceiptRoute>();
-  private disconnectedSessions = new Map<string, DisconnectedSession>();
-  private mailboxMessages: MailboxMessage[] = [];
-  private deliveryRecords = new Map<string, DeliveryRecord>();
-  private pendingReceipts = new Map<string, PendingReceipt>();
-  private connections = new Set<net.Socket>();
-  private unregisteredConnections = new Set<net.Socket>();
-  private server: net.Server;
-  private lastLivenessSweepAt = Date.now();
-  private shutdownTimer: NodeJS.Timeout | null = null;
-
-  constructor() {
-    ensureIntercomRuntimeDir(INTERCOM_DIR);
-    assertNoLiveBroker(PID_PATH);
-    ensurePendingAskRecordDir();
-    this.prunePendingAskRecords();
-    try {
-      unlinkSync(SOCKET_PATH);
-    } catch {
-    }
-    this.server = net.createServer(this.handleConnection.bind(this));
-  }
-
-  start(): void {
-    const onListening = () => {
-      restrictIntercomRuntimeFile(SOCKET_PATH);
-      writeFileSync(PID_PATH, String(process.pid), { mode: INTERCOM_RUNTIME_FILE_MODE });
-      restrictIntercomRuntimeFile(PID_PATH);
-      console.log(`Intercom broker started (pid: ${process.pid})`);
-    };
-
-    this.server.listen(SOCKET_PATH, onListening);
-    process.on("SIGTERM", () => this.shutdown());
-    process.on("SIGINT", () => this.shutdown());
-    setInterval(() => this.evictSilentSessions(), LIVENESS_SWEEP_MS).unref();
-  }
-
-  private evictSilentSessions(): void {
-    const now = Date.now();
-    const sinceLastSweepMs = now - this.lastLivenessSweepAt;
-    this.lastLivenessSweepAt = now;
-    if (sinceLastSweepMs > 2 * LIVENESS_SWEEP_MS + 1000) {
-      for (const session of this.sessions.values()) session.lastInboundAt = now;
-      return;
-    }
-    for (const session of this.sessions.values()) {
-      if (session.livenessIntervalMs === undefined) continue;
-      const silentMs = now - session.lastInboundAt;
-      if (silentMs <= session.livenessIntervalMs * LIVENESS_MISSED_INTERVALS) continue;
-      console.log(`Dropping session ${session.info.id}: no heartbeat for ${silentMs}ms`);
-      session.socket.destroy();
-    }
-  }
-
-  private handleConnection(socket: net.Socket): void {
-    this.connections.add(socket);
-    let sessionKey: string | null = null;
-    let registrationTimeout: NodeJS.Timeout | null = null;
-    const armRegistrationTimeout = () => {
-      if (registrationTimeout) {
-        clearTimeout(registrationTimeout);
-      }
-      this.unregisteredConnections.delete(socket);
-      this.unregisteredConnections.add(socket);
-      this.evictOldestUnregisteredConnections(socket);
-      registrationTimeout = setTimeout(() => {
-        if (!sessionKey) {
-          socket.destroy();
-        }
-      }, REGISTRATION_TIMEOUT_MS);
-      registrationTimeout.unref?.();
-    };
-    const clearRegistrationTimeout = () => {
-      if (registrationTimeout) {
-        clearTimeout(registrationTimeout);
-        registrationTimeout = null;
-      }
-      this.unregisteredConnections.delete(socket);
-    };
-    armRegistrationTimeout();
-    const connection: ConnectionState = {
-      socket,
-      tokens: RATE_LIMIT_CAPACITY,
-      lastRefillAt: Date.now(),
-    };
-
-    const reader = createMessageReader((msg) => {
-      if (!this.consumeToken(connection)) {
-        writeMessage(socket, { type: "error", error: "Intercom broker rate limit exceeded" });
-        socket.destroy(new Error("Intercom broker rate limit exceeded"));
-        return;
-      }
-      const session = sessionKey ? this.sessions.get(sessionKey) : undefined;
-      if (session?.socket === socket) session.lastInboundAt = Date.now();
-      this.handleMessage(socket, msg, sessionKey, (id) => {
-        sessionKey = id;
-        if (id) {
-          clearRegistrationTimeout();
-        } else {
-          armRegistrationTimeout();
-        }
-      });
-    }, (error) => {
-      socket.destroy(error);
-    });
-
-    socket.on("data", reader);
-
-    socket.on("close", () => {
-      clearRegistrationTimeout();
-      this.connections.delete(socket);
-      this.settlePendingReceiptsForSocket(socket);
-      if (sessionKey) {
-        const existing = this.sessions.get(sessionKey);
-        if (existing?.socket === socket) {
-          this.rememberDisconnectedSession(existing);
-          this.sessions.delete(sessionKey);
-          this.clearMessageReceiptRoutesForSession(sessionKey);
-          this.broadcast({ type: "session_left", sessionId: existing.info.id }, sessionKey);
-          this.scheduleShutdownCheck();
-        }
-      }
-    });
-
-    socket.on("error", (error) => {
-      console.error("Socket error:", error);
-    });
-  }
-
-  private evictOldestUnregisteredConnections(currentSocket: net.Socket): void {
-    while (this.unregisteredConnections.size > MAX_UNREGISTERED_CONNECTIONS) {
-      const [oldest] = this.unregisteredConnections;
-      if (!oldest) {
-        return;
-      }
-      if (oldest === currentSocket && this.unregisteredConnections.size === 1) {
-        return;
-      }
-      this.unregisteredConnections.delete(oldest);
-      oldest.destroy();
-    }
-  }
-
-  private consumeToken(connection: ConnectionState, now = Date.now()): boolean {
-    const elapsedMs = now - connection.lastRefillAt;
-    if (elapsedMs > 0) {
-      connection.tokens = Math.min(
-        RATE_LIMIT_CAPACITY,
-        connection.tokens + elapsedMs * RATE_LIMIT_REFILL_PER_SECOND / 1000,
-      );
-      connection.lastRefillAt = now;
-    }
-    if (connection.tokens < 1) {
-      return false;
-    }
-    connection.tokens -= 1;
-    return true;
-  }
-
-  private scheduleShutdownCheck(delayMs = 5000): void {
-    if (this.shutdownTimer) return;
-
-    this.shutdownTimer = setTimeout(() => {
-      this.shutdownTimer = null;
-      if (this.sessions.size > 0) return;
-      const now = Date.now();
-      this.pruneMailboxMessages(now);
-      if (this.mailboxMessages.length > 0) {
-        const oldestQueuedAt = Math.min(...this.mailboxMessages.map(entry => entry.queuedAt));
-        this.scheduleShutdownCheck(Math.max(oldestQueuedAt + MAILBOX_MESSAGE_RETENTION_MS - now + 1, 1000));
-        return;
-      }
-      console.log("No sessions connected, shutting down");
-      this.shutdown();
-    }, delayMs);
-  }
-
-  private handleMessage(
-    socket: net.Socket,
-    msg: unknown,
-    currentKey: string | null,
-    setKey: (key: string | null) => void,
-  ): void {
-    if (typeof msg !== "object" || msg === null || !("type" in msg) || typeof msg.type !== "string") {
-      throw new Error("Invalid client message");
-    }
-
-    const clientMessage = msg as { type: string } & Record<string, unknown>;
-
-    if (clientMessage.type === "health") {
-      if (typeof clientMessage.requestId !== "string") {
-        throw new Error("Invalid health message");
-      }
-      writeMessage(socket, {
-        type: "health_ok",
-        requestId: clientMessage.requestId,
-        protocol: INTERCOM_PROTOCOL_NAME,
-        version: INTERCOM_PROTOCOL_VERSION,
-      });
-      return;
-    }
-
-    if (currentKey === null && clientMessage.type !== "register") {
-      throw new Error(`Received ${clientMessage.type} before register`);
-    }
-
-    switch (clientMessage.type) {
-      case "register": {
-        if (!isSessionRegistration(clientMessage.session)) {
-          throw new Error("Invalid register message");
-        }
-
-        if (currentKey) {
-          throw new Error("Received duplicate register message");
-        }
-
-        let id: string = randomUUID();
-        if (clientMessage.sessionId !== undefined) {
-          if (!isSessionId(clientMessage.sessionId)) {
-            throw new Error("Invalid register sessionId");
-          }
-          id = clientMessage.sessionId;
-        }
-        const key = id;
-        const session = clientMessage.session;
-
-        this.pruneDisconnectedSessions();
-        this.pruneMailboxMessages();
-        const previous = this.sessions.get(key);
-        if (!previous && this.sessions.size >= MAX_SESSIONS) {
-          writeMessage(socket, { type: "error", error: "Too many registered intercom sessions" });
-          socket.destroy();
-          break;
-        }
-        if (previous && previous.info.pid !== session.pid && isProcessAlive(previous.info.pid)) {
-          const holder = previous.info;
-          writeMessage(socket, {
-            type: "error",
-            code: SESSION_HELD_ERROR_CODE,
-            error: `Intercom session ${id} is held by live process ${holder.pid} in ${holder.cwd}`,
-            holder: { pid: holder.pid, cwd: holder.cwd, ...(holder.name !== undefined ? { name: holder.name } : {}) },
-          });
-          socket.end();
-          break;
-        }
-        if (previous) {
-          this.clearMessageReceiptRoutesForSession(key);
-          previous.socket.end();
-        }
-        setKey(key);
-        const info: SessionInfo = {
-          id,
-          endpointEpoch: randomUUID(),
-          ...(session.name !== undefined ? { name: session.name } : {}),
-          ...(session.runtimeFallbackAlias !== undefined ? { runtimeFallbackAlias: session.runtimeFallbackAlias } : {}),
-          cwd: session.cwd,
-          model: session.model,
-          pid: session.pid,
-          startedAt: session.startedAt,
-          lastActivity: session.lastActivity,
-          ...(session.status !== undefined ? { status: session.status } : {}),
-          ...(session.tmuxPane !== undefined ? { tmuxPane: session.tmuxPane } : {}),
-          ...(session.herdrPaneId !== undefined ? { herdrPaneId: session.herdrPaneId } : {}),
-          trustedLocal: true,
-        };
-
-        const connectedSession: ConnectedSession = {
-          socket,
-          info,
-          key,
-          lastPresenceBroadcastAt: Date.now(),
-          ...(session.herdrSessionPath ? { herdrSessionPath: session.herdrSessionPath } : {}),
-          acknowledgesReceipts: session.acknowledgesReceipts === true,
-          ...(session.livenessIntervalMs !== undefined ? { livenessIntervalMs: session.livenessIntervalMs } : {}),
-          lastInboundAt: Date.now(),
-        };
-        this.sessions.set(key, connectedSession);
-        this.disconnectedSessions.delete(key);
-
-        if (this.shutdownTimer) {
-          clearTimeout(this.shutdownTimer);
-          this.shutdownTimer = null;
-        }
-
-        writeMessage(socket, {
-          type: "registered",
-          sessionId: id,
-          features: [EXACT_SEND_FEATURE],
-        });
-        this.broadcast({ type: "session_joined", session: info }, key);
-
-        this.flushMailboxForSession(connectedSession);
-        break;
-      }
-
-      case "unregister": {
-        if (!currentKey) {
-          throw new Error("Received unregister before register");
-        }
-        const existing = this.sessions.get(currentKey);
-        if (existing?.socket === socket) {
-          this.rememberDisconnectedSession(existing);
-          this.sessions.delete(currentKey);
-          this.clearMessageReceiptRoutesForSession(currentKey);
-          this.broadcast({ type: "session_left", sessionId: existing.info.id }, currentKey);
-          this.scheduleShutdownCheck();
-        }
-        setKey(null);
-        break;
-      }
-
-      case "list": {
-        if (typeof clientMessage.requestId !== "string") {
-          throw new Error("Invalid list message");
-        }
-
-        const requester = currentKey ? this.sessions.get(currentKey) : undefined;
-        if (!requester || requester.socket !== socket) {
-          throw new Error("List session not found");
-        }
-        const sessions = Array.from(this.sessions.values())
-          .map(s => s.info);
-        const requestId = clientMessage.requestId;
-        const herdrSessionPaths = new Map(
-          Array.from(this.sessions.values())
-            .filter(session => session.herdrSessionPath)
-            .map(session => [session.info.id, session.herdrSessionPath!] as const),
-        );
-        void resolveHerdrLocations(sessions, { sessionPaths: herdrSessionPaths })
-          .then((resolvedSessions) => writeMessage(socket, { type: "sessions", requestId, sessions: resolvedSessions }))
-          .catch((cause) => {
-            const detail = cause instanceof Error ? cause.message : String(cause);
-            const fallback = sessions.map((session) => ({
-              ...session,
-              herdrLocation: session.herdrPaneId
-                ? { status: "unavailable" as const, paneId: session.herdrPaneId, reason: "command_failed" as const, detail }
-                : { status: "not_hosted" as const },
-            }));
-            writeMessage(socket, { type: "sessions", requestId, sessions: fallback });
-          });
-        break;
-      }
-
-      case "send": {
-        if (!currentKey) {
-          throw new Error("Received send before register");
-        }
-        const message = clientMessage.message;
-        const messageId = isMessage(message) ? message.id : "unknown";
-
-        if (typeof clientMessage.to !== "string" || !isMessage(message)) {
-          this.writeDeliveryFailure(socket, messageId, "Invalid message format", "E_INVALID_MESSAGE");
-          break;
-        }
-        let to = clientMessage.to;
-        const fromSession = this.sessions.get(currentKey);
-        if (!fromSession || fromSession.socket !== socket) {
-          this.writeDeliveryFailure(socket, message.id, "Sender session not found", "E_SENDER_NOT_FOUND");
-          break;
-        }
-
-        const brokerReceivedAt = Date.now();
-        this.pruneAskEdges();
-        this.pruneMessageReceiptRoutes(brokerReceivedAt);
-        const replyEdge = message.replyTo ? this.askEdges.get(message.replyTo) : undefined;
-
-        const hasTargetId = clientMessage.targetId !== undefined;
-        const hasTargetEpoch = clientMessage.targetEpoch !== undefined;
-        if (
-          hasTargetId !== hasTargetEpoch
-          || (hasTargetId && (typeof clientMessage.targetId !== "string" || clientMessage.targetId.length === 0))
-          || (hasTargetEpoch && (typeof clientMessage.targetEpoch !== "string" || clientMessage.targetEpoch.length === 0))
-        ) {
-          this.writeDeliveryFailure(socket, message.id, "Exact target requires an id and endpoint epoch", "E_INVALID_TARGET");
-          break;
-        }
-        if (hasTargetId && hasTargetEpoch) {
-          const targetId = clientMessage.targetId as string;
-          const targetEpoch = clientMessage.targetEpoch as string;
-          const fingerprint = messageDeliveryFingerprint(message, targetId);
-          if (this.replayOrReject(socket, currentKey, message.id, fingerprint)) {
-            break;
-          }
-          const exactTarget = this.sessions.get(targetId);
-          if (!exactTarget) {
-            this.recordDelivery(currentKey, message.id, fingerprint, "failed", "Session not found", "E_TARGET_NOT_FOUND");
-            this.writeDeliveryFailure(socket, message.id, "Session not found", "E_TARGET_NOT_FOUND");
-            break;
-          }
-          if (exactTarget.info.endpointEpoch !== targetEpoch) {
-            this.recordDelivery(currentKey, message.id, fingerprint, "failed", "Target endpoint changed before delivery", "E_TARGET_REBOUND", true);
-            this.writeDeliveryFailure(socket, message.id, "Target endpoint changed before delivery", "E_TARGET_REBOUND", true);
-            break;
-          }
-          to = targetId;
-        }
-
-        const targets = this.findSessions(to);
-        if (targets.length === 1) {
-          if (message.replyTo && !replyEdge) {
-            this.writeDeliveryFailure(socket, message.id, "Reply target does not match a pending ask", "E_REPLY_TARGET");
-            break;
-          }
-          const target = targets[0];
-          const fingerprint = messageDeliveryFingerprint(message, target.info.id);
-          if (this.replayOrReject(socket, currentKey, message.id, fingerprint)) {
-            break;
-          }
-          if (message.supersedes) {
-            const supersededRoute = this.messageReceiptRoutes.get(message.supersedes);
-            if (!supersededRoute || supersededRoute.from !== currentKey || supersededRoute.to !== target.key) {
-              this.writeDeliveryFailure(socket, message.id, "Supersede target does not match a previous message from this sender to this receiver", "E_SUPERSEDE_TARGET");
-              break;
-            }
-          }
-          if (replyEdge && (replyEdge.to !== currentKey || replyEdge.from !== target.key)) {
-            this.writeDeliveryFailure(socket, message.id, "Reply target does not match the pending ask", "E_REPLY_TARGET");
-            break;
-          }
-          if (message.expectsReply) {
-            const reverseEdge = Array.from(this.askEdges.entries()).find(([edgeMessageId, edge]) => edgeMessageId !== message.replyTo && edge.from === target.key && edge.to === currentKey);
-            if (reverseEdge) {
-              this.writeDeliveryFailure(socket, message.id, "Mutual ask refused: target session is already waiting for a reply from this session.", "E_MUTUAL_ASK");
-              break;
-            }
-            this.writePendingAskRecord(message, fromSession, target.info, brokerReceivedAt);
-            this.askEdges.set(message.id, {
-              from: currentKey,
-              to: target.key,
-              createdAt: brokerReceivedAt,
-            });
-          }
-          const deliveredMessage: Message = {
-            ...message,
-            brokerReceivedAt,
-            brokerDeliveredAt: Date.now(),
-          };
-          if (message.supersedes) {
-            const control: MessageControl = {
-              action: "supersede",
-              messageId: message.supersedes,
-              supersededBy: message.id,
-              timestamp: Date.now(),
-            };
-            writeMessage(target.socket, {
-              type: "message_control",
-              from: fromSession.info,
-              control,
-            });
-            this.updateDeliveryRecord(currentKey, message.supersedes, "failed", `Superseded by ${message.id}`, "E_DELIVERY_SUPERSEDED");
-          }
-          this.messageReceiptRoutes.set(message.id, { from: currentKey, to: target.key, createdAt: brokerReceivedAt });
-          writeMessage(target.socket, {
-            type: "message",
-            from: fromSession.info,
-            message: deliveredMessage,
-          });
-          this.completeSocketDelivery(socket, currentKey, target, message, fingerprint);
-          break;
-        }
-
-        if (targets.length > 1) {
-          this.writeDeliveryFailure(socket, message.id, `Multiple sessions named \"${to}\" are connected. Use the session ID instead.`, "E_AMBIGUOUS_TARGET");
-          break;
-        }
-
-        const disconnectedTargets = this.findDisconnectedSessions(to);
-        if (disconnectedTargets.length === 1) {
-          if (message.replyTo && !replyEdge) {
-            this.writeDeliveryFailure(socket, message.id, "Reply target does not match a pending ask", "E_REPLY_TARGET");
-            break;
-          }
-          const disconnectedTarget = disconnectedTargets[0]!;
-          const target = disconnectedTarget.info;
-          const fingerprint = messageDeliveryFingerprint(message, target.id);
-          if (this.replayOrReject(socket, currentKey, message.id, fingerprint)) {
-            break;
-          }
-          if (message.supersedes) {
-            this.writeDeliveryFailure(socket, message.id, "Supersede target is not connected", "E_SUPERSEDE_TARGET");
-            break;
-          }
-          if (replyEdge && (replyEdge.to !== currentKey || replyEdge.from !== disconnectedTarget.key)) {
-            this.writeDeliveryFailure(socket, message.id, "Reply target does not match the pending ask", "E_REPLY_TARGET");
-            break;
-          }
-          if (message.expectsReply) {
-            this.writeDeliveryFailure(socket, message.id, "Target session is not currently connected; blocking asks are not queued", "E_TARGET_DISCONNECTED");
-            break;
-          }
-          const liveMailboxTarget = this.findUniqueLiveSessionForDisconnectedSession(disconnectedTarget, currentKey);
-          if (liveMailboxTarget) {
-            const deliveredMessage: Message = {
-              ...message,
-              brokerReceivedAt,
-              brokerDeliveredAt: Date.now(),
-            };
-            this.messageReceiptRoutes.set(message.id, { from: currentKey, to: liveMailboxTarget.key, createdAt: brokerReceivedAt });
-            writeMessage(liveMailboxTarget.socket, {
-              type: "message",
-              from: fromSession.info,
-              message: deliveredMessage,
-            });
-            this.completeSocketDelivery(socket, currentKey, liveMailboxTarget, message, fingerprint);
-            break;
-          }
-          this.queueMailboxMessage(fromSession, disconnectedTarget, message, brokerReceivedAt);
-          this.releaseReplyEdge(message.replyTo);
-          this.recordDelivery(currentKey, message.id, fingerprint, "queued");
-          this.writeDeliverySuccess(socket, message.id, "queued");
-          break;
-        }
-
-        if (disconnectedTargets.length > 1) {
-          this.writeDeliveryFailure(socket, message.id, `Multiple disconnected sessions named \"${to}\" can receive queued mail. Use the session ID instead.`, "E_AMBIGUOUS_TARGET");
-          break;
-        }
-
-        this.writeDeliveryFailure(socket, message.id, "Session not found", "E_TARGET_NOT_FOUND");
-        break;
-      }
-
-      case "message_receipt": {
-        if (!currentKey) {
-          throw new Error("Received message_receipt before register");
-        }
-        if (!isMessageReceipt(clientMessage.receipt)) {
-          throw new Error("Invalid message_receipt message");
-        }
-        this.pruneMessageReceiptRoutes();
-        const route = this.messageReceiptRoutes.get(clientMessage.receipt.messageId);
-        const receiver = this.sessions.get(currentKey);
-        const sender = route ? this.sessions.get(route.from) : undefined;
-        if (route?.to === currentKey && receiver?.socket === socket && RECEIPT_PROOF_STATUSES.has(clientMessage.receipt.status)) {
-          this.confirmPendingReceipt(this.deliveryRecordKey(route.from, clientMessage.receipt.messageId), socket);
-        }
-        if (route?.to === currentKey && receiver?.socket === socket && sender) {
-          writeMessage(sender.socket, {
-            type: "message_receipt",
-            from: receiver.info,
-            receipt: clientMessage.receipt,
-          });
-        }
-        break;
-      }
-
-      case "cancel_message": {
-        if (!currentKey) {
-          throw new Error("Received cancel_message before register");
-        }
-        if (typeof clientMessage.messageId !== "string") {
-          throw new Error("Invalid cancel_message message");
-        }
-        this.pruneMessageReceiptRoutes();
-        this.pruneMailboxMessages();
-        const sender = this.sessions.get(currentKey);
-        const queuedIndex = this.mailboxMessages.findIndex(entry => entry.message.id === clientMessage.messageId && entry.fromKey === currentKey);
-        if (queuedIndex >= 0 && sender?.socket === socket) {
-          this.mailboxMessages.splice(queuedIndex, 1);
-          this.updateDeliveryRecord(currentKey, clientMessage.messageId, "failed", "Sender cancelled the queued delivery", "E_DELIVERY_CANCELLED");
-          const edge = this.askEdges.get(clientMessage.messageId);
-          if (edge?.from === currentKey) {
-            this.askEdges.delete(clientMessage.messageId);
-            this.removePendingAskRecord(clientMessage.messageId);
-          }
-          writeMessage(socket, { type: "delivered", messageId: clientMessage.messageId });
-          break;
-        }
-        const route = this.messageReceiptRoutes.get(clientMessage.messageId);
-        const receiver = route ? this.sessions.get(route.to) : undefined;
-        if (route?.from !== currentKey || sender?.socket !== socket || !receiver) {
-          writeMessage(socket, {
-            type: "delivery_failed",
-            messageId: clientMessage.messageId,
-            reason: "Message cannot be cancelled by this session",
-          });
-          break;
-        }
-        writeMessage(receiver.socket, {
-          type: "message_control",
-          from: sender.info,
-          control: {
-            action: "cancel",
-            messageId: clientMessage.messageId,
-            timestamp: Date.now(),
-          },
-        });
-        const edge = this.askEdges.get(clientMessage.messageId);
-        if (edge?.from === currentKey) {
-          this.askEdges.delete(clientMessage.messageId);
-          this.removePendingAskRecord(clientMessage.messageId);
-        }
-        this.updateDeliveryRecord(currentKey, clientMessage.messageId, "failed", "Sender cancelled the delivery", "E_DELIVERY_CANCELLED");
-        writeMessage(socket, { type: "delivered", messageId: clientMessage.messageId });
-        break;
-      }
-
-      case "cancel_ask": {
-        if (!currentKey) {
-          throw new Error("Received cancel_ask before register");
-        }
-        if (typeof clientMessage.messageId !== "string") {
-          throw new Error("Invalid cancel_ask message");
-        }
-        const session = this.sessions.get(currentKey);
-        const edge = this.askEdges.get(clientMessage.messageId);
-        if (session?.socket === socket && edge?.from === currentKey) {
-          this.askEdges.delete(clientMessage.messageId);
-          this.removePendingAskRecord(clientMessage.messageId);
-        }
-        break;
-      }
-
-      case "presence": {
-        if (!currentKey) {
-          throw new Error("Received presence before register");
-        }
-        const session = this.sessions.get(currentKey);
-        if (session?.socket === socket) {
-          let changed = false;
-          if (clientMessage.name !== undefined) {
-            if (typeof clientMessage.name !== "string") {
-              throw new Error("Invalid presence name");
-            }
-            if (session.info.name !== clientMessage.name) {
-              session.info.name = clientMessage.name;
-              changed = true;
-            }
-          }
-          if (clientMessage.runtimeFallbackAlias !== undefined) {
-            if (typeof clientMessage.runtimeFallbackAlias !== "boolean") {
-              throw new Error("Invalid presence runtimeFallbackAlias");
-            }
-            if (session.info.runtimeFallbackAlias !== clientMessage.runtimeFallbackAlias) {
-              session.info.runtimeFallbackAlias = clientMessage.runtimeFallbackAlias;
-              changed = true;
-            }
-          }
-          if (clientMessage.status !== undefined) {
-            if (typeof clientMessage.status !== "string") {
-              throw new Error("Invalid presence status");
-            }
-            if (session.info.status !== clientMessage.status) {
-              session.info.status = clientMessage.status;
-              changed = true;
-            }
-          }
-          if (clientMessage.model !== undefined) {
-            if (typeof clientMessage.model !== "string") {
-              throw new Error("Invalid presence model");
-            }
-            if (session.info.model !== clientMessage.model) {
-              session.info.model = clientMessage.model;
-              changed = true;
-            }
-          }
-          if (clientMessage.contextPct !== undefined) {
-            if (clientMessage.contextPct === null) {
-              if (session.info.contextPct !== undefined) { delete session.info.contextPct; changed = true; }
-            } else if (typeof clientMessage.contextPct !== "number") {
-              throw new Error("Invalid presence contextPct");
-            } else if (session.info.contextPct !== clientMessage.contextPct) {
-              session.info.contextPct = clientMessage.contextPct;
-              changed = true;
-            }
-          }
-          if (clientMessage.contextTokens !== undefined) {
-            if (clientMessage.contextTokens === null) {
-              if (session.info.contextTokens !== undefined) { delete session.info.contextTokens; changed = true; }
-            } else if (typeof clientMessage.contextTokens !== "number") {
-              throw new Error("Invalid presence contextTokens");
-            } else if (session.info.contextTokens !== clientMessage.contextTokens) {
-              session.info.contextTokens = clientMessage.contextTokens;
-              changed = true;
-            }
-          }
-          if (clientMessage.contextWindow !== undefined) {
-            if (clientMessage.contextWindow === null) {
-              if (session.info.contextWindow !== undefined) { delete session.info.contextWindow; changed = true; }
-            } else if (typeof clientMessage.contextWindow !== "number") {
-              throw new Error("Invalid presence contextWindow");
-            } else if (session.info.contextWindow !== clientMessage.contextWindow) {
-              session.info.contextWindow = clientMessage.contextWindow;
-              changed = true;
-            }
-          }
-          const now = Date.now();
-          session.info.lastActivity = now;
-          if (changed || now - session.lastPresenceBroadcastAt >= PRESENCE_HEARTBEAT_MS) {
-            session.lastPresenceBroadcastAt = now;
-            this.broadcast({ type: "presence_update", session: session.info }, currentKey);
-          }
-        }
-        break;
-      }
-
-      default:
-        throw new Error(`Unknown client message type: ${clientMessage.type}`);
-    }
-  }
-
-  private rememberDisconnectedSession(session: ConnectedSession, now = Date.now()): void {
-    this.disconnectedSessions.set(session.key, {
-      info: { ...session.info },
-      key: session.key,
-      disconnectedAt: now,
-    });
-    this.pruneDisconnectedSessions(now);
-  }
-
-  private pruneDisconnectedSessions(now = Date.now()): void {
-    for (const [sessionId, session] of this.disconnectedSessions) {
-      if (now - session.disconnectedAt > DISCONNECTED_SESSION_RETENTION_MS) {
-        this.disconnectedSessions.delete(sessionId);
-      }
-    }
-  }
-
-  private pruneMailboxMessages(now = Date.now()): void {
-    for (let index = this.mailboxMessages.length - 1; index >= 0; index -= 1) {
-      const entry = this.mailboxMessages[index]!;
-      if (now - entry.queuedAt > MAILBOX_MESSAGE_RETENTION_MS) {
-        if (entry.message.expectsReply) {
-          this.askEdges.delete(entry.message.id);
-          this.removePendingAskRecord(entry.message.id);
-        }
-        this.messageReceiptRoutes.delete(entry.message.id);
-        this.updateDeliveryRecord(entry.fromKey, entry.message.id, "failed", "Mailbox delivery expired", "E_DELIVERY_EXPIRED");
-        this.mailboxMessages.splice(index, 1);
-      }
-    }
-  }
-
-  private queueMailboxMessage(from: ConnectedSession, target: DisconnectedSession, message: Message, brokerReceivedAt: number): void {
-    this.pruneMailboxMessages(brokerReceivedAt);
-    while (this.mailboxMessages.length >= MAX_MAILBOX_MESSAGES) {
-      const evicted = this.mailboxMessages.shift();
-      if (!evicted) break;
-      if (evicted.message.expectsReply) {
-        this.askEdges.delete(evicted.message.id);
-        this.removePendingAskRecord(evicted.message.id);
-      }
-      this.messageReceiptRoutes.delete(evicted.message.id);
-      this.updateDeliveryRecord(evicted.fromKey, evicted.message.id, "failed", "Mailbox capacity evicted the delivery", "E_DELIVERY_EVICTED");
-    }
-    this.mailboxMessages.push({
-      from: { ...from.info },
-      fromKey: from.key,
-      target: { ...target.info },
-      targetKey: target.key,
-      message: { ...message, brokerReceivedAt },
-      queuedAt: brokerReceivedAt,
-    });
-  }
-
-  private writeDeliverySuccess(socket: net.Socket, messageId: string, delivery: "socket_delivered" | "queued"): void {
-    writeMessage(socket, { type: "delivered", messageId, delivery, retryable: false, outcomeKnown: true });
-  }
-
-  private writeDeliveryFailure(socket: net.Socket, messageId: string, reason: string, code: string, retryable = false): void {
-    writeMessage(socket, { type: "delivery_failed", messageId, reason, delivery: "failed", code, retryable, outcomeKnown: true });
-  }
-
-  private releaseReplyEdge(replyTo: string | undefined): void {
-    if (!replyTo) return;
-    this.askEdges.delete(replyTo);
-    this.removePendingAskRecord(replyTo);
-  }
-
-  private completeSocketDelivery(senderSocket: net.Socket, fromKey: string, target: ConnectedSession, message: Message, fingerprint: string): void {
-    if (!target.acknowledgesReceipts) {
-      this.releaseReplyEdge(message.replyTo);
-      this.recordDelivery(fromKey, message.id, fingerprint, "socket_delivered");
-      this.writeDeliverySuccess(senderSocket, message.id, "socket_delivered");
-      return;
-    }
-    const key = this.deliveryRecordKey(fromKey, message.id);
-    this.recordDelivery(fromKey, message.id, fingerprint, "unknown");
-    const timer = setTimeout(() => {
-      this.failPendingReceipt(key, `Receiver did not confirm receipt within ${RECEIPT_TIMEOUT_MS}ms`, "E_RECEIPT_TIMEOUT");
-    }, RECEIPT_TIMEOUT_MS);
-    timer.unref();
-    this.pendingReceipts.set(key, {
-      senderSocket,
-      fromKey,
-      messageId: message.id,
-      targetSocket: target.socket,
-      ...(message.replyTo ? { replyTo: message.replyTo } : {}),
-      timer,
-    });
-  }
-
-  private confirmPendingReceipt(key: string, receiverSocket: net.Socket): void {
-    const pending = this.pendingReceipts.get(key);
-    if (!pending || pending.targetSocket !== receiverSocket) return;
-    clearTimeout(pending.timer);
-    this.pendingReceipts.delete(key);
-    if (this.deliveryRecords.get(key)?.state === "unknown") {
-      this.updateDeliveryRecord(pending.fromKey, pending.messageId, "socket_delivered");
-    }
-    this.releaseReplyEdge(pending.replyTo);
-    if (pending.senderSocket.writable) this.writeDeliverySuccess(pending.senderSocket, pending.messageId, "socket_delivered");
-  }
-
-  private failPendingReceipt(key: string, reason: string, code: string): void {
-    const pending = this.pendingReceipts.get(key);
-    if (!pending) return;
-    clearTimeout(pending.timer);
-    this.pendingReceipts.delete(key);
-    if (pending.senderSocket.writable) {
-      writeMessage(pending.senderSocket, { type: "delivery_failed", messageId: pending.messageId, reason, delivery: "unknown", code, retryable: true, outcomeKnown: false });
-    }
-  }
-
-  private settlePendingReceiptsForSocket(socket: net.Socket): void {
-    for (const [key, pending] of this.pendingReceipts) {
-      if (pending.targetSocket === socket || pending.senderSocket === socket) {
-        this.failPendingReceipt(key, "Receiver disconnected before confirming receipt", "E_RECEIVER_DISCONNECTED");
-      }
-    }
-  }
-
-  private deliveryRecordKey(fromSessionId: string, messageId: string): string {
-    return JSON.stringify([fromSessionId, messageId]);
-  }
-
-  private replayOrReject(socket: net.Socket, fromSessionId: string, messageId: string, fingerprint: string): boolean {
-    this.pruneDeliveryRecords();
-    const key = this.deliveryRecordKey(fromSessionId, messageId);
-    const record = this.deliveryRecords.get(key);
-    if (!record) return false;
-    if (record.fingerprint !== fingerprint) {
-      this.writeDeliveryFailure(socket, messageId, "Message id was reused with different authored content", "E_MESSAGE_ID_REUSE");
-      return true;
-    }
-    if (record.state === "unknown") {
-      const pending = this.pendingReceipts.get(key);
-      if (pending) {
-        pending.senderSocket = socket;
-        return true;
-      }
-      this.deliveryRecords.delete(key);
-      return false;
-    }
-    if (record.code === "E_TARGET_REBOUND" && record.retryable) {
-      return false;
-    }
-    if (record.state === "socket_delivered" || record.state === "queued") {
-      this.writeDeliverySuccess(socket, messageId, record.state);
-    } else {
-      this.writeDeliveryFailure(socket, messageId, record.reason ?? "Previous delivery failed", record.code ?? "E_DELIVERY_FAILED", record.retryable);
-    }
-    return true;
-  }
-
-  private recordDelivery(fromSessionId: string, messageId: string, fingerprint: string, state: DeliveryState, reason?: string, code?: string, retryable = false): void {
-    this.pruneDeliveryRecords();
-    while (this.deliveryRecords.size >= MAX_DELIVERY_RECORDS) {
-      const oldest = this.deliveryRecords.keys().next().value;
-      if (oldest === undefined) break;
-      this.deliveryRecords.delete(oldest);
-    }
-    this.deliveryRecords.set(this.deliveryRecordKey(fromSessionId, messageId), {
-      fingerprint,
-      state,
-      ...(reason ? { reason } : {}),
-      ...(code ? { code } : {}),
-      retryable,
-      createdAt: Date.now(),
-    });
-  }
-
-  private pruneDeliveryRecords(now = Date.now()): void {
-    for (const [key, record] of this.deliveryRecords) {
-      if (now - record.createdAt > DELIVERY_RECORD_RETENTION_MS) this.deliveryRecords.delete(key);
-    }
-  }
-
-  private updateDeliveryRecord(fromSessionId: string, messageId: string, state: DeliveryState, reason?: string, code?: string): void {
-    const record = this.deliveryRecords.get(this.deliveryRecordKey(fromSessionId, messageId));
-    if (!record) return;
-    record.state = state;
-    record.reason = reason;
-    record.code = code;
-    record.retryable = false;
-  }
-
-  private flushMailboxForSession(session: ConnectedSession, now = Date.now()): void {
-    this.pruneMailboxMessages(now);
-    const sessionName = session.info.name?.toLowerCase();
-    const uniqueMailboxIdentity = this.findLiveSessionsSharingMailboxIdentity(session).length === 1;
-
-    for (let index = 0; index < this.mailboxMessages.length;) {
-      const entry = this.mailboxMessages[index]!;
-      const matchesId = entry.targetKey === session.key;
-      const matchesSenderIdentity = Boolean(
-        sessionName
-        && entry.from.name?.toLowerCase() === sessionName
-        && sameCwd(entry.from.cwd, session.info.cwd),
-      );
-      const matchesUniqueName = Boolean(
-        uniqueMailboxIdentity
-        && sessionName
-        && !matchesSenderIdentity
-        && entry.target.name?.toLowerCase() === sessionName
-        && sameCwd(entry.target.cwd, session.info.cwd),
-      );
-      if (!matchesId && !matchesUniqueName) {
-        index += 1;
-        continue;
-      }
-      if (session.socket.writableLength >= MAX_FRAME_BYTES) {
-        session.socket.once("drain", () => {
-          if (this.sessions.get(session.key) === session) this.flushMailboxForSession(session);
-        });
-        return;
-      }
-
-      this.mailboxMessages.splice(index, 1);
-      const edge = this.askEdges.get(entry.message.id);
-      if (edge?.to === entry.targetKey) {
-        edge.to = session.key;
-      }
-      const deliveredMessage: Message = {
-        ...entry.message,
-        brokerDeliveredAt: Date.now(),
-      };
-      writeMessage(session.socket, {
-        type: "message",
-        from: entry.from,
-        message: deliveredMessage,
-      });
-      this.messageReceiptRoutes.set(entry.message.id, {
-        from: entry.fromKey,
-        to: session.key,
-        createdAt: entry.message.brokerReceivedAt ?? entry.queuedAt,
-      });
-      this.updateDeliveryRecord(entry.fromKey, entry.message.id, "socket_delivered");
-    }
-  }
-
-  private pruneAskEdges(now = Date.now()): void {
-    this.prunePendingAskRecords(now);
-    for (const [messageId, edge] of this.askEdges) {
-      if (now - edge.createdAt > ASK_TIMEOUT_MS) {
-        this.askEdges.delete(messageId);
-        this.removePendingAskRecord(messageId);
-      }
-    }
-  }
-
-  private writePendingAskRecord(message: Message, from: ConnectedSession, target: SessionInfo, createdAt: number): void {
-    ensurePendingAskRecordDir();
-    const record: PendingAskRecord = {
-      askId: message.id,
-      messageId: message.id,
-      asker: { sessionId: from.info.id, name: from.info.name ?? null },
-      target: { sessionId: target.id, name: target.name ?? null },
-      question: message.content.text,
-      createdAt,
-      expiresAt: createdAt + ASK_TIMEOUT_MS,
-    };
-    const filePath = pendingAskRecordPath(message.id);
-    writeFileSync(filePath, `${JSON.stringify(record, null, 2)}\n`, { mode: INTERCOM_RUNTIME_FILE_MODE });
-    restrictIntercomRuntimeFile(filePath);
-  }
-
-  private removePendingAskRecord(messageId: string): void {
-    try {
-      unlinkSync(pendingAskRecordPath(messageId));
-    } catch (error) {
-      if (!isRecord(error) || error.code !== "ENOENT") {
-        throw error;
-      }
-    }
-  }
-
-  private prunePendingAskRecords(now = Date.now()): void {
-    ensurePendingAskRecordDir();
-    for (const entry of readdirSync(PENDING_ASKS_DIR, { withFileTypes: true })) {
-      if (!entry.isFile() || !entry.name.endsWith(".json")) {
-        continue;
-      }
-      const filePath = join(PENDING_ASKS_DIR, entry.name);
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(readFileSync(filePath, "utf-8"));
-      } catch {
-        unlinkSync(filePath);
-        continue;
-      }
-      if (!isPendingAskRecord(parsed) || now > parsed.expiresAt) {
-        unlinkSync(filePath);
-      }
-    }
-  }
-
-  private pruneMessageReceiptRoutes(now = Date.now()): void {
-    for (const [messageId, route] of this.messageReceiptRoutes) {
-      if (now - route.createdAt > MESSAGE_RECEIPT_ROUTE_RETENTION_MS) {
-        this.messageReceiptRoutes.delete(messageId);
-      }
-    }
-  }
-
-  private clearMessageReceiptRoutesForSession(sessionKey: string): void {
-    for (const [messageId, route] of this.messageReceiptRoutes) {
-      if (route.from === sessionKey || route.to === sessionKey) {
-        this.messageReceiptRoutes.delete(messageId);
-      }
-    }
-  }
-
-  private findSessions(nameOrId: string): ConnectedSession[] {
-    const byId = this.sessions.get(nameOrId);
-    if (byId) {
-      return [byId];
-    }
-
-    const lowerName = nameOrId.toLowerCase();
-    const byName = Array.from(this.sessions.values()).filter(session => session.info.name?.toLowerCase() === lowerName);
-    if (byName.length > 0) {
-      return byName;
-    }
-
-    return Array.from(this.sessions.entries())
-      .filter(([, session]) => session.info.id.startsWith(nameOrId))
-      .map(([, session]) => session);
-  }
-
-  private findDisconnectedSessions(nameOrId: string): DisconnectedSession[] {
-    this.pruneDisconnectedSessions();
-    const byId = this.disconnectedSessions.get(nameOrId);
-    if (byId) {
-      return [byId];
-    }
-
-    const lowerName = nameOrId.toLowerCase();
-    const byName = Array.from(this.disconnectedSessions.values()).filter(session => session.info.name?.toLowerCase() === lowerName);
-    if (byName.length > 0) {
-      return byName;
-    }
-
-    return Array.from(this.disconnectedSessions.entries())
-      .filter(([, session]) => session.info.id.startsWith(nameOrId))
-      .map(([, session]) => session);
-  }
-
-  private findUniqueLiveSessionForDisconnectedSession(disconnected: DisconnectedSession, senderKey?: string): ConnectedSession | null {
-    const matches = this.findLiveSessionsSharingMailboxIdentity(disconnected)
-      .filter((session) => session.key !== senderKey);
-    return matches.length === 1 ? matches[0]! : null;
-  }
-
-  private findLiveSessionsSharingMailboxIdentity(sessionInfo: ConnectedSession | DisconnectedSession): ConnectedSession[] {
-    const lowerName = sessionInfo.info.name?.toLowerCase();
-    if (!lowerName || sessionInfo.info.runtimeFallbackAlias) {
-      return [];
-    }
-    return Array.from(this.sessions.values()).filter(session =>
-      !session.info.runtimeFallbackAlias
-      && session.info.name?.toLowerCase() === lowerName
-      && sameCwd(session.info.cwd, sessionInfo.info.cwd)
-    );
-  }
-
-  private broadcast(msg: BrokerMessage, exclude?: string): void {
-    for (const [id, session] of this.sessions) {
-      if (id !== exclude) {
-        writeMessage(session.socket, msg);
-      }
-    }
-  }
-
-  private shutdown(): void {
-    console.log("Broker shutting down");
-    for (const session of this.sessions.values()) {
-      session.socket.end();
-    }
-    this.sessions.clear();
-    this.askEdges.clear();
-    this.messageReceiptRoutes.clear();
-    this.disconnectedSessions.clear();
-    this.mailboxMessages.length = 0;
-    try {
-      unlinkSync(SOCKET_PATH);
-    } catch {
-    }
-    try {
-      unlinkSync(PID_PATH);
-    } catch {
-    }
-    this.server.close();
-    process.exit(0);
-  }
+	private sessions = new Map<string, ConnectedSession>();
+	private askEdges = new Map<string, AskEdge>();
+	private messageReceiptRoutes = new Map<string, MessageReceiptRoute>();
+	private disconnectedSessions = new Map<string, DisconnectedSession>();
+	private mailboxMessages: MailboxMessage[] = [];
+	private deliveryRecords = new Map<string, DeliveryRecord>();
+	private pendingReceipts = new Map<string, PendingReceipt>();
+	private connections = new Set<net.Socket>();
+	private unregisteredConnections = new Set<net.Socket>();
+	private server: net.Server;
+	private lastLivenessSweepAt = Date.now();
+	private shutdownTimer: NodeJS.Timeout | null = null;
+
+	constructor() {
+		ensureIntercomRuntimeDir(INTERCOM_DIR);
+		assertNoLiveBroker(PID_PATH);
+		ensurePendingAskRecordDir();
+		this.prunePendingAskRecords();
+		try {
+			unlinkSync(SOCKET_PATH);
+		} catch {}
+		this.server = net.createServer(this.handleConnection.bind(this));
+	}
+
+	start(): void {
+		const onListening = () => {
+			restrictIntercomRuntimeFile(SOCKET_PATH);
+			writeFileSync(PID_PATH, String(process.pid), { mode: INTERCOM_RUNTIME_FILE_MODE });
+			restrictIntercomRuntimeFile(PID_PATH);
+			console.log(`Intercom broker started (pid: ${process.pid})`);
+		};
+
+		this.server.listen(SOCKET_PATH, onListening);
+		process.on("SIGTERM", () => this.shutdown());
+		process.on("SIGINT", () => this.shutdown());
+		setInterval(() => this.evictSilentSessions(), LIVENESS_SWEEP_MS).unref();
+	}
+
+	private evictSilentSessions(): void {
+		const now = Date.now();
+		const sinceLastSweepMs = now - this.lastLivenessSweepAt;
+		this.lastLivenessSweepAt = now;
+		if (sinceLastSweepMs > 2 * LIVENESS_SWEEP_MS + 1000) {
+			for (const session of this.sessions.values()) session.lastInboundAt = now;
+			return;
+		}
+		for (const session of this.sessions.values()) {
+			if (session.livenessIntervalMs === undefined) continue;
+			const silentMs = now - session.lastInboundAt;
+			if (silentMs <= session.livenessIntervalMs * LIVENESS_MISSED_INTERVALS) continue;
+			console.log(`Dropping session ${session.info.id}: no heartbeat for ${silentMs}ms`);
+			session.socket.destroy();
+		}
+	}
+
+	private handleConnection(socket: net.Socket): void {
+		this.connections.add(socket);
+		let sessionKey: string | null = null;
+		let registrationTimeout: NodeJS.Timeout | null = null;
+		const armRegistrationTimeout = () => {
+			if (registrationTimeout) {
+				clearTimeout(registrationTimeout);
+			}
+			this.unregisteredConnections.delete(socket);
+			this.unregisteredConnections.add(socket);
+			this.evictOldestUnregisteredConnections(socket);
+			registrationTimeout = setTimeout(() => {
+				if (!sessionKey) {
+					socket.destroy();
+				}
+			}, REGISTRATION_TIMEOUT_MS);
+			registrationTimeout.unref?.();
+		};
+		const clearRegistrationTimeout = () => {
+			if (registrationTimeout) {
+				clearTimeout(registrationTimeout);
+				registrationTimeout = null;
+			}
+			this.unregisteredConnections.delete(socket);
+		};
+		armRegistrationTimeout();
+		const connection: ConnectionState = {
+			socket,
+			tokens: RATE_LIMIT_CAPACITY,
+			lastRefillAt: Date.now(),
+		};
+
+		const reader = createMessageReader(
+			(msg) => {
+				if (!this.consumeToken(connection)) {
+					writeMessage(socket, { type: "error", error: "Intercom broker rate limit exceeded" });
+					socket.destroy(new Error("Intercom broker rate limit exceeded"));
+					return;
+				}
+				const session = sessionKey ? this.sessions.get(sessionKey) : undefined;
+				if (session?.socket === socket) session.lastInboundAt = Date.now();
+				this.handleMessage(socket, msg, sessionKey, (id) => {
+					sessionKey = id;
+					if (id) {
+						clearRegistrationTimeout();
+					} else {
+						armRegistrationTimeout();
+					}
+				});
+			},
+			(error) => {
+				socket.destroy(error);
+			},
+		);
+
+		socket.on("data", reader);
+
+		socket.on("close", () => {
+			clearRegistrationTimeout();
+			this.connections.delete(socket);
+			this.settlePendingReceiptsForSocket(socket);
+			if (sessionKey) {
+				const existing = this.sessions.get(sessionKey);
+				if (existing?.socket === socket) {
+					this.rememberDisconnectedSession(existing);
+					this.sessions.delete(sessionKey);
+					this.clearMessageReceiptRoutesForSession(sessionKey);
+					this.broadcast({ type: "session_left", sessionId: existing.info.id }, sessionKey);
+					this.scheduleShutdownCheck();
+				}
+			}
+		});
+
+		socket.on("error", (error) => {
+			console.error("Socket error:", error);
+		});
+	}
+
+	private evictOldestUnregisteredConnections(currentSocket: net.Socket): void {
+		while (this.unregisteredConnections.size > MAX_UNREGISTERED_CONNECTIONS) {
+			const [oldest] = this.unregisteredConnections;
+			if (!oldest) {
+				return;
+			}
+			if (oldest === currentSocket && this.unregisteredConnections.size === 1) {
+				return;
+			}
+			this.unregisteredConnections.delete(oldest);
+			oldest.destroy();
+		}
+	}
+
+	private consumeToken(connection: ConnectionState, now = Date.now()): boolean {
+		const elapsedMs = now - connection.lastRefillAt;
+		if (elapsedMs > 0) {
+			connection.tokens = Math.min(
+				RATE_LIMIT_CAPACITY,
+				connection.tokens + (elapsedMs * RATE_LIMIT_REFILL_PER_SECOND) / 1000,
+			);
+			connection.lastRefillAt = now;
+		}
+		if (connection.tokens < 1) {
+			return false;
+		}
+		connection.tokens -= 1;
+		return true;
+	}
+
+	private scheduleShutdownCheck(delayMs = 5000): void {
+		if (this.shutdownTimer) return;
+
+		this.shutdownTimer = setTimeout(() => {
+			this.shutdownTimer = null;
+			if (this.sessions.size > 0) return;
+			const now = Date.now();
+			this.pruneMailboxMessages(now);
+			if (this.mailboxMessages.length > 0) {
+				const oldestQueuedAt = Math.min(...this.mailboxMessages.map((entry) => entry.queuedAt));
+				this.scheduleShutdownCheck(Math.max(oldestQueuedAt + MAILBOX_MESSAGE_RETENTION_MS - now + 1, 1000));
+				return;
+			}
+			console.log("No sessions connected, shutting down");
+			this.shutdown();
+		}, delayMs);
+	}
+
+	private handleMessage(
+		socket: net.Socket,
+		msg: unknown,
+		currentKey: string | null,
+		setKey: (key: string | null) => void,
+	): void {
+		if (typeof msg !== "object" || msg === null || !("type" in msg) || typeof msg.type !== "string") {
+			throw new Error("Invalid client message");
+		}
+
+		const clientMessage = msg as { type: string } & Record<string, unknown>;
+
+		if (clientMessage.type === "health") {
+			if (typeof clientMessage.requestId !== "string") {
+				throw new Error("Invalid health message");
+			}
+			writeMessage(socket, {
+				type: "health_ok",
+				requestId: clientMessage.requestId,
+				protocol: INTERCOM_PROTOCOL_NAME,
+				version: INTERCOM_PROTOCOL_VERSION,
+			});
+			return;
+		}
+
+		if (currentKey === null && clientMessage.type !== "register") {
+			throw new Error(`Received ${clientMessage.type} before register`);
+		}
+
+		switch (clientMessage.type) {
+			case "register": {
+				if (!isSessionRegistration(clientMessage.session)) {
+					throw new Error("Invalid register message");
+				}
+
+				if (currentKey) {
+					throw new Error("Received duplicate register message");
+				}
+
+				let id: string = randomUUID();
+				if (clientMessage.sessionId !== undefined) {
+					if (!isSessionId(clientMessage.sessionId)) {
+						throw new Error("Invalid register sessionId");
+					}
+					id = clientMessage.sessionId;
+				}
+				const key = id;
+				const session = clientMessage.session;
+
+				this.pruneDisconnectedSessions();
+				this.pruneMailboxMessages();
+				const previous = this.sessions.get(key);
+				if (!previous && this.sessions.size >= MAX_SESSIONS) {
+					writeMessage(socket, { type: "error", error: "Too many registered intercom sessions" });
+					socket.destroy();
+					break;
+				}
+				if (previous && previous.info.pid !== session.pid && isProcessAlive(previous.info.pid)) {
+					const holder = previous.info;
+					writeMessage(socket, {
+						type: "error",
+						code: SESSION_HELD_ERROR_CODE,
+						error: `Intercom session ${id} is held by live process ${holder.pid} in ${holder.cwd}`,
+						holder: {
+							pid: holder.pid,
+							cwd: holder.cwd,
+							...(holder.name !== undefined ? { name: holder.name } : {}),
+						},
+					});
+					socket.end();
+					break;
+				}
+				if (previous) {
+					this.clearMessageReceiptRoutesForSession(key);
+					previous.socket.end();
+				}
+				setKey(key);
+				const info: SessionInfo = {
+					id,
+					endpointEpoch: randomUUID(),
+					...(session.name !== undefined ? { name: session.name } : {}),
+					...(session.runtimeFallbackAlias !== undefined
+						? { runtimeFallbackAlias: session.runtimeFallbackAlias }
+						: {}),
+					cwd: session.cwd,
+					model: session.model,
+					pid: session.pid,
+					startedAt: session.startedAt,
+					lastActivity: session.lastActivity,
+					...(session.status !== undefined ? { status: session.status } : {}),
+					...(session.tmuxPane !== undefined ? { tmuxPane: session.tmuxPane } : {}),
+					...(session.herdrPaneId !== undefined ? { herdrPaneId: session.herdrPaneId } : {}),
+					trustedLocal: true,
+				};
+
+				const connectedSession: ConnectedSession = {
+					socket,
+					info,
+					key,
+					lastPresenceBroadcastAt: Date.now(),
+					...(session.herdrSessionPath ? { herdrSessionPath: session.herdrSessionPath } : {}),
+					acknowledgesReceipts: session.acknowledgesReceipts === true,
+					...(session.livenessIntervalMs !== undefined ? { livenessIntervalMs: session.livenessIntervalMs } : {}),
+					lastInboundAt: Date.now(),
+				};
+				this.sessions.set(key, connectedSession);
+				this.disconnectedSessions.delete(key);
+
+				if (this.shutdownTimer) {
+					clearTimeout(this.shutdownTimer);
+					this.shutdownTimer = null;
+				}
+
+				writeMessage(socket, {
+					type: "registered",
+					sessionId: id,
+					features: [EXACT_SEND_FEATURE],
+				});
+				this.broadcast({ type: "session_joined", session: info }, key);
+
+				this.flushMailboxForSession(connectedSession);
+				break;
+			}
+
+			case "unregister": {
+				if (!currentKey) {
+					throw new Error("Received unregister before register");
+				}
+				const existing = this.sessions.get(currentKey);
+				if (existing?.socket === socket) {
+					this.rememberDisconnectedSession(existing);
+					this.sessions.delete(currentKey);
+					this.clearMessageReceiptRoutesForSession(currentKey);
+					this.broadcast({ type: "session_left", sessionId: existing.info.id }, currentKey);
+					this.scheduleShutdownCheck();
+				}
+				setKey(null);
+				break;
+			}
+
+			case "list": {
+				if (typeof clientMessage.requestId !== "string") {
+					throw new Error("Invalid list message");
+				}
+
+				const requester = currentKey ? this.sessions.get(currentKey) : undefined;
+				if (!requester || requester.socket !== socket) {
+					throw new Error("List session not found");
+				}
+				const sessions = Array.from(this.sessions.values()).map((s) => s.info);
+				const requestId = clientMessage.requestId;
+				const herdrSessionPaths = new Map(
+					Array.from(this.sessions.values())
+						.filter((session) => session.herdrSessionPath)
+						.map((session) => [session.info.id, session.herdrSessionPath!] as const),
+				);
+				void resolveHerdrLocations(sessions, { sessionPaths: herdrSessionPaths })
+					.then((resolvedSessions) =>
+						writeMessage(socket, { type: "sessions", requestId, sessions: resolvedSessions }),
+					)
+					.catch((cause) => {
+						const detail = cause instanceof Error ? cause.message : String(cause);
+						const fallback = sessions.map((session) => ({
+							...session,
+							herdrLocation: session.herdrPaneId
+								? {
+										status: "unavailable" as const,
+										paneId: session.herdrPaneId,
+										reason: "command_failed" as const,
+										detail,
+									}
+								: { status: "not_hosted" as const },
+						}));
+						writeMessage(socket, { type: "sessions", requestId, sessions: fallback });
+					});
+				break;
+			}
+
+			case "send": {
+				if (!currentKey) {
+					throw new Error("Received send before register");
+				}
+				const message = clientMessage.message;
+				const messageId = isMessage(message) ? message.id : "unknown";
+
+				if (typeof clientMessage.to !== "string" || !isMessage(message)) {
+					this.writeDeliveryFailure(socket, messageId, "Invalid message format", "E_INVALID_MESSAGE");
+					break;
+				}
+				let to = clientMessage.to;
+				const fromSession = this.sessions.get(currentKey);
+				if (!fromSession || fromSession.socket !== socket) {
+					this.writeDeliveryFailure(socket, message.id, "Sender session not found", "E_SENDER_NOT_FOUND");
+					break;
+				}
+
+				const brokerReceivedAt = Date.now();
+				this.pruneAskEdges();
+				this.pruneMessageReceiptRoutes(brokerReceivedAt);
+				const replyEdge = message.replyTo ? this.askEdges.get(message.replyTo) : undefined;
+
+				const hasTargetId = clientMessage.targetId !== undefined;
+				const hasTargetEpoch = clientMessage.targetEpoch !== undefined;
+				if (
+					hasTargetId !== hasTargetEpoch ||
+					(hasTargetId && (typeof clientMessage.targetId !== "string" || clientMessage.targetId.length === 0)) ||
+					(hasTargetEpoch &&
+						(typeof clientMessage.targetEpoch !== "string" || clientMessage.targetEpoch.length === 0))
+				) {
+					this.writeDeliveryFailure(
+						socket,
+						message.id,
+						"Exact target requires an id and endpoint epoch",
+						"E_INVALID_TARGET",
+					);
+					break;
+				}
+				if (hasTargetId && hasTargetEpoch) {
+					const targetId = clientMessage.targetId as string;
+					const targetEpoch = clientMessage.targetEpoch as string;
+					const fingerprint = messageDeliveryFingerprint(message, targetId);
+					if (this.replayOrReject(socket, currentKey, message.id, fingerprint)) {
+						break;
+					}
+					const exactTarget = this.sessions.get(targetId);
+					if (!exactTarget) {
+						this.recordDelivery(
+							currentKey,
+							message.id,
+							fingerprint,
+							"failed",
+							"Session not found",
+							"E_TARGET_NOT_FOUND",
+						);
+						this.writeDeliveryFailure(socket, message.id, "Session not found", "E_TARGET_NOT_FOUND");
+						break;
+					}
+					if (exactTarget.info.endpointEpoch !== targetEpoch) {
+						this.recordDelivery(
+							currentKey,
+							message.id,
+							fingerprint,
+							"failed",
+							"Target endpoint changed before delivery",
+							"E_TARGET_REBOUND",
+							true,
+						);
+						this.writeDeliveryFailure(
+							socket,
+							message.id,
+							"Target endpoint changed before delivery",
+							"E_TARGET_REBOUND",
+							true,
+						);
+						break;
+					}
+					to = targetId;
+				}
+
+				const targets = this.findSessions(to);
+				if (targets.length === 1) {
+					if (message.replyTo && !replyEdge) {
+						this.writeDeliveryFailure(
+							socket,
+							message.id,
+							"Reply target does not match a pending ask",
+							"E_REPLY_TARGET",
+						);
+						break;
+					}
+					const target = targets[0];
+					const fingerprint = messageDeliveryFingerprint(message, target.info.id);
+					if (this.replayOrReject(socket, currentKey, message.id, fingerprint)) {
+						break;
+					}
+					if (message.supersedes) {
+						const supersededRoute = this.messageReceiptRoutes.get(message.supersedes);
+						if (!supersededRoute || supersededRoute.from !== currentKey || supersededRoute.to !== target.key) {
+							this.writeDeliveryFailure(
+								socket,
+								message.id,
+								"Supersede target does not match a previous message from this sender to this receiver",
+								"E_SUPERSEDE_TARGET",
+							);
+							break;
+						}
+					}
+					if (replyEdge && (replyEdge.to !== currentKey || replyEdge.from !== target.key)) {
+						this.writeDeliveryFailure(
+							socket,
+							message.id,
+							"Reply target does not match the pending ask",
+							"E_REPLY_TARGET",
+						);
+						break;
+					}
+					if (message.expectsReply) {
+						const reverseEdge = Array.from(this.askEdges.entries()).find(
+							([edgeMessageId, edge]) =>
+								edgeMessageId !== message.replyTo && edge.from === target.key && edge.to === currentKey,
+						);
+						if (reverseEdge) {
+							this.writeDeliveryFailure(
+								socket,
+								message.id,
+								"Mutual ask refused: target session is already waiting for a reply from this session.",
+								"E_MUTUAL_ASK",
+							);
+							break;
+						}
+						this.writePendingAskRecord(message, fromSession, target.info, brokerReceivedAt);
+						this.askEdges.set(message.id, {
+							from: currentKey,
+							to: target.key,
+							createdAt: brokerReceivedAt,
+						});
+					}
+					const deliveredMessage: Message = {
+						...message,
+						brokerReceivedAt,
+						brokerDeliveredAt: Date.now(),
+					};
+					if (message.supersedes) {
+						const control: MessageControl = {
+							action: "supersede",
+							messageId: message.supersedes,
+							supersededBy: message.id,
+							timestamp: Date.now(),
+						};
+						writeMessage(target.socket, {
+							type: "message_control",
+							from: fromSession.info,
+							control,
+						});
+						this.updateDeliveryRecord(
+							currentKey,
+							message.supersedes,
+							"failed",
+							`Superseded by ${message.id}`,
+							"E_DELIVERY_SUPERSEDED",
+						);
+					}
+					this.messageReceiptRoutes.set(message.id, {
+						from: currentKey,
+						to: target.key,
+						createdAt: brokerReceivedAt,
+					});
+					writeMessage(target.socket, {
+						type: "message",
+						from: fromSession.info,
+						message: deliveredMessage,
+					});
+					this.completeSocketDelivery(socket, currentKey, target, message, fingerprint);
+					break;
+				}
+
+				if (targets.length > 1) {
+					this.writeDeliveryFailure(
+						socket,
+						message.id,
+						`Multiple sessions named \"${to}\" are connected. Use the session ID instead.`,
+						"E_AMBIGUOUS_TARGET",
+					);
+					break;
+				}
+
+				const disconnectedTargets = this.findDisconnectedSessions(to);
+				if (disconnectedTargets.length === 1) {
+					if (message.replyTo && !replyEdge) {
+						this.writeDeliveryFailure(
+							socket,
+							message.id,
+							"Reply target does not match a pending ask",
+							"E_REPLY_TARGET",
+						);
+						break;
+					}
+					const disconnectedTarget = disconnectedTargets[0]!;
+					const target = disconnectedTarget.info;
+					const fingerprint = messageDeliveryFingerprint(message, target.id);
+					if (this.replayOrReject(socket, currentKey, message.id, fingerprint)) {
+						break;
+					}
+					if (message.supersedes) {
+						this.writeDeliveryFailure(
+							socket,
+							message.id,
+							"Supersede target is not connected",
+							"E_SUPERSEDE_TARGET",
+						);
+						break;
+					}
+					if (replyEdge && (replyEdge.to !== currentKey || replyEdge.from !== disconnectedTarget.key)) {
+						this.writeDeliveryFailure(
+							socket,
+							message.id,
+							"Reply target does not match the pending ask",
+							"E_REPLY_TARGET",
+						);
+						break;
+					}
+					if (message.expectsReply) {
+						this.writeDeliveryFailure(
+							socket,
+							message.id,
+							"Target session is not currently connected; blocking asks are not queued",
+							"E_TARGET_DISCONNECTED",
+						);
+						break;
+					}
+					const liveMailboxTarget = this.findUniqueLiveSessionForDisconnectedSession(
+						disconnectedTarget,
+						currentKey,
+					);
+					if (liveMailboxTarget) {
+						const deliveredMessage: Message = {
+							...message,
+							brokerReceivedAt,
+							brokerDeliveredAt: Date.now(),
+						};
+						this.messageReceiptRoutes.set(message.id, {
+							from: currentKey,
+							to: liveMailboxTarget.key,
+							createdAt: brokerReceivedAt,
+						});
+						writeMessage(liveMailboxTarget.socket, {
+							type: "message",
+							from: fromSession.info,
+							message: deliveredMessage,
+						});
+						this.completeSocketDelivery(socket, currentKey, liveMailboxTarget, message, fingerprint);
+						break;
+					}
+					this.queueMailboxMessage(fromSession, disconnectedTarget, message, brokerReceivedAt);
+					this.releaseReplyEdge(message.replyTo);
+					this.recordDelivery(currentKey, message.id, fingerprint, "queued");
+					this.writeDeliverySuccess(socket, message.id, "queued");
+					break;
+				}
+
+				if (disconnectedTargets.length > 1) {
+					this.writeDeliveryFailure(
+						socket,
+						message.id,
+						`Multiple disconnected sessions named \"${to}\" can receive queued mail. Use the session ID instead.`,
+						"E_AMBIGUOUS_TARGET",
+					);
+					break;
+				}
+
+				this.writeDeliveryFailure(socket, message.id, "Session not found", "E_TARGET_NOT_FOUND");
+				break;
+			}
+
+			case "message_receipt": {
+				if (!currentKey) {
+					throw new Error("Received message_receipt before register");
+				}
+				if (!isMessageReceipt(clientMessage.receipt)) {
+					throw new Error("Invalid message_receipt message");
+				}
+				this.pruneMessageReceiptRoutes();
+				const route = this.messageReceiptRoutes.get(clientMessage.receipt.messageId);
+				const receiver = this.sessions.get(currentKey);
+				const sender = route ? this.sessions.get(route.from) : undefined;
+				if (
+					route?.to === currentKey &&
+					receiver?.socket === socket &&
+					RECEIPT_PROOF_STATUSES.has(clientMessage.receipt.status)
+				) {
+					this.confirmPendingReceipt(this.deliveryRecordKey(route.from, clientMessage.receipt.messageId), socket);
+				}
+				if (route?.to === currentKey && receiver?.socket === socket && sender) {
+					writeMessage(sender.socket, {
+						type: "message_receipt",
+						from: receiver.info,
+						receipt: clientMessage.receipt,
+					});
+				}
+				break;
+			}
+
+			case "cancel_message": {
+				if (!currentKey) {
+					throw new Error("Received cancel_message before register");
+				}
+				if (typeof clientMessage.messageId !== "string") {
+					throw new Error("Invalid cancel_message message");
+				}
+				this.pruneMessageReceiptRoutes();
+				this.pruneMailboxMessages();
+				const sender = this.sessions.get(currentKey);
+				const queuedIndex = this.mailboxMessages.findIndex(
+					(entry) => entry.message.id === clientMessage.messageId && entry.fromKey === currentKey,
+				);
+				if (queuedIndex >= 0 && sender?.socket === socket) {
+					this.mailboxMessages.splice(queuedIndex, 1);
+					this.updateDeliveryRecord(
+						currentKey,
+						clientMessage.messageId,
+						"failed",
+						"Sender cancelled the queued delivery",
+						"E_DELIVERY_CANCELLED",
+					);
+					const edge = this.askEdges.get(clientMessage.messageId);
+					if (edge?.from === currentKey) {
+						this.askEdges.delete(clientMessage.messageId);
+						this.removePendingAskRecord(clientMessage.messageId);
+					}
+					writeMessage(socket, { type: "delivered", messageId: clientMessage.messageId });
+					break;
+				}
+				const route = this.messageReceiptRoutes.get(clientMessage.messageId);
+				const receiver = route ? this.sessions.get(route.to) : undefined;
+				if (route?.from !== currentKey || sender?.socket !== socket || !receiver) {
+					writeMessage(socket, {
+						type: "delivery_failed",
+						messageId: clientMessage.messageId,
+						reason: "Message cannot be cancelled by this session",
+					});
+					break;
+				}
+				writeMessage(receiver.socket, {
+					type: "message_control",
+					from: sender.info,
+					control: {
+						action: "cancel",
+						messageId: clientMessage.messageId,
+						timestamp: Date.now(),
+					},
+				});
+				const edge = this.askEdges.get(clientMessage.messageId);
+				if (edge?.from === currentKey) {
+					this.askEdges.delete(clientMessage.messageId);
+					this.removePendingAskRecord(clientMessage.messageId);
+				}
+				this.updateDeliveryRecord(
+					currentKey,
+					clientMessage.messageId,
+					"failed",
+					"Sender cancelled the delivery",
+					"E_DELIVERY_CANCELLED",
+				);
+				writeMessage(socket, { type: "delivered", messageId: clientMessage.messageId });
+				break;
+			}
+
+			case "cancel_ask": {
+				if (!currentKey) {
+					throw new Error("Received cancel_ask before register");
+				}
+				if (typeof clientMessage.messageId !== "string") {
+					throw new Error("Invalid cancel_ask message");
+				}
+				const session = this.sessions.get(currentKey);
+				const edge = this.askEdges.get(clientMessage.messageId);
+				if (session?.socket === socket && edge?.from === currentKey) {
+					this.askEdges.delete(clientMessage.messageId);
+					this.removePendingAskRecord(clientMessage.messageId);
+				}
+				break;
+			}
+
+			case "presence": {
+				if (!currentKey) {
+					throw new Error("Received presence before register");
+				}
+				const session = this.sessions.get(currentKey);
+				if (session?.socket === socket) {
+					let changed = false;
+					if (clientMessage.name !== undefined) {
+						if (typeof clientMessage.name !== "string") {
+							throw new Error("Invalid presence name");
+						}
+						if (session.info.name !== clientMessage.name) {
+							session.info.name = clientMessage.name;
+							changed = true;
+						}
+					}
+					if (clientMessage.runtimeFallbackAlias !== undefined) {
+						if (typeof clientMessage.runtimeFallbackAlias !== "boolean") {
+							throw new Error("Invalid presence runtimeFallbackAlias");
+						}
+						if (session.info.runtimeFallbackAlias !== clientMessage.runtimeFallbackAlias) {
+							session.info.runtimeFallbackAlias = clientMessage.runtimeFallbackAlias;
+							changed = true;
+						}
+					}
+					if (clientMessage.status !== undefined) {
+						if (typeof clientMessage.status !== "string") {
+							throw new Error("Invalid presence status");
+						}
+						if (session.info.status !== clientMessage.status) {
+							session.info.status = clientMessage.status;
+							changed = true;
+						}
+					}
+					if (clientMessage.model !== undefined) {
+						if (typeof clientMessage.model !== "string") {
+							throw new Error("Invalid presence model");
+						}
+						if (session.info.model !== clientMessage.model) {
+							session.info.model = clientMessage.model;
+							changed = true;
+						}
+					}
+					if (clientMessage.contextPct !== undefined) {
+						if (clientMessage.contextPct === null) {
+							if (session.info.contextPct !== undefined) {
+								delete session.info.contextPct;
+								changed = true;
+							}
+						} else if (typeof clientMessage.contextPct !== "number") {
+							throw new Error("Invalid presence contextPct");
+						} else if (session.info.contextPct !== clientMessage.contextPct) {
+							session.info.contextPct = clientMessage.contextPct;
+							changed = true;
+						}
+					}
+					if (clientMessage.contextTokens !== undefined) {
+						if (clientMessage.contextTokens === null) {
+							if (session.info.contextTokens !== undefined) {
+								delete session.info.contextTokens;
+								changed = true;
+							}
+						} else if (typeof clientMessage.contextTokens !== "number") {
+							throw new Error("Invalid presence contextTokens");
+						} else if (session.info.contextTokens !== clientMessage.contextTokens) {
+							session.info.contextTokens = clientMessage.contextTokens;
+							changed = true;
+						}
+					}
+					if (clientMessage.contextWindow !== undefined) {
+						if (clientMessage.contextWindow === null) {
+							if (session.info.contextWindow !== undefined) {
+								delete session.info.contextWindow;
+								changed = true;
+							}
+						} else if (typeof clientMessage.contextWindow !== "number") {
+							throw new Error("Invalid presence contextWindow");
+						} else if (session.info.contextWindow !== clientMessage.contextWindow) {
+							session.info.contextWindow = clientMessage.contextWindow;
+							changed = true;
+						}
+					}
+					const now = Date.now();
+					session.info.lastActivity = now;
+					if (changed || now - session.lastPresenceBroadcastAt >= PRESENCE_HEARTBEAT_MS) {
+						session.lastPresenceBroadcastAt = now;
+						this.broadcast({ type: "presence_update", session: session.info }, currentKey);
+					}
+				}
+				break;
+			}
+
+			default:
+				throw new Error(`Unknown client message type: ${clientMessage.type}`);
+		}
+	}
+
+	private rememberDisconnectedSession(session: ConnectedSession, now = Date.now()): void {
+		this.disconnectedSessions.set(session.key, {
+			info: { ...session.info },
+			key: session.key,
+			disconnectedAt: now,
+		});
+		this.pruneDisconnectedSessions(now);
+	}
+
+	private pruneDisconnectedSessions(now = Date.now()): void {
+		for (const [sessionId, session] of this.disconnectedSessions) {
+			if (now - session.disconnectedAt > DISCONNECTED_SESSION_RETENTION_MS) {
+				this.disconnectedSessions.delete(sessionId);
+			}
+		}
+	}
+
+	private pruneMailboxMessages(now = Date.now()): void {
+		for (let index = this.mailboxMessages.length - 1; index >= 0; index -= 1) {
+			const entry = this.mailboxMessages[index]!;
+			if (now - entry.queuedAt > MAILBOX_MESSAGE_RETENTION_MS) {
+				if (entry.message.expectsReply) {
+					this.askEdges.delete(entry.message.id);
+					this.removePendingAskRecord(entry.message.id);
+				}
+				this.messageReceiptRoutes.delete(entry.message.id);
+				this.updateDeliveryRecord(
+					entry.fromKey,
+					entry.message.id,
+					"failed",
+					"Mailbox delivery expired",
+					"E_DELIVERY_EXPIRED",
+				);
+				this.mailboxMessages.splice(index, 1);
+			}
+		}
+	}
+
+	private queueMailboxMessage(
+		from: ConnectedSession,
+		target: DisconnectedSession,
+		message: Message,
+		brokerReceivedAt: number,
+	): void {
+		this.pruneMailboxMessages(brokerReceivedAt);
+		while (this.mailboxMessages.length >= MAX_MAILBOX_MESSAGES) {
+			const evicted = this.mailboxMessages.shift();
+			if (!evicted) break;
+			if (evicted.message.expectsReply) {
+				this.askEdges.delete(evicted.message.id);
+				this.removePendingAskRecord(evicted.message.id);
+			}
+			this.messageReceiptRoutes.delete(evicted.message.id);
+			this.updateDeliveryRecord(
+				evicted.fromKey,
+				evicted.message.id,
+				"failed",
+				"Mailbox capacity evicted the delivery",
+				"E_DELIVERY_EVICTED",
+			);
+		}
+		this.mailboxMessages.push({
+			from: { ...from.info },
+			fromKey: from.key,
+			target: { ...target.info },
+			targetKey: target.key,
+			message: { ...message, brokerReceivedAt },
+			queuedAt: brokerReceivedAt,
+		});
+	}
+
+	private writeDeliverySuccess(socket: net.Socket, messageId: string, delivery: "socket_delivered" | "queued"): void {
+		writeMessage(socket, { type: "delivered", messageId, delivery, retryable: false, outcomeKnown: true });
+	}
+
+	private writeDeliveryFailure(
+		socket: net.Socket,
+		messageId: string,
+		reason: string,
+		code: string,
+		retryable = false,
+	): void {
+		writeMessage(socket, {
+			type: "delivery_failed",
+			messageId,
+			reason,
+			delivery: "failed",
+			code,
+			retryable,
+			outcomeKnown: true,
+		});
+	}
+
+	private releaseReplyEdge(replyTo: string | undefined): void {
+		if (!replyTo) return;
+		this.askEdges.delete(replyTo);
+		this.removePendingAskRecord(replyTo);
+	}
+
+	private completeSocketDelivery(
+		senderSocket: net.Socket,
+		fromKey: string,
+		target: ConnectedSession,
+		message: Message,
+		fingerprint: string,
+	): void {
+		if (!target.acknowledgesReceipts) {
+			this.releaseReplyEdge(message.replyTo);
+			this.recordDelivery(fromKey, message.id, fingerprint, "socket_delivered");
+			this.writeDeliverySuccess(senderSocket, message.id, "socket_delivered");
+			return;
+		}
+		const key = this.deliveryRecordKey(fromKey, message.id);
+		this.recordDelivery(fromKey, message.id, fingerprint, "unknown");
+		const timer = setTimeout(() => {
+			this.failPendingReceipt(
+				key,
+				`Receiver did not confirm receipt within ${RECEIPT_TIMEOUT_MS}ms`,
+				"E_RECEIPT_TIMEOUT",
+			);
+		}, RECEIPT_TIMEOUT_MS);
+		timer.unref();
+		this.pendingReceipts.set(key, {
+			senderSocket,
+			fromKey,
+			messageId: message.id,
+			targetSocket: target.socket,
+			...(message.replyTo ? { replyTo: message.replyTo } : {}),
+			timer,
+		});
+	}
+
+	private confirmPendingReceipt(key: string, receiverSocket: net.Socket): void {
+		const pending = this.pendingReceipts.get(key);
+		if (!pending || pending.targetSocket !== receiverSocket) return;
+		clearTimeout(pending.timer);
+		this.pendingReceipts.delete(key);
+		if (this.deliveryRecords.get(key)?.state === "unknown") {
+			this.updateDeliveryRecord(pending.fromKey, pending.messageId, "socket_delivered");
+		}
+		this.releaseReplyEdge(pending.replyTo);
+		if (pending.senderSocket.writable)
+			this.writeDeliverySuccess(pending.senderSocket, pending.messageId, "socket_delivered");
+	}
+
+	private failPendingReceipt(key: string, reason: string, code: string): void {
+		const pending = this.pendingReceipts.get(key);
+		if (!pending) return;
+		clearTimeout(pending.timer);
+		this.pendingReceipts.delete(key);
+		if (pending.senderSocket.writable) {
+			writeMessage(pending.senderSocket, {
+				type: "delivery_failed",
+				messageId: pending.messageId,
+				reason,
+				delivery: "unknown",
+				code,
+				retryable: true,
+				outcomeKnown: false,
+			});
+		}
+	}
+
+	private settlePendingReceiptsForSocket(socket: net.Socket): void {
+		for (const [key, pending] of this.pendingReceipts) {
+			if (pending.targetSocket === socket || pending.senderSocket === socket) {
+				this.failPendingReceipt(key, "Receiver disconnected before confirming receipt", "E_RECEIVER_DISCONNECTED");
+			}
+		}
+	}
+
+	private deliveryRecordKey(fromSessionId: string, messageId: string): string {
+		return JSON.stringify([fromSessionId, messageId]);
+	}
+
+	private replayOrReject(socket: net.Socket, fromSessionId: string, messageId: string, fingerprint: string): boolean {
+		this.pruneDeliveryRecords();
+		const key = this.deliveryRecordKey(fromSessionId, messageId);
+		const record = this.deliveryRecords.get(key);
+		if (!record) return false;
+		if (record.fingerprint !== fingerprint) {
+			this.writeDeliveryFailure(
+				socket,
+				messageId,
+				"Message id was reused with different authored content",
+				"E_MESSAGE_ID_REUSE",
+			);
+			return true;
+		}
+		if (record.state === "unknown") {
+			const pending = this.pendingReceipts.get(key);
+			if (pending) {
+				pending.senderSocket = socket;
+				return true;
+			}
+			this.deliveryRecords.delete(key);
+			return false;
+		}
+		if (record.code === "E_TARGET_REBOUND" && record.retryable) {
+			return false;
+		}
+		if (record.state === "socket_delivered" || record.state === "queued") {
+			this.writeDeliverySuccess(socket, messageId, record.state);
+		} else {
+			this.writeDeliveryFailure(
+				socket,
+				messageId,
+				record.reason ?? "Previous delivery failed",
+				record.code ?? "E_DELIVERY_FAILED",
+				record.retryable,
+			);
+		}
+		return true;
+	}
+
+	private recordDelivery(
+		fromSessionId: string,
+		messageId: string,
+		fingerprint: string,
+		state: DeliveryState,
+		reason?: string,
+		code?: string,
+		retryable = false,
+	): void {
+		this.pruneDeliveryRecords();
+		while (this.deliveryRecords.size >= MAX_DELIVERY_RECORDS) {
+			const oldest = this.deliveryRecords.keys().next().value;
+			if (oldest === undefined) break;
+			this.deliveryRecords.delete(oldest);
+		}
+		this.deliveryRecords.set(this.deliveryRecordKey(fromSessionId, messageId), {
+			fingerprint,
+			state,
+			...(reason ? { reason } : {}),
+			...(code ? { code } : {}),
+			retryable,
+			createdAt: Date.now(),
+		});
+	}
+
+	private pruneDeliveryRecords(now = Date.now()): void {
+		for (const [key, record] of this.deliveryRecords) {
+			if (now - record.createdAt > DELIVERY_RECORD_RETENTION_MS) this.deliveryRecords.delete(key);
+		}
+	}
+
+	private updateDeliveryRecord(
+		fromSessionId: string,
+		messageId: string,
+		state: DeliveryState,
+		reason?: string,
+		code?: string,
+	): void {
+		const record = this.deliveryRecords.get(this.deliveryRecordKey(fromSessionId, messageId));
+		if (!record) return;
+		record.state = state;
+		record.reason = reason;
+		record.code = code;
+		record.retryable = false;
+	}
+
+	private flushMailboxForSession(session: ConnectedSession, now = Date.now()): void {
+		this.pruneMailboxMessages(now);
+		const sessionName = session.info.name?.toLowerCase();
+		const uniqueMailboxIdentity = this.findLiveSessionsSharingMailboxIdentity(session).length === 1;
+
+		for (let index = 0; index < this.mailboxMessages.length; ) {
+			const entry = this.mailboxMessages[index]!;
+			const matchesId = entry.targetKey === session.key;
+			const matchesSenderIdentity = Boolean(
+				sessionName && entry.from.name?.toLowerCase() === sessionName && sameCwd(entry.from.cwd, session.info.cwd),
+			);
+			const matchesUniqueName = Boolean(
+				uniqueMailboxIdentity &&
+					sessionName &&
+					!matchesSenderIdentity &&
+					entry.target.name?.toLowerCase() === sessionName &&
+					sameCwd(entry.target.cwd, session.info.cwd),
+			);
+			if (!matchesId && !matchesUniqueName) {
+				index += 1;
+				continue;
+			}
+			if (session.socket.writableLength >= MAX_FRAME_BYTES) {
+				session.socket.once("drain", () => {
+					if (this.sessions.get(session.key) === session) this.flushMailboxForSession(session);
+				});
+				return;
+			}
+
+			this.mailboxMessages.splice(index, 1);
+			const edge = this.askEdges.get(entry.message.id);
+			if (edge?.to === entry.targetKey) {
+				edge.to = session.key;
+			}
+			const deliveredMessage: Message = {
+				...entry.message,
+				brokerDeliveredAt: Date.now(),
+			};
+			writeMessage(session.socket, {
+				type: "message",
+				from: entry.from,
+				message: deliveredMessage,
+			});
+			this.messageReceiptRoutes.set(entry.message.id, {
+				from: entry.fromKey,
+				to: session.key,
+				createdAt: entry.message.brokerReceivedAt ?? entry.queuedAt,
+			});
+			this.updateDeliveryRecord(entry.fromKey, entry.message.id, "socket_delivered");
+		}
+	}
+
+	private pruneAskEdges(now = Date.now()): void {
+		this.prunePendingAskRecords(now);
+		for (const [messageId, edge] of this.askEdges) {
+			if (now - edge.createdAt > ASK_TIMEOUT_MS) {
+				this.askEdges.delete(messageId);
+				this.removePendingAskRecord(messageId);
+			}
+		}
+	}
+
+	private writePendingAskRecord(
+		message: Message,
+		from: ConnectedSession,
+		target: SessionInfo,
+		createdAt: number,
+	): void {
+		ensurePendingAskRecordDir();
+		const record: PendingAskRecord = {
+			askId: message.id,
+			messageId: message.id,
+			asker: { sessionId: from.info.id, name: from.info.name ?? null },
+			target: { sessionId: target.id, name: target.name ?? null },
+			question: message.content.text,
+			createdAt,
+			expiresAt: createdAt + ASK_TIMEOUT_MS,
+		};
+		const filePath = pendingAskRecordPath(message.id);
+		writeFileSync(filePath, `${JSON.stringify(record, null, 2)}\n`, { mode: INTERCOM_RUNTIME_FILE_MODE });
+		restrictIntercomRuntimeFile(filePath);
+	}
+
+	private removePendingAskRecord(messageId: string): void {
+		try {
+			unlinkSync(pendingAskRecordPath(messageId));
+		} catch (error) {
+			if (!isRecord(error) || error.code !== "ENOENT") {
+				throw error;
+			}
+		}
+	}
+
+	private prunePendingAskRecords(now = Date.now()): void {
+		ensurePendingAskRecordDir();
+		for (const entry of readdirSync(PENDING_ASKS_DIR, { withFileTypes: true })) {
+			if (!entry.isFile() || !entry.name.endsWith(".json")) {
+				continue;
+			}
+			const filePath = join(PENDING_ASKS_DIR, entry.name);
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(readFileSync(filePath, "utf-8"));
+			} catch {
+				unlinkSync(filePath);
+				continue;
+			}
+			if (!isPendingAskRecord(parsed) || now > parsed.expiresAt) {
+				unlinkSync(filePath);
+			}
+		}
+	}
+
+	private pruneMessageReceiptRoutes(now = Date.now()): void {
+		for (const [messageId, route] of this.messageReceiptRoutes) {
+			if (now - route.createdAt > MESSAGE_RECEIPT_ROUTE_RETENTION_MS) {
+				this.messageReceiptRoutes.delete(messageId);
+			}
+		}
+	}
+
+	private clearMessageReceiptRoutesForSession(sessionKey: string): void {
+		for (const [messageId, route] of this.messageReceiptRoutes) {
+			if (route.from === sessionKey || route.to === sessionKey) {
+				this.messageReceiptRoutes.delete(messageId);
+			}
+		}
+	}
+
+	private findSessions(nameOrId: string): ConnectedSession[] {
+		const byId = this.sessions.get(nameOrId);
+		if (byId) {
+			return [byId];
+		}
+
+		const lowerName = nameOrId.toLowerCase();
+		const byName = Array.from(this.sessions.values()).filter(
+			(session) => session.info.name?.toLowerCase() === lowerName,
+		);
+		if (byName.length > 0) {
+			return byName;
+		}
+
+		return Array.from(this.sessions.entries())
+			.filter(([, session]) => session.info.id.startsWith(nameOrId))
+			.map(([, session]) => session);
+	}
+
+	private findDisconnectedSessions(nameOrId: string): DisconnectedSession[] {
+		this.pruneDisconnectedSessions();
+		const byId = this.disconnectedSessions.get(nameOrId);
+		if (byId) {
+			return [byId];
+		}
+
+		const lowerName = nameOrId.toLowerCase();
+		const byName = Array.from(this.disconnectedSessions.values()).filter(
+			(session) => session.info.name?.toLowerCase() === lowerName,
+		);
+		if (byName.length > 0) {
+			return byName;
+		}
+
+		return Array.from(this.disconnectedSessions.entries())
+			.filter(([, session]) => session.info.id.startsWith(nameOrId))
+			.map(([, session]) => session);
+	}
+
+	private findUniqueLiveSessionForDisconnectedSession(
+		disconnected: DisconnectedSession,
+		senderKey?: string,
+	): ConnectedSession | null {
+		const matches = this.findLiveSessionsSharingMailboxIdentity(disconnected).filter(
+			(session) => session.key !== senderKey,
+		);
+		return matches.length === 1 ? matches[0]! : null;
+	}
+
+	private findLiveSessionsSharingMailboxIdentity(
+		sessionInfo: ConnectedSession | DisconnectedSession,
+	): ConnectedSession[] {
+		const lowerName = sessionInfo.info.name?.toLowerCase();
+		if (!lowerName || sessionInfo.info.runtimeFallbackAlias) {
+			return [];
+		}
+		return Array.from(this.sessions.values()).filter(
+			(session) =>
+				!session.info.runtimeFallbackAlias &&
+				session.info.name?.toLowerCase() === lowerName &&
+				sameCwd(session.info.cwd, sessionInfo.info.cwd),
+		);
+	}
+
+	private broadcast(msg: BrokerMessage, exclude?: string): void {
+		for (const [id, session] of this.sessions) {
+			if (id !== exclude) {
+				writeMessage(session.socket, msg);
+			}
+		}
+	}
+
+	private shutdown(): void {
+		console.log("Broker shutting down");
+		for (const session of this.sessions.values()) {
+			session.socket.end();
+		}
+		this.sessions.clear();
+		this.askEdges.clear();
+		this.messageReceiptRoutes.clear();
+		this.disconnectedSessions.clear();
+		this.mailboxMessages.length = 0;
+		try {
+			unlinkSync(SOCKET_PATH);
+		} catch {}
+		try {
+			unlinkSync(PID_PATH);
+		} catch {}
+		this.server.close();
+		process.exit(0);
+	}
 }
 
 new IntercomBroker().start();

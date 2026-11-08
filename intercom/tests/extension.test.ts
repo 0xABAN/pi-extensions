@@ -44,7 +44,8 @@ function fakeSession(name: string, sessionId: string) {
 	intercom(pi as never);
 
 	const emit = (event: string, payload: Record<string, unknown> = {}) => handlers.get(event)!(payload, ctx);
-	const call = (params: Record<string, unknown>): Promise<ToolResult> => tools.get("intercom")!.execute("call", params, undefined, undefined, ctx);
+	const call = (params: Record<string, unknown>): Promise<ToolResult> =>
+		tools.get("intercom")!.execute("call", params, undefined, undefined, ctx);
 	const setIdle = (value: boolean) => {
 		idle = value;
 	};

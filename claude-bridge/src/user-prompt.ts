@@ -25,9 +25,8 @@ export function extractUserPromptBlocks(messages: Context["messages"]): ContentB
 	let hasImage = false;
 	const blocks: ContentBlockParam[] = [];
 	for (const message of turn) {
-		const content: (TextContent | ImageContent)[] = typeof message.content === "string"
-			? [{ type: "text", text: message.content }]
-			: message.content;
+		const content: (TextContent | ImageContent)[] =
+			typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content;
 		if (!Array.isArray(content)) {
 			throw new Error(
 				`extractUserPromptBlocks: user message content must be a string or block array, got ${typeof content} — likely a malformed message from another extension`,
@@ -54,7 +53,9 @@ export function extractUserPromptBlocks(messages: Context["messages"]): ContentB
 			}
 		}
 	}
-	debug(`extractUserPromptBlocks: ${turn.length} msgs in turn, ${blocks.length} blocks, types=${blocks.map((b) => b.type).join(",")}`);
+	debug(
+		`extractUserPromptBlocks: ${turn.length} msgs in turn, ${blocks.length} blocks, types=${blocks.map((b) => b.type).join(",")}`,
+	);
 	return hasImage ? blocks : null;
 }
 

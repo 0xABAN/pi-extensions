@@ -15,13 +15,18 @@ export function makePromptStream(): PromptStream {
 	let done = false;
 	let failure: Error | null = null;
 
-	const kick = () => { wake?.(); wake = null; };
+	const kick = () => {
+		wake?.();
+		wake = null;
+	};
 
 	async function* gen(): AsyncGenerator<SDKUserMessage> {
 		try {
 			while (true) {
 				while (queue.length === 0 && !done && !failure) {
-					await new Promise<void>((resolve) => { wake = resolve; });
+					await new Promise<void>((resolve) => {
+						wake = resolve;
+					});
 				}
 				if (failure) throw failure;
 				const item = queue.shift();
@@ -42,10 +47,17 @@ export function makePromptStream(): PromptStream {
 
 	return {
 		stream: gen(),
-		push: (msg) => failure || done
-			? Promise.reject(failure ?? new Error("prompt stream closed"))
-			: new Promise<void>((resolve, reject) => { queue.push({ msg, resolve, reject }); kick(); }),
-		end: () => { done = true; kick(); },
+		push: (msg) =>
+			failure || done
+				? Promise.reject(failure ?? new Error("prompt stream closed"))
+				: new Promise<void>((resolve, reject) => {
+						queue.push({ msg, resolve, reject });
+						kick();
+					}),
+		end: () => {
+			done = true;
+			kick();
+		},
 		fail: (error) => {
 			if (failure) return;
 			failure = error;
@@ -56,7 +68,10 @@ export function makePromptStream(): PromptStream {
 	};
 }
 
-export function userMessage(content: SDKUserMessage["message"]["content"], priority?: SDKUserMessage["priority"]): SDKUserMessage {
+export function userMessage(
+	content: SDKUserMessage["message"]["content"],
+	priority?: SDKUserMessage["priority"],
+): SDKUserMessage {
 	return {
 		type: "user",
 		message: { role: "user", content } as SDKUserMessage["message"],

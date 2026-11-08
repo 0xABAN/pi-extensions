@@ -4,15 +4,26 @@ import type { PromptStream } from "./prompt-stream.js";
 import { LiveRecording } from "./session-sync.js";
 import type { RateLimitInfo } from "./rate-limit.js";
 
-export function newAssistantOutput(model: Model<any>, text: string, stopReason: AssistantMessage["stopReason"], errorMessage?: string): AssistantMessage {
+export function newAssistantOutput(
+	model: Model<any>,
+	text: string,
+	stopReason: AssistantMessage["stopReason"],
+	errorMessage?: string,
+): AssistantMessage {
 	return {
 		role: "assistant",
 		content: text ? [{ type: "text", text }] : [],
 		api: model.api,
 		provider: model.provider,
 		model: model.id,
-		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
-			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+		usage: {
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+		},
 		stopReason,
 		...(errorMessage ? { errorMessage } : {}),
 		timestamp: Date.now(),
@@ -78,7 +89,8 @@ export class QueryContext {
 	}
 
 	releasePendingToolCalls(reason: string): void {
-		for (const pending of this.pendingToolCalls.values()) pending.resolve({ content: [{ type: "text", text: reason }] });
+		for (const pending of this.pendingToolCalls.values())
+			pending.resolve({ content: [{ type: "text", text: reason }] });
 		this.pendingToolCalls.clear();
 		this.pendingResults.clear();
 	}

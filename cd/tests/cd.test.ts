@@ -30,7 +30,9 @@ test("resolves relative, home and escaped paths, and rejects missing directories
 	expect(resolveCdTarget("My\\ Folder", root, home)).toEqual({ path: join(root, "My Folder") });
 	expect(resolveCdTarget("'My Folder'", root, home)).toEqual({ path: join(root, "My Folder") });
 	expect(resolveCdTarget("~/project", root, home)).toEqual({ path: join(home, "project") });
-	expect(resolveCdTarget("missing", root, home)).toEqual({ error: `Directory does not exist: ${join(root, "missing")}` });
+	expect(resolveCdTarget("missing", root, home)).toEqual({
+		error: `Directory does not exist: ${join(root, "missing")}`,
+	});
 	expect(resolveCdTarget("file.txt", root, home)).toEqual({ error: `Not a directory: ${join(root, "file.txt")}` });
 });
 

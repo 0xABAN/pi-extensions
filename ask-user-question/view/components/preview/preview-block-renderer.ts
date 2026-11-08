@@ -22,7 +22,6 @@ export const NOTES_EDIT_AFFORDANCE_TEXT = `Note saved: press ${NOTES_KEY} to edi
 
 export type NotesAffordance = "add" | "edit" | "none";
 
-
 function contentBudgetFor(mode: PreviewLayoutMode): number {
 	const cap = mode === "side-by-side" ? MAX_PREVIEW_HEIGHT_SIDE_BY_SIDE : MAX_PREVIEW_HEIGHT_STACKED;
 	return Math.max(1, cap - BORDER_VERTICAL_OVERHEAD - NOTES_AFFORDANCE_OVERHEAD);
@@ -98,7 +97,11 @@ export class PreviewBlockRenderer {
 		if (!fit.affordance) return boxedLines;
 
 		const text =
-			affordance !== "none" && this.cache.has(optionIndex) ? affordance === "edit" ? NOTES_EDIT_AFFORDANCE_TEXT : NOTES_AFFORDANCE_TEXT : "";
+			affordance !== "none" && this.cache.has(optionIndex)
+				? affordance === "edit"
+					? NOTES_EDIT_AFFORDANCE_TEXT
+					: NOTES_AFFORDANCE_TEXT
+				: "";
 		return [...boxedLines, "", text ? this.theme.fg("muted", text) : ""];
 	}
 }

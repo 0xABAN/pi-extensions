@@ -23,7 +23,11 @@ function isDirectory(path: string): boolean {
 	return existsSync(path) && statSync(path).isDirectory();
 }
 
-export function resolveCdTarget(args: string, cwd: string, home = homedir()): { path: string } | { error: string } | null {
+export function resolveCdTarget(
+	args: string,
+	cwd: string,
+	home = homedir(),
+): { path: string } | { error: string } | null {
 	const input = unescapePath(args);
 	if (!input) return null;
 

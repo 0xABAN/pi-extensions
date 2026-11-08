@@ -95,7 +95,8 @@ function create(state: TaskState, params: TaskParams): { state: TaskState; op: O
 	if (inputs.length === 0) return error(state, "tasks[] must not be empty");
 
 	const missing = inputs.findIndex((input) => !input.subject?.trim());
-	if (missing !== -1) return error(state, params.tasks ? `tasks[${missing}]: subject required` : "subject required for create");
+	if (missing !== -1)
+		return error(state, params.tasks ? `tasks[${missing}]: subject required` : "subject required for create");
 
 	const created = inputs.map((input, index) => newTask(state.nextId + index, input));
 	return {

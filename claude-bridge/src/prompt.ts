@@ -2,7 +2,16 @@ import { contentText, type SystemMessage } from "@earendil-works/pi-ai";
 import { debugLogPath } from "./debug.js";
 import { MCP_TOOL_PREFIX } from "./mcp-server.js";
 
-const BUILT_IN_SECTIONS = new Set(["preamble", "tools", "rules", "docs", "addendum", "project_context", "skills", "cwd"]);
+const BUILT_IN_SECTIONS = new Set([
+	"preamble",
+	"tools",
+	"rules",
+	"docs",
+	"addendum",
+	"project_context",
+	"skills",
+	"cwd",
+]);
 const DEFAULT_PROMPT_SECTIONS = ["tools", "rules", "docs"];
 const FORWARDED_SECTIONS = ["addendum", "project_context", "skills"];
 
@@ -16,12 +25,19 @@ interface PromptPart {
 
 function pointSkillsAtMcpTools(skills: string): string {
 	return skills
-		.replace("Use the read tool to load a skill's file", `Use the read tool (${MCP_TOOL_PREFIX}read) to load a skill's file`)
+		.replace(
+			"Use the read tool to load a skill's file",
+			`Use the read tool (${MCP_TOOL_PREFIX}read) to load a skill's file`,
+		)
 		.replace("Use bash to load a skill's file", `Use bash (${MCP_TOOL_PREFIX}bash) to load a skill's file`);
 }
 
 function preambleAtLineStart(text: string): number {
-	for (let offset = text.indexOf(PI_PREAMBLE); offset !== -1; offset = text.indexOf(PI_PREAMBLE, offset + PI_PREAMBLE.length)) {
+	for (
+		let offset = text.indexOf(PI_PREAMBLE);
+		offset !== -1;
+		offset = text.indexOf(PI_PREAMBLE, offset + PI_PREAMBLE.length)
+	) {
 		if (offset === 0 || text[offset - 1] === "\n") return offset;
 	}
 	return -1;
@@ -42,13 +58,15 @@ function assertSendable(parts: PromptPart[]): void {
 		return;
 	}
 
-	throw new Error([
-		"claude-bridge: refusing to send this prompt. Claude Code's Anthropic path reads a request carrying",
-		"  pi's harness, or the phrase pair its subscription gate rejects, as a third-party app: it fails",
-		"  with 400 or is billed as extra usage.",
-		...findings.map((finding) => `  Found: ${finding}.`),
-		`  Reword or remove that text. CLAUDE_BRIDGE_DEBUG=1 writes the full prompt to ${debugLogPath()}.`,
-	].join("\n"));
+	throw new Error(
+		[
+			"claude-bridge: refusing to send this prompt. Claude Code's Anthropic path reads a request carrying",
+			"  pi's harness, or the phrase pair its subscription gate rejects, as a third-party app: it fails",
+			"  with 400 or is billed as extra usage.",
+			...findings.map((finding) => `  Found: ${finding}.`),
+			`  Reword or remove that text. CLAUDE_BRIDGE_DEBUG=1 writes the full prompt to ${debugLogPath()}.`,
+		].join("\n"),
+	);
 }
 
 export function claudeCodeAppend(system: SystemMessage | undefined): string | undefined {

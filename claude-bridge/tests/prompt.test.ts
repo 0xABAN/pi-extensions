@@ -16,14 +16,16 @@ function system(options: Parameters<typeof buildSystemPromptSections>[0]) {
 }
 
 test("forwards the addendum, project context and skills but none of pi's own sections", () => {
-	const append = claudeCodeAppend(system({
-		cwd: "/work",
-		selectedTools: ["read", "bash"],
-		toolSnippets: { read: "Read files", bash: "Run commands" },
-		appendSystemPrompt: "Commit when checks pass.",
-		contextFiles: [{ path: "/work/AGENTS.md", content: "Use bun." }],
-		skills: [skill],
-	}))!;
+	const append = claudeCodeAppend(
+		system({
+			cwd: "/work",
+			selectedTools: ["read", "bash"],
+			toolSnippets: { read: "Read files", bash: "Run commands" },
+			appendSystemPrompt: "Commit when checks pass.",
+			contextFiles: [{ path: "/work/AGENTS.md", content: "Use bun." }],
+			skills: [skill],
+		}),
+	)!;
 
 	expect(append.startsWith("<addendum>\nCommit when checks pass.\n</addendum>\n\n<project_context>")).toBe(true);
 	expect(append).toContain('<project_instructions path="/work/AGENTS.md">\nUse bun.\n</project_instructions>');
@@ -43,11 +45,13 @@ test("points a bash-only skills hint at the served bash tool", () => {
 });
 
 test("forwards a custom prompt and custom sections", () => {
-	const append = claudeCodeAppend(system({
-		cwd: "/work",
-		customPrompt: "You review pull requests.",
-		sections: { mcp_servers: "github: connected" },
-	}));
+	const append = claudeCodeAppend(
+		system({
+			cwd: "/work",
+			customPrompt: "You review pull requests.",
+			sections: { mcp_servers: "github: connected" },
+		}),
+	);
 
 	expect(append).toBe("You review pull requests.\n\n<mcp_servers>\ngithub: connected\n</mcp_servers>");
 });
@@ -57,16 +61,22 @@ test("forwards a forced prompt as given", () => {
 });
 
 test("refuses to send pi's preamble or both harness doc paths", () => {
-	expect(() => claudeCodeAppend({
-		role: "system",
-		content: "You are a coding assistant running inside pi, a coding agent harness.",
-		timestamp: 0,
-	})).toThrow("pi's preamble");
+	expect(() =>
+		claudeCodeAppend({
+			role: "system",
+			content: "You are a coding assistant running inside pi, a coding agent harness.",
+			timestamp: 0,
+		}),
+	).toThrow("pi's preamble");
 
-	expect(() => claudeCodeAppend(system({
-		cwd: "/work",
-		appendSystemPrompt: "See docs/custom-provider.md and docs/packages.md.",
-	}))).toThrow("docs/custom-provider.md and docs/packages.md in the addendum section");
+	expect(() =>
+		claudeCodeAppend(
+			system({
+				cwd: "/work",
+				appendSystemPrompt: "See docs/custom-provider.md and docs/packages.md.",
+			}),
+		),
+	).toThrow("docs/custom-provider.md and docs/packages.md in the addendum section");
 });
 
 test("sends nothing without a system message", () => {

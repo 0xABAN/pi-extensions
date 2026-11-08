@@ -10,7 +10,10 @@ const branch = [
 		type: "message",
 		id: "bbb222",
 		timestamp,
-		message: { role: "assistant", content: [{ type: "text", text: "Use git branch -m.\n\nThen push." }, { type: "toolCall" }] },
+		message: {
+			role: "assistant",
+			content: [{ type: "text", text: "Use git branch -m.\n\nThen push." }, { type: "toolCall" }],
+		},
 	},
 	{ type: "message", id: "ddd444", timestamp, message: { role: "toolResult", content: "ignored" } },
 ] as never;
@@ -31,7 +34,11 @@ function context(editorText = "") {
 	return { ctx: ctx as never, notices, text: () => text };
 }
 
-const theme = { fg: (_: string, text: string) => text, bold: (text: string) => text, italic: (text: string) => text } as never;
+const theme = {
+	fg: (_: string, text: string) => text,
+	bold: (text: string) => text,
+	italic: (text: string) => text,
+} as never;
 
 test("collects user and assistant text, newest first", () => {
 	const candidates = collectCandidates(branch);

@@ -40,7 +40,8 @@ export function loadSessionState(piSessionId: string, onReject: (message: string
 		if (error instanceof SyntaxError) return reject(onReject, "invalid JSON");
 		throw error;
 	}
-	if (value === null || typeof value !== "object" || Array.isArray(value)) return reject(onReject, "expected an object");
+	if (value === null || typeof value !== "object" || Array.isArray(value))
+		return reject(onReject, "expected an object");
 	const stored = value as Record<string, unknown>;
 	if (!("version" in stored)) return reject(onReject, "missing version");
 	if (stored.version !== FORMAT_VERSION) return reject(onReject, `unsupported version; expected ${FORMAT_VERSION}`);
@@ -55,7 +56,11 @@ export function loadSessionState(piSessionId: string, onReject: (message: string
 		return reject(onReject, "digests, uuids, and cuttable must be arrays");
 	}
 	try {
-		validateRecording({ digests: stored.digests as string[], uuids: stored.uuids as (string | null)[], cuttable: stored.cuttable as boolean[] });
+		validateRecording({
+			digests: stored.digests as string[],
+			uuids: stored.uuids as (string | null)[],
+			cuttable: stored.cuttable as boolean[],
+		});
 	} catch (error) {
 		if (error instanceof InvalidRecordingError) return reject(onReject, error.message);
 		throw error;

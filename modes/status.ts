@@ -43,12 +43,17 @@ function thinkingLabel(level: string): string {
 }
 
 /** Pure presentation: lifecycle code owns status keys, tool state and persistence. */
-export function formatModeStatus(mode: AgentMode, thinkingLevel?: string, themeName?: string): { mode: string; thinking: string } {
-	const mid: [number, number, number] = mode === "learn"
-		? [230, 152, 117] // warm peach (learn)
-		: mode === "plan"
-			? [196, 160, 230] // pastel purple (plan)
-			: [173, 210, 203]; // pale teal (build, #add2cb)
+export function formatModeStatus(
+	mode: AgentMode,
+	thinkingLevel?: string,
+	themeName?: string,
+): { mode: string; thinking: string } {
+	const mid: [number, number, number] =
+		mode === "learn"
+			? [230, 152, 117] // warm peach (learn)
+			: mode === "plan"
+				? [196, 160, 230] // pastel purple (plan)
+				: [173, 210, 203]; // pale teal (build, #add2cb)
 
 	// Reuse the Everforest palette; Pi's built-in themes keep the default gradient.
 	// Hard and Medium share their foreground/accent colors.
@@ -62,10 +67,10 @@ export function formatModeStatus(mode: AgentMode, thinkingLevel?: string, themeN
 
 	const stops: [number, number, number][] = hexStops
 		? hexStops.map((hex) => [
-			Number.parseInt(hex.slice(1, 3), 16),
-			Number.parseInt(hex.slice(3, 5), 16),
-			Number.parseInt(hex.slice(5, 7), 16),
-		])
+				Number.parseInt(hex.slice(1, 3), 16),
+				Number.parseInt(hex.slice(3, 5), 16),
+				Number.parseInt(hex.slice(5, 7), 16),
+			])
 		: [[255, 255, 255], mid, [243, 238, 223]];
 
 	const label = mode === "learn" ? "\uF19D  learn mode" : mode === "plan" ? "\uF022  plan mode" : "\uF121  build mode";

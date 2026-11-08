@@ -14,7 +14,9 @@ function taskLine(task: Task, theme: Theme, showId: boolean): string {
 	const done = task.status === "completed" || task.status === "deleted";
 	const subject = theme.fg(done ? "muted" : "text", displayText(task.subject));
 	const form =
-		task.status === "in_progress" && task.activeForm ? ` ${theme.fg("muted", `(${displayText(task.activeForm)})`)}` : "";
+		task.status === "in_progress" && task.activeForm
+			? ` ${theme.fg("muted", `(${displayText(task.activeForm)})`)}`
+			: "";
 	return `${glyph} ${id}${done ? theme.strikethrough(subject) : subject}${form}`;
 }
 
@@ -24,7 +26,10 @@ function fitTasks(tasks: Task[], rows: number): { shown: Task[]; hidden: Record<
 	const room = rows - 1;
 	const open = tasks.filter((task) => task.status !== "completed");
 	if (open.length >= room) {
-		return { shown: open.slice(0, room), hidden: { completed: tasks.length - open.length, open: open.length - room } };
+		return {
+			shown: open.slice(0, room),
+			hidden: { completed: tasks.length - open.length, open: open.length - room },
+		};
 	}
 
 	const keptCompleted = new Set(tasks.filter((task) => task.status === "completed").slice(0, room - open.length));
@@ -46,7 +51,9 @@ export function renderTodoPanel(state: TaskState, theme: Theme, width: number, e
 
 	const { shown, hidden } = fitTasks(tasks, expanded ? tasks.length : MAX_ROWS - 1);
 	const more = hidden.completed + hidden.open;
-	const rows = shown.map((task, index) => branch(taskLine(task, theme, false), more === 0 && index === shown.length - 1));
+	const rows = shown.map((task, index) =>
+		branch(taskLine(task, theme, false), more === 0 && index === shown.length - 1),
+	);
 	if (more > 0) {
 		const parts = [
 			hidden.completed > 0 ? `${hidden.completed} completed` : "",
