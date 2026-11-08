@@ -1,20 +1,17 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { QuestionnaireSession } from "./state/questionnaire-session.ts";
-import { ROW_INTENT_META, sentinelsToAppend } from "./state/row-intent.ts";
-import { normalizeQuestionParams } from "./tool/normalize-params.ts";
-import { buildQuestionnaireResponse, buildToolResult } from "./tool/response-envelope.ts";
+import { QuestionDialog } from "./dialog.ts";
 import {
 	MAX_OPTIONS,
 	MAX_QUESTIONS,
 	MIN_OPTIONS,
-	type QuestionData,
+	normalizeQuestions,
 	type QuestionnaireResult,
-	type QuestionParams,
 	QuestionParamsSchema,
-} from "./tool/types.ts";
-import { validateQuestionnaire } from "./tool/validate-questionnaire.ts";
-import type { WrappingSelectItem } from "./view/components/wrapping-select.ts";
-import { renderAskCall, renderAskResult, summarizeAsk } from "./view/transcript.ts";
+	questionnaireResponse,
+	toolResult,
+	validateQuestions,
+} from "./questions.ts";
+import { renderAskCall, renderAskResult, summarizeAsk } from "./transcript.ts";
 
 const PROMPT_SNIPPET = `Ask the user up to ${MAX_QUESTIONS} structured questions (${MIN_OPTIONS}-${MAX_OPTIONS} options each) when requirements are ambiguous`;
 const PROMPT_GUIDELINES = [
@@ -44,18 +41,6 @@ Use the optional \`preview\` field on options when presenting concrete artifacts
 
 Preview content is rendered as markdown in a monospace box. Multi-line text with newlines is supported. When any option has a preview, the UI switches to a side-by-side layout with a vertical option list on the left and preview on the right. Do not use previews for simple preference questions where labels and descriptions suffice. Note: previews are only supported for single-select questions (not multiSelect).`;
 
-export function buildItemsForQuestion(question: QuestionData): WrappingSelectItem[] {
-	const items: WrappingSelectItem[] = question.options.map((o) => ({
-		kind: "option",
-		label: o.label,
-		description: o.description,
-	}));
-	for (const kind of sentinelsToAppend(question)) {
-		items.push({ kind, label: ROW_INTENT_META[kind].label });
-	}
-	return items;
-}
-
 export default function (pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "ask_user_question",
@@ -71,33 +56,25 @@ export default function (pi: ExtensionAPI): void {
 			renderAskResult(result, context?.args, theme, { expanded, isError: context?.isError ?? false }),
 
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const typed = normalizeQuestionParams(params as QuestionParams);
+			const questions = normalizeQuestions(params);
 			if (!ctx.hasUI) {
-				return buildToolResult("Error: UI not available (running in non-interactive mode)", {
+				return toolResult("Error: UI not available (running in non-interactive mode)", {
 					answers: [],
 					cancelled: true,
 					error: "no_ui",
 				});
 			}
 
-			const validation = validateQuestionnaire(typed);
-			if (!validation.ok) {
-				return buildToolResult(validation.message, { answers: [], cancelled: true, error: validation.error });
+			const invalid = validateQuestions(questions);
+			if (invalid) {
+				return toolResult(invalid.message, { answers: [], cancelled: true, error: invalid.error });
 			}
 
 			const result = await ctx.ui.custom<QuestionnaireResult>(
-				(tui, theme, keybindings, done) =>
-					new QuestionnaireSession({
-						tui,
-						theme,
-						params: typed,
-						itemsByTab: typed.questions.map(buildItemsForQuestion),
-						done,
-						keybindings,
-					}).component,
-				{ blocked: { kind: "question", message: typed.questions[0]!.question } },
+				(tui, theme, keybindings, done) => new QuestionDialog(tui, theme, keybindings, questions, done),
+				{ blocked: { kind: "question", message: questions[0]!.question } },
 			);
-			return buildQuestionnaireResponse(result, typed);
+			return questionnaireResponse(result, questions);
 		},
 	});
 }

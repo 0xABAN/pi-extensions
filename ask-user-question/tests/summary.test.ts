@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { summarizeAsk } from "../view/transcript.ts";
+import { summarizeAsk } from "../transcript.ts";
 
 test("names the questions by their headers", () => {
 	const args = {

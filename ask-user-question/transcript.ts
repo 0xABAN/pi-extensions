@@ -1,13 +1,13 @@
 import type { Theme, ToolSummary } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { NO_INPUT_PLACEHOLDER } from "../tool/format-answer.ts";
+import { stripFenceMarkers } from "./preview.ts";
 import {
+	type Answer,
 	isQuestionnaireResult,
-	type QuestionAnswer,
+	NO_INPUT,
 	type QuestionnaireResult,
 	type QuestionParams,
-} from "../tool/types.ts";
-import { stripFenceMarkers } from "./components/preview/preview-box-renderer.ts";
+} from "./questions.ts";
 
 const INDENT = "  ";
 const COLUMN_GAP = "  ";
@@ -100,7 +100,7 @@ function tableLines(
 }
 
 function detailLines(
-	answer: QuestionAnswer | undefined,
+	answer: Answer | undefined,
 	questionText: string | undefined,
 	indent: string,
 	theme: Theme,
@@ -121,7 +121,7 @@ function globalNoteLines(details: QuestionnaireResult, theme: Theme, width: numb
 	return details.globalNote ? hanging(INDENT, theme.fg("dim", `✎ ${details.globalNote}`), width) : [];
 }
 
-function answerText(answer: QuestionAnswer | undefined, theme: Theme): string {
+function answerText(answer: Answer | undefined, theme: Theme): string {
 	if (!answer) return theme.fg("dim", "not answered");
 	const typed = answer.answer ? `"${answer.answer}"` : undefined;
 	const picks =
@@ -130,7 +130,7 @@ function answerText(answer: QuestionAnswer | undefined, theme: Theme): string {
 			: answer.kind === "custom"
 				? [typed]
 				: [...(answer.selected ?? []).map(label), typed];
-	return theme.fg("toolOutput", picks.filter(Boolean).join(", ") || NO_INPUT_PLACEHOLDER);
+	return theme.fg("toolOutput", picks.filter(Boolean).join(", ") || NO_INPUT);
 }
 
 function label(text: string): string {
