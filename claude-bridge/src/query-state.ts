@@ -68,9 +68,13 @@ export class QueryContext {
 	turnStreamBlockStart = 0;
 	turnFallbackMessageId: string | undefined;
 
+	get turnMessage(): AssistantMessage {
+		if (!this.turnOutput) throw new Error("turn accessed before resetTurnState");
+		return this.turnOutput;
+	}
+
 	get turnBlocks(): Array<any> {
-		if (!this.turnOutput) throw new Error("turnBlocks accessed before resetTurnState");
-		return this.turnOutput.content;
+		return this.turnMessage.content;
 	}
 
 	releasePendingToolCalls(reason: string): void {

@@ -6,14 +6,14 @@ export function verifyWrittenSession(jsonlPath: string, expectedSessionId: strin
 	try {
 		st = statSync(jsonlPath);
 	} catch (e) {
-		warnings.push(`file missing after save — path=${jsonlPath} err=${e.message}`);
+		warnings.push(`file missing after save — path=${jsonlPath} err=${(e as Error).message}`);
 		return warnings;
 	}
 	let content;
 	try {
 		content = readFileSync(jsonlPath, "utf8");
 	} catch (e) {
-		warnings.push(`file unreadable — path=${jsonlPath} size=${st.size} err=${e.message}`);
+		warnings.push(`file unreadable — path=${jsonlPath} size=${st.size} err=${(e as Error).message}`);
 		return warnings;
 	}
 	const lines = content.split("\n").filter((l) => l.trim().length > 0);
@@ -28,7 +28,7 @@ export function verifyWrittenSession(jsonlPath: string, expectedSessionId: strin
 			warnings.push(`sessionId drift — expected=${expectedSessionId} first=${firstRec.sessionId} last=${lastRec.sessionId}`);
 		}
 	} catch (e) {
-		warnings.push(`malformed JSONL — path=${jsonlPath} err=${e.message}`);
+		warnings.push(`malformed JSONL — path=${jsonlPath} err=${(e as Error).message}`);
 	}
 	return warnings;
 }

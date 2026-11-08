@@ -1,4 +1,4 @@
-import { createAssistantMessageEventStream, getCurrentSystemMessage, type AssistantMessage, type AssistantMessageEvent, type AssistantMessageEventStream, type Context, type ImageContent, type Model, type SimpleStreamOptions, type TextContent, type Tool, type UserMessage } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, getCurrentSystemMessage, type AssistantMessage, type AssistantMessageEvent, type AssistantMessageEventStream, type Context, type ImageContent, type Model, type SimpleStreamOptions, type TextContent, type ThinkingLevel, type Tool, type UserMessage } from "@earendil-works/pi-ai";
 import { getModels } from "@earendil-works/pi-ai/compat";
 import { isToolCallEventType, type ExtensionAPI, type ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { query, type EffortLevel, type SDKMessage, type SettingSource, type ThinkingConfig } from "@anthropic-ai/claude-agent-sdk";
@@ -538,14 +538,14 @@ function logServedContextWindow(label: string, message: SDKMessage, model: Model
 
 const VALID_EFFORTS = new Set<string>(["low", "medium", "high", "xhigh", "max"]);
 
-function effortForReasoning(model: Model<any>, reasoning: string | undefined): EffortLevel | undefined {
+function effortForReasoning(model: Model<any>, reasoning: ThinkingLevel | undefined): EffortLevel | undefined {
 	if (!reasoning) return undefined;
 	const mapped = model.thinkingLevelMap?.[reasoning];
 	if (mapped === undefined) return REASONING_TO_EFFORT[reasoning];
 	return VALID_EFFORTS.has(mapped as EffortLevel) ? mapped as EffortLevel : undefined;
 }
 
-function thinkingForReasoning(model: Model<any>, reasoning: string | undefined): ThinkingConfig | undefined {
+function thinkingForReasoning(model: Model<any>, reasoning: ThinkingLevel | undefined): ThinkingConfig | undefined {
 	if (reasoning || !model.reasoning || model.thinkingLevelMap?.off === null) return undefined;
 	return { type: "disabled" };
 }
@@ -586,9 +586,9 @@ function pushTextBlock(c: QueryContext, text: string): void {
 	ensureTurnStarted(c);
 	c.turnBlocks.push({ type: "text", text });
 	const idx = c.turnBlocks.length - 1;
-	c.currentPiStream?.push({ type: "text_start", contentIndex: idx, partial: c.turnOutput });
-	c.currentPiStream?.push({ type: "text_delta", contentIndex: idx, delta: text, partial: c.turnOutput });
-	c.currentPiStream?.push({ type: "text_end", contentIndex: idx, content: text, partial: c.turnOutput });
+	c.currentPiStream?.push({ type: "text_start", contentIndex: idx, partial: c.turnMessage });
+	c.currentPiStream?.push({ type: "text_delta", contentIndex: idx, delta: text, partial: c.turnMessage });
+	c.currentPiStream?.push({ type: "text_end", contentIndex: idx, content: text, partial: c.turnMessage });
 }
 
 function claimCurrentPiStream(stream: AssistantMessageEventStream, label: string, c: QueryContext, options: SimpleStreamOptions | undefined): void {
@@ -601,7 +601,7 @@ function claimCurrentPiStream(stream: AssistantMessageEventStream, label: string
 
 function ensureTurnStarted(c: QueryContext): void {
 	if (!c.turnStarted && c.currentPiStream && c.turnOutput) {
-		c.currentPiStream!.push({ type: "start", partial: c.turnOutput });
+		c.currentPiStream!.push({ type: "start", partial: c.turnMessage });
 		c.turnStarted = true;
 	}
 }
@@ -717,10 +717,10 @@ function processStreamEvent(
 		ensureTurnStarted(c);
 		if (event.content_block?.type === "text") {
 			c.turnBlocks.push({ type: "text", text: "", index: event.index });
-			c.currentPiStream!.push({ type: "text_start", contentIndex: c.turnBlocks.length - 1, partial: c.turnOutput });
+			c.currentPiStream!.push({ type: "text_start", contentIndex: c.turnBlocks.length - 1, partial: c.turnMessage });
 		} else if (event.content_block?.type === "thinking") {
 			c.turnBlocks.push({ type: "thinking", thinking: "", thinkingSignature: "", index: event.index });
-			c.currentPiStream!.push({ type: "thinking_start", contentIndex: c.turnBlocks.length - 1, partial: c.turnOutput });
+			c.currentPiStream!.push({ type: "thinking_start", contentIndex: c.turnBlocks.length - 1, partial: c.turnMessage });
 		} else if (event.content_block?.type === "tool_use") {
 			const piName = piToolNameFor(event.content_block.name, customToolNameToPi);
 			if (!piName) {
@@ -734,7 +734,7 @@ function processStreamEvent(
 				arguments: (event.content_block.input as Record<string, unknown>) ?? {},
 				partialJson: "", index: event.index,
 			});
-			c.currentPiStream!.push({ type: "toolcall_start", contentIndex: c.turnBlocks.length - 1, partial: c.turnOutput });
+			c.currentPiStream!.push({ type: "toolcall_start", contentIndex: c.turnBlocks.length - 1, partial: c.turnMessage });
 		} else {
 			debug("processStreamEvent: unhandled content_block_start type", event.content_block?.type);
 		}
@@ -747,14 +747,14 @@ function processStreamEvent(
 		if (!block) return;
 		if (event.delta?.type === "text_delta" && block.type === "text") {
 			block.text += event.delta.text;
-			c.currentPiStream!.push({ type: "text_delta", contentIndex: index, delta: event.delta.text, partial: c.turnOutput });
+			c.currentPiStream!.push({ type: "text_delta", contentIndex: index, delta: event.delta.text, partial: c.turnMessage });
 		} else if (event.delta?.type === "thinking_delta" && block.type === "thinking") {
 			block.thinking += event.delta.thinking;
-			c.currentPiStream!.push({ type: "thinking_delta", contentIndex: index, delta: event.delta.thinking, partial: c.turnOutput });
+			c.currentPiStream!.push({ type: "thinking_delta", contentIndex: index, delta: event.delta.thinking, partial: c.turnMessage });
 		} else if (event.delta?.type === "input_json_delta" && block.type === "toolCall") {
 			block.partialJson += event.delta.partial_json;
 			block.arguments = parsePartialJson(block.partialJson, block.arguments);
-			c.currentPiStream!.push({ type: "toolcall_delta", contentIndex: index, delta: event.delta.partial_json, partial: c.turnOutput });
+			c.currentPiStream!.push({ type: "toolcall_delta", contentIndex: index, delta: event.delta.partial_json, partial: c.turnMessage });
 		} else if (event.delta?.type === "signature_delta" && block.type === "thinking") {
 			block.thinkingSignature = (block.thinkingSignature ?? "") + event.delta.signature;
 		} else {
@@ -769,9 +769,9 @@ function processStreamEvent(
 		if (!block) return;
 		delete block.index;
 		if (block.type === "text") {
-			c.currentPiStream!.push({ type: "text_end", contentIndex: index, content: block.text, partial: c.turnOutput });
+			c.currentPiStream!.push({ type: "text_end", contentIndex: index, content: block.text, partial: c.turnMessage });
 		} else if (block.type === "thinking") {
-			c.currentPiStream!.push({ type: "thinking_end", contentIndex: index, content: block.thinking, partial: c.turnOutput });
+			c.currentPiStream!.push({ type: "thinking_end", contentIndex: index, content: block.thinking, partial: c.turnMessage });
 		} else if (block.type === "toolCall") {
 			c.turnSawToolCall = true;
 			const finished = c.assistantSteps.get(c.turnStreamMessageId!)?.content
@@ -782,7 +782,7 @@ function processStreamEvent(
 				block.arguments = mapToolArgs(block.name, parsePartialJson(block.partialJson, block.arguments));
 			}
 			delete block.partialJson;
-			c.currentPiStream!.push({ type: "toolcall_end", contentIndex: index, toolCall: block, partial: c.turnOutput });
+			c.currentPiStream!.push({ type: "toolcall_end", contentIndex: index, toolCall: block, partial: c.turnMessage });
 		}
 		return;
 	}
@@ -862,9 +862,9 @@ function processAssistantMessage(message: SDKMessage, model: Model<any>, customT
 			ensureTurnStarted(c);
 			c.turnBlocks.push({ type: "thinking", thinking: block.thinking ?? "", thinkingSignature: block.signature ?? "" });
 			const idx = c.turnBlocks.length - 1;
-			c.currentPiStream?.push({ type: "thinking_start", contentIndex: idx, partial: c.turnOutput });
-			if (block.thinking) c.currentPiStream?.push({ type: "thinking_delta", contentIndex: idx, delta: block.thinking, partial: c.turnOutput });
-			c.currentPiStream?.push({ type: "thinking_end", contentIndex: idx, content: block.thinking ?? "", partial: c.turnOutput });
+			c.currentPiStream?.push({ type: "thinking_start", contentIndex: idx, partial: c.turnMessage });
+			if (block.thinking) c.currentPiStream?.push({ type: "thinking_delta", contentIndex: idx, delta: block.thinking, partial: c.turnMessage });
+			c.currentPiStream?.push({ type: "thinking_end", contentIndex: idx, content: block.thinking ?? "", partial: c.turnMessage });
 		} else if (block.type === "tool_use") {
 			const piName = piToolNameFor(block.name, customToolNameToPi);
 			if (!piName) {
@@ -881,8 +881,8 @@ function processAssistantMessage(message: SDKMessage, model: Model<any>, customT
 			});
 			const idx = c.turnBlocks.length - 1;
 			const toolBlock = c.turnBlocks[idx];
-			c.currentPiStream?.push({ type: "toolcall_start", contentIndex: idx, partial: c.turnOutput });
-			c.currentPiStream?.push({ type: "toolcall_end", contentIndex: idx, toolCall: toolBlock as any, partial: c.turnOutput });
+			c.currentPiStream?.push({ type: "toolcall_start", contentIndex: idx, partial: c.turnMessage });
+			c.currentPiStream?.push({ type: "toolcall_end", contentIndex: idx, toolCall: toolBlock as any, partial: c.turnMessage });
 		} else {
 			debug("processAssistantMessage: unhandled block type", block.type);
 		}
