@@ -36,6 +36,7 @@
     "whimsical"
   ],
   "scripts": {
+    "check": "../pi/node_modules/.bin/biome check --write . && bun run typecheck",
     "test": "bun test",
     "typecheck": "../pi/node_modules/.bin/tsc --noEmit"
   },
