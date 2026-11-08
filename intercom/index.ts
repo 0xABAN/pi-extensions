@@ -25,7 +25,6 @@ const INBOUND_MESSAGE_DEDUPE_MAX = 1000;
 const INBOUND_MESSAGE_DEDUPE_RETENTION_MS = 60 * 60 * 1000;
 const DEFAULT_UNNAMED_SESSION_ALIAS_PREFIX = "session";
 const STABLE_INTERCOM_SESSION_ID_ENV = "PI_INTERCOM_STABLE_ID";
-const NAME_POLL_MS_ENV = "PI_INTERCOM_NAME_POLL_MS";
 
 interface InboundMessageEntry {
   from: SessionInfo;
@@ -178,9 +177,6 @@ function currentHerdrPane(): string | undefined {
   const pane = process.env.HERDR_PANE_ID?.trim();
   return pane ? pane : undefined;
 }
-function formatIntercomContactSnippet(sessionId: string): string {
-  return `Use pi-intercom: intercom({ action: "send", to: "${sessionId}", message: "..." })`;
-}
 function formatSessionLabel(session: SessionInfo, duplicates: Set<string>): string {
   if (!session.name) {
     return session.id;
@@ -240,16 +236,6 @@ function formatInboundDeliveryMetadata(message: Message): string {
   if (injectedAt) parts.push(`injected ${injectedAt}`);
   return parts.join(" · ");
 }
-function getNamePollMs(): number {
-  const configured = process.env[NAME_POLL_MS_ENV];
-  if (configured !== undefined) {
-    const value = Number(configured);
-    if (Number.isFinite(value) && value > 0) {
-      return value;
-    }
-  }
-  return 1000;
-}
 export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSION) {
   let client: IntercomClient | null = null;
   const wakeWithTriggerTurn = triggerTurnRunsPromptLifecycle(piVersion);
@@ -261,9 +247,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
   let currentModel = "unknown";
   let sessionStartedAt: number | null = null;
   let reconnectTimer: NodeJS.Timeout | null = null;
-  let namePollTimer: NodeJS.Timeout | null = null;
-  let lastPresenceName: string | null = null;
-  let lastPresenceRuntimeFallbackAlias: boolean | null = null;
   let reconnectPromise: Promise<IntercomClient> | null = null;
   let reconnectPromiseGeneration: number | null = null;
   let startupConnectTimer: NodeJS.Timeout | null = null;
@@ -409,13 +392,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     clearTimeout(startupConnectTimer);
     startupConnectTimer = null;
   }
-  function clearNamePollTimer(): void {
-    if (!namePollTimer) {
-      return;
-    }
-    clearInterval(namePollTimer);
-    namePollTimer = null;
-  }
   function getLiveContext(ctx: ExtensionContext | null = runtimeContext, generation = runtimeGeneration): ExtensionContext | null {
     if (disposed || shuttingDown || generation !== runtimeGeneration || !ctx) {
       return null;
@@ -502,25 +478,7 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       return;
     }
     const identity = buildPresenceIdentity(pi, currentIntercomSessionId ?? sessionId);
-    lastPresenceName = identity.name;
-    lastPresenceRuntimeFallbackAlias = identity.runtimeFallbackAlias;
     client.updatePresence({ ...identity, status: currentStatus(), ...currentContextUsage() });
-  }
-  function startNamePoll(): void {
-    clearNamePollTimer();
-    const initialIdentity = currentSessionId ? buildPresenceIdentity(pi, currentIntercomSessionId ?? currentSessionId) : null;
-    lastPresenceName = initialIdentity?.name ?? null;
-    lastPresenceRuntimeFallbackAlias = initialIdentity?.runtimeFallbackAlias ?? null;
-    namePollTimer = setInterval(() => {
-      if (!currentSessionId || !getLiveContext()) {
-        return;
-      }
-      const identity = buildPresenceIdentity(pi, currentIntercomSessionId ?? currentSessionId);
-      if (identity.name !== lastPresenceName || identity.runtimeFallbackAlias !== lastPresenceRuntimeFallbackAlias) {
-        syncPresenceIdentity(currentSessionId);
-      }
-    }, getNamePollMs());
-    namePollTimer.unref?.();
   }
   function syncPresenceStatus(): void {
     if (!client || !currentSessionId || !getLiveContext()) {
@@ -1095,7 +1053,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     sessionHeldBlocked = false;
     clearReconnectTimer();
     clearStartupConnectTimer();
-    clearNamePollTimer();
     rejectReplyWaiter(new Error("Session replaced"));
     replyTracker.reset();
     if (previousClient) {
@@ -1107,13 +1064,9 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     currentIntercomSessionId = resolveConfiguredIntercomSessionId(currentSessionId, config);
     currentModel = ctx.model?.id ?? "unknown";
     sessionStartedAt = Date.now();
-    const initialPresenceIdentity = buildPresenceIdentity(pi, currentIntercomSessionId);
-    lastPresenceName = initialPresenceIdentity.name;
-    lastPresenceRuntimeFallbackAlias = initialPresenceIdentity.runtimeFallbackAlias;
     agentRunning = false;
     expireHeldInboundMessages("session replaced before injection");
     activeTools.clear();
-    startNamePoll();
     const startupGeneration = runtimeGeneration;
     startupConnectTimer = setTimeout(() => {
       startupConnectTimer = null;
@@ -1128,6 +1081,9 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       });
     }, 0);
   }
+  pi.on("session_info_changed", (_event, ctx) => {
+    if (getLiveContext(ctx)) syncPresenceIdentity(ctx.sessionManager.getSessionId());
+  });
   pi.on("session_start", (_event, ctx) => {
     if (!config.enabled) {
       return;
@@ -1141,7 +1097,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     runtimeGeneration += 1;
     clearStartupConnectTimer();
     clearReconnectTimer();
-    clearNamePollTimer();
     rejectReplyWaiter(new Error("Session shutting down"));
     replyTracker.reset();
     agentRunning = false;
@@ -1739,86 +1694,6 @@ Usage:
     },
   }));
 
-  function insertIntoEditor(ctx: ExtensionContext, text: string): boolean {
-    if (!ctx.hasUI) return false;
-    const ui = ctx.ui as { getEditorText?: () => string; setEditorText?: (text: string) => void };
-    if (typeof ui.setEditorText !== "function") return false;
-    const existing = typeof ui.getEditorText === "function" ? ui.getEditorText() : "";
-    ui.setEditorText(existing.trim() ? `${existing.trimEnd()}\n\n${text}` : text);
-    return true;
-  }
-
-  async function insertIntercomId(ctx: ExtensionContext): Promise<void> {
-    const commandGeneration = runtimeGeneration;
-    const liveContext = getLiveContext(ctx, commandGeneration);
-    if (!liveContext) return;
-    let contactClient: IntercomClient;
-    try {
-      contactClient = await ensureConnected("tool");
-    } catch (error) {
-      notifyIfLive(ctx, `Intercom unavailable: ${getErrorMessage(error)}`, "error", commandGeneration);
-      return;
-    }
-    const sessionId = contactClient.sessionId;
-    if (!sessionId || !getLiveContext(liveContext, commandGeneration)) return;
-    const snippet = formatIntercomContactSnippet(sessionId);
-    if (insertIntoEditor(liveContext, snippet)) {
-      notifyIfLive(liveContext, `Inserted intercom contact target: ${sessionId}`, "info", commandGeneration);
-      return;
-    }
-    notifyIfLive(liveContext, `Intercom contact target: ${sessionId}`, "info", commandGeneration);
-  }
-
-  async function setIntercomAlias(args: string, ctx: ExtensionContext): Promise<void> {
-    const commandGeneration = runtimeGeneration;
-    const liveContext = getLiveContext(ctx, commandGeneration);
-    if (!liveContext) return;
-
-    let alias = args.trim();
-    const opensAliasInput = !alias || alias.toLowerCase() === "menu";
-    if (opensAliasInput) {
-      if (!liveContext.hasUI) {
-        const currentAlias = pi.getSessionName()?.trim();
-        notifyCommand(
-          liveContext,
-          alias ? "The alias menu requires an interactive UI; use /alias <name>." : currentAlias ? `Session alias: ${currentAlias}` : "No session alias set. Use /alias <name>.",
-          alias ? "warning" : "info",
-          commandGeneration,
-        );
-        return;
-      }
-
-      const currentAlias = pi.getSessionName()?.trim();
-      let entered: string | undefined;
-      try {
-        entered = await liveContext.ui.input(
-          "Set session alias",
-          currentAlias ? `Current alias: ${currentAlias}` : "Enter an alias",
-        );
-      } catch (error) {
-        notifyCommand(liveContext, `Unable to set session alias: ${getErrorMessage(error)}`, "error", commandGeneration);
-        return;
-      }
-      if (entered === undefined) return;
-      alias = entered.trim();
-      if (!alias) {
-        notifyCommand(liveContext, "Session alias cannot be empty.", "warning", commandGeneration);
-        return;
-      }
-    }
-
-    if (!getLiveContext(liveContext, commandGeneration)) return;
-    try {
-      pi.setSessionName(alias);
-    } catch (error) {
-      notifyCommand(liveContext, `Unable to set session alias: ${getErrorMessage(error)}`, "error", commandGeneration);
-      return;
-    }
-
-    syncPresenceIdentity(liveContext.sessionManager.getSessionId());
-    notifyCommand(liveContext, `Session alias set: ${alias}`, "info", commandGeneration);
-  }
-
   async function runHandoverCommand(args: string, ctx: ExtensionContext): Promise<void> {
     const commandGeneration = runtimeGeneration;
     const liveContext = getLiveContext(ctx, commandGeneration);
@@ -2015,16 +1890,7 @@ Usage:
     handler: async (_args, ctx) => openIntercomOverlay(ctx),
   });
 
-  pi.registerCommand("intercom-id", {
-    description: "Insert a stable pi-intercom handoff snippet for this session into the editor",
-    handler: async (_args, ctx) => insertIntercomId(ctx),
-  });
 
-
-  pi.registerCommand("alias", {
-    description: "Set the current session alias (usage: /alias <name> or /alias menu)",
-    handler: async (args, ctx) => setIntercomAlias(args, ctx),
-  });
 
   pi.registerCommand("handover", {
     description: "Summarize this session and hand it over to another session (usage: /handover to pick a session, or /handover <target or project path> [next task])",
