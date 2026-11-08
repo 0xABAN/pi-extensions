@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import modesExtension from "../index.ts";
 import { LEARN_MODE_PROMPT } from "../learn.ts";
+import { PLAN_MODE_PROMPT } from "../plan.ts";
 import { formatModeStatus } from "../status.ts";
 import { isSafeCommand, READ_ONLY_TOOLS } from "../utils.ts";
 
@@ -25,6 +26,8 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 	let choice: string | undefined;
 
 	const handlers = new Map<string, Function>();
+	const registeredTools = new Map<string, any>();
+	const selects: { title: string; options: string[] }[] = [];
 	const commands = new Map<string, unknown>();
 	const shortcuts = new Map<string, { handler: Function }>();
 	const statuses = new Map<string, string>();
@@ -41,13 +44,16 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 			theme: { name: "everforest-dark-hard" },
 			setStatus: (key: string, text: string) => statuses.set(key, text),
 			notify: (text: string, level: string) => notices.push({ text, level }),
-			select: async () => choice,
-			editor: async () => "",
+			select: async (title: string, options: string[]) => {
+				selects.push({ title, options });
+				return choice;
+			},
 		},
 	};
 
 	modesExtension({
 		on: (name: string, handler: Function) => handlers.set(name, handler),
+		registerTool: (tool: { name: string }) => registeredTools.set(tool.name, tool),
 		registerCommand: (name: string, command: unknown) => commands.set(name, command),
 		registerShortcut: (key: string, shortcut: { handler: Function }) => shortcuts.set(key, shortcut),
 		registerFlag: (name: string, flag: { default: unknown }) => flagValues.set(name, flags[name] ?? flag.default),
@@ -59,8 +65,6 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 		appendEntry: (customType: string, data: unknown) => {
 			branch.push({ type: "custom", customType, data: structuredClone(data) });
 		},
-		sendMessage: (message: unknown, options: unknown) => sent.push({ message, options }),
-		sendUserMessage: (content: unknown, options: unknown) => sent.push({ content, options }),
 	} as never);
 
 	const emit = (type: string, event: object = {}) => handlers.get(type)?.({ type, ...event }, ctx);
@@ -71,9 +75,11 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 		ctx,
 		statuses,
 		notices,
-		sent,
+		selects,
 		commands,
 		shortcuts,
+		planTool: registeredTools.get("plan"),
+		callPlan: () => registeredTools.get("plan").execute("call-1", {}, undefined, undefined, ctx),
 		shiftTab: () => shortcuts.get("shift+tab")!.handler(ctx),
 		tools: () => activeTools,
 		entries: () => branch,
@@ -83,7 +89,7 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 		setIdle: (value: boolean) => {
 			idle = value;
 		},
-		setChoice: (value: string) => {
+		setChoice: (value: string | undefined) => {
 			choice = value;
 		},
 		mode: () => stripColor(statuses.get("agent-mode")!),
@@ -109,7 +115,7 @@ test("shift+tab is the only mode control", async () => {
 	expect([...h.shortcuts.keys()]).toEqual(["shift+tab"]);
 });
 
-test("plan and learn share one read-only tool set", async () => {
+test("plan and learn share one read-only tool set, and only plan gets the plan tool", async () => {
 	const h = await harness();
 	const readOnly = [
 		"read", "grep", "find", "ls", "bash",
@@ -118,9 +124,11 @@ test("plan and learn share one read-only tool set", async () => {
 		"ask_user_question", "intercom",
 	];
 
+	expect(h.planTool.defaultActive).toBe(false);
+
 	await h.shiftTab();
 	expect(h.mode()).toMatch(/plan mode$/);
-	expect(h.tools()).toEqual(readOnly);
+	expect(h.tools()).toEqual([...readOnly, "plan"]);
 
 	await h.shiftTab();
 	expect(h.mode()).toBe(LEARN_LABEL);
@@ -133,6 +141,7 @@ for (const [mode, presses] of [["plan", 1], ["learn", 2]] as const) {
 		for (let i = 0; i < presses; i++) await h.shiftTab();
 
 		const blocked = ["powershell", "edit", "write", "tool_search", "todo", "Agent", "SubagentWorkflow", "source_check", "custom_tool", "mcp_write"];
+		if (mode === "learn") blocked.push("plan");
 		for (const toolName of blocked) {
 			for (const parentToolCallId of [undefined, "outer-tool"]) {
 				const result = await h.emit("tool_call", { toolName, input: {}, parentToolCallId });
@@ -187,7 +196,7 @@ test("every part of a bash command must be allowlisted", () => {
 	}
 });
 
-test("learn sends its policy as the learn_mode section, only while learning", async () => {
+test("plan and learn send their rules as a prompt section, only in their mode", async () => {
 	const h = await harness();
 	const untouched = promptEvent().systemPromptOptions;
 
@@ -200,7 +209,10 @@ test("learn sends its policy as the learn_mode section, only while learning", as
 	expect(await turn()).toEqual(untouched);
 
 	await h.shiftTab();
-	expect(await turn()).toEqual(untouched);
+	expect(await turn()).toEqual({
+		appendSystemPrompt: "Other instructions.\n",
+		sections: { unrelated: "keep me", plan_mode: PLAN_MODE_PROMPT },
+	});
 
 	await h.shiftTab();
 	expect(await turn()).toEqual({
@@ -221,9 +233,14 @@ test("learn's policy reaches turns without a UI", async () => {
 	expect(event.systemPromptOptions.sections.learn_mode).toBe(LEARN_MODE_PROMPT);
 });
 
-test("learn adds a hidden note to every turn, and other modes do not", async () => {
+test("plan and learn each add their own hidden note to every turn", async () => {
 	const h = await harness();
 	const note = async () => (await h.emit("before_agent_start", promptEvent()))?.message;
+	const planNote = {
+		customType: "plan-mode-context",
+		content: expect.stringContaining("follow the <plan_mode> rules"),
+		display: false,
+	};
 	const learnNote = {
 		customType: "learn-mode-context",
 		content: expect.stringContaining("follow the <learn_mode> rules"),
@@ -233,7 +250,8 @@ test("learn adds a hidden note to every turn, and other modes do not", async () 
 	expect(await note()).toBeUndefined();
 
 	await h.shiftTab();
-	expect((await note()).customType).toBe("plan-mode-context");
+	expect(await note()).toEqual(planNote);
+	expect(await note()).toEqual(planNote);
 
 	await h.shiftTab();
 	expect(await note()).toEqual(learnNote);
@@ -244,35 +262,28 @@ test("learn adds a hidden note to every turn, and other modes do not", async () 
 });
 
 test("each mode keeps only its own notes in context, and the lesson in all of them", async () => {
-	const planNote = { role: "custom", customType: "plan-mode-context", content: "Produce a plan." };
-	const execute = { role: "custom", customType: "plan-mode-execute", content: "Execute the plan." };
+	const planNote = { role: "custom", customType: "plan-mode-context", content: "Read-only." };
 	const learnNote = { role: "custom", customType: "learn-mode-context", content: "Guide, don't solve." };
+	const other = { role: "custom", customType: "other-extension", content: "Keep me." };
 	const explanation = { role: "assistant", content: [{ type: "text", text: "A return exits the whole function." }] };
 	const lesson = { role: "user", content: "I understand return. I have not traced the loop yet." };
 
 	const h = await harness();
 	const context = async () => {
-		const messages = [planNote, execute, learnNote, explanation, lesson];
+		const messages = [planNote, learnNote, other, explanation, lesson];
 		return (await h.emit("context", { messages })).messages;
 	};
 
-	expect(await context()).toEqual([execute, explanation, lesson]);
+	expect(await context()).toEqual([other, explanation, lesson]);
 
 	await h.shiftTab();
-	expect(await context()).toEqual([planNote, execute, explanation, lesson]);
+	expect(await context()).toEqual([planNote, other, explanation, lesson]);
 
 	await h.shiftTab();
-	expect(await context()).toEqual([learnNote, explanation, lesson]);
+	expect(await context()).toEqual([learnNote, other, explanation, lesson]);
 
 	await h.shiftTab();
-	expect(await context()).toEqual([execute, explanation, lesson]);
-});
-
-test("learn never offers to execute a Plan section", async () => {
-	const h = await harness({ flags: { learn: true } });
-
-	await h.emit("agent_end", { messages: [{ role: "assistant", content: [{ type: "text", text: "Plan:\n1. Implement a solution" }] }] });
-	expect(h.sent).toHaveLength(0);
+	expect(await context()).toEqual([other, explanation, lesson]);
 });
 
 test("a full cycle back to build restores the original tools and allows edits", async () => {
@@ -339,18 +350,35 @@ test("startup flags override saved state, and learn wins over plan", async () =>
 	expect((await harness({ flags: { plan: true } })).mode()).toMatch(/plan mode$/);
 });
 
-test("execute switches to build even before pi is idle", async () => {
+test("approving a plan switches to build within the running turn", async () => {
 	const h = await harness({ flags: { plan: true } });
 	h.setIdle(false);
-	h.setChoice("Execute the plan");
+	h.setChoice("Approve");
 
-	await h.emit("agent_end", {
-		messages: [{ role: "assistant", content: [{ type: "text", text: "Plan:\n1. Implement the feature\n2. Check the behavior" }] }],
-	});
+	const result = await h.callPlan();
+
+	expect(h.selects).toEqual([{ title: "Approve this plan?", options: ["Approve", "Revise"] }]);
+	expect(result.terminate).toBeUndefined();
+	expect(result.content[0].text).toContain("The user approved the plan");
 	expect(h.mode()).toMatch(/build mode$/);
 	expect(h.tools()).toEqual(BUILD_TOOLS);
-	expect(h.sent.at(-1).message.customType).toBe("plan-mode-execute");
+	expect(h.entries().at(-1)!.data.mode).toBe("build");
+	expect(await h.emit("tool_call", { toolName: "edit", input: {} })).toBeUndefined();
 });
+
+for (const choice of ["Revise", undefined]) {
+	test(`choosing ${choice ?? "nothing"} keeps plan mode and ends the turn`, async () => {
+		const h = await harness({ flags: { plan: true } });
+		h.setChoice(choice);
+
+		const result = await h.callPlan();
+
+		expect(result.terminate).toBe(true);
+		expect(result.content[0].text).toContain("revise the plan");
+		expect(h.mode()).toMatch(/plan mode$/);
+		expect(h.tools()).toContain("plan");
+	});
+}
 
 test("mode icons share one neutral color, and everforest learn uses muted teal", () => {
 	for (const theme of ["everforest-dark-hard", "everforest-dark-medium", "dark"]) {

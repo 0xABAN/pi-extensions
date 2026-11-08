@@ -93,8 +93,8 @@
       "version": "0.1.0",
       "peerDependencies": {
         "@earendil-works/pi-agent-core": "*",
-        "@earendil-works/pi-ai": "*",
         "@earendil-works/pi-coding-agent": "*",
+        "typebox": "*",
       },
     },
     "powerline": {

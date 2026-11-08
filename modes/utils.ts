@@ -145,24 +145,3 @@ export function isSafeCommand(command: string): boolean {
 
 	return parts.every(isSafePart);
 }
-
-/** Numbered steps under a "Plan:" header — handed to rpiv-todo on execute. */
-export function extractPlanSteps(message: string): string[] {
-	const headerMatch = message.match(/\*{0,2}Plan:\*{0,2}\s*\n/i);
-	if (!headerMatch) return [];
-
-	const planSection = message.slice(message.indexOf(headerMatch[0]) + headerMatch[0].length);
-	const steps: string[] = [];
-	const numberedPattern = /^\s*(\d+)[.)]\s+\*{0,2}([^*\n]+)/gm;
-
-	for (const match of planSection.matchAll(numberedPattern)) {
-		const text = match[2]
-			.replace(/`([^`]+)`/g, "$1")
-			.replace(/\s+/g, " ")
-			.trim();
-		if (text.length > 5 && !text.startsWith("`") && !text.startsWith("/") && !text.startsWith("-")) {
-			steps.push(text.charAt(0).toUpperCase() + text.slice(1));
-		}
-	}
-	return steps;
-}

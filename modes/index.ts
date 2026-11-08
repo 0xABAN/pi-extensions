@@ -1,26 +1,32 @@
 /**
  * Build, Plan, and Learn share one mode controller and tool checkpoint.
- * Shift+Tab cycles modes. Plan and Learn share one read-only tool set.
- * Plan preserves the existing exploration/execute flow. Learn teaches without
- * doing the task.
+ * Shift+Tab cycles modes. Plan and Learn share one read-only tool set, and each
+ * adds its rules as a prompt section plus a short note on every turn. Plan asks
+ * for approval through the plan tool. Learn teaches without doing the task.
  */
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, TextContent } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type AgentMode, extractPlanSteps, isSafeCommand, READ_ONLY_TOOLS } from "./utils.ts";
+import { type AgentMode, isSafeCommand, READ_ONLY_TOOLS } from "./utils.ts";
 import { formatModeStatus } from "./status.ts";
 import { LEARN_MODE_PROMPT } from "./learn.ts";
+import { PLAN_MODE_PROMPT, PLAN_TOOL, registerPlanTool } from "./plan.ts";
 
-function isAssistantMessage(m: AgentMessage): m is AssistantMessage {
-	return m.role === "assistant" && Array.isArray(m.content);
-}
+const MODE_PROMPTS = {
+	plan: PLAN_MODE_PROMPT,
+	learn: LEARN_MODE_PROMPT,
+};
 
-function getTextContent(message: AssistantMessage): string {
-	return message.content
-		.filter((block): block is TextContent => block.type === "text")
-		.map((block) => block.text)
-		.join("\n");
+const MODE_NOTES = {
+	plan: "Plan mode: follow the <plan_mode> rules. Read-only; call the plan tool when proposing a change.",
+	learn:
+		"Learn mode: follow the <learn_mode> rules. Guide, don't solve: no code, fixes, or solution steps. Under 100 words, at most one question.",
+};
+
+const NOTE_TYPES = new Set(["plan-mode-context", "learn-mode-context"]);
+
+function noteType(mode: AgentMode): string {
+	return `${mode}-mode-context`;
 }
 
 interface ModeState {
@@ -50,8 +56,14 @@ export default function modesExtension(pi: ExtensionAPI): void {
 		ctx.ui.setStatus("agent-thinking", status.thinking);
 	}
 
+	function modeTools(): string[] {
+		if (mode === "plan") return [...READ_ONLY_TOOLS, PLAN_TOOL];
+		if (mode === "learn") return [...READ_ONLY_TOOLS];
+		return buildTools;
+	}
+
 	function applyModeTools(): void {
-		pi.setActiveTools(mode === "build" ? buildTools : [...READ_ONLY_TOOLS]);
+		pi.setActiveTools(modeTools());
 	}
 
 	function persistState(): void {
@@ -94,6 +106,8 @@ export default function modesExtension(pi: ExtensionAPI): void {
 		updateStatus(ctx);
 	}
 
+	registerPlanTool(pi, (ctx) => setMode("build", ctx));
+
 	pi.registerShortcut("shift+tab", {
 		description: "Cycle build, plan, and learn modes",
 		handler: async (ctx) => changeMode(mode === "build" ? "plan" : mode === "plan" ? "learn" : "build", ctx),
@@ -104,11 +118,12 @@ export default function modesExtension(pi: ExtensionAPI): void {
 		if (mode === "build") return;
 
 		const leave = "Ask the user to press Shift+Tab to return to build mode.";
+		const allowed = modeTools();
 
-		if (!READ_ONLY_TOOLS.has(event.toolName)) {
+		if (!allowed.includes(event.toolName)) {
 			return {
 				block: true,
-				reason: `${mode} mode permits only ${[...READ_ONLY_TOOLS].join(", ")}. ${leave}`,
+				reason: `${mode} mode permits only ${allowed.join(", ")}. ${leave}`,
 			};
 		}
 
@@ -123,89 +138,24 @@ export default function modesExtension(pi: ExtensionAPI): void {
 		}
 	});
 
-	function staleNotes(): Set<string> {
-		if (mode === "plan") return new Set(["learn-mode-context"]);
-		if (mode === "learn") return new Set(["plan-mode-context", "plan-mode-execute"]);
-		return new Set(["plan-mode-context", "learn-mode-context"]);
-	}
-
-	// Each mode keeps only its own notes; Learn also drops Plan's execution reminders.
-	pi.on("context", async (event) => {
-		const stale = staleNotes();
-		return {
-			messages: event.messages.filter((m) => {
-				const { customType } = m as AgentMessage & { customType?: string };
-				return !customType || !stale.has(customType);
-			}),
-		};
-	});
+	// Each mode keeps only its own notes; Build keeps none.
+	pi.on("context", async (event) => ({
+		messages: event.messages.filter((m) => {
+			const { customType } = m as AgentMessage & { customType?: string };
+			return !customType || !NOTE_TYPES.has(customType) || customType === noteType(mode);
+		}),
+	}));
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		// Status strings contain ANSI colors; refresh after a theme selection.
 		if (ctx.hasUI) updateStatus(ctx);
 
-		if (mode === "learn") {
-			event.systemPromptOptions.sections.learn_mode = LEARN_MODE_PROMPT;
-			return {
-				message: {
-					customType: "learn-mode-context",
-					content:
-						"Learn mode: follow the <learn_mode> rules. Guide, don't solve: no code, fixes, or solution steps. Under 100 words, at most one question.",
-					display: false,
-				},
-			};
-		}
-		if (mode !== "plan") return;
+		if (mode === "build") return;
+
+		event.systemPromptOptions.sections[`${mode}_mode`] = MODE_PROMPTS[mode];
 		return {
-			message: {
-				customType: "plan-mode-context",
-				content:
-					'Plan mode: read-only. Explore, ask questions, then output a numbered plan under a "Plan:" header. Do not modify files.',
-				display: false,
-			},
+			message: { customType: noteType(mode), content: MODE_NOTES[mode], display: false },
 		};
-	});
-
-	// After a Plan: section, offer execute / stay / refine
-	pi.on("agent_end", async (event, ctx) => {
-		if (mode !== "plan" || !ctx.hasUI) return;
-
-		const lastAssistant = event.messages.findLast(isAssistantMessage);
-		if (!lastAssistant) return;
-
-		const steps = extractPlanSteps(getTextContent(lastAssistant));
-		if (steps.length === 0) return;
-
-		const choice = await ctx.ui.select("Plan mode - what next?", [
-			"Execute the plan",
-			"Stay in plan mode",
-			"Refine the plan",
-		]);
-
-		if (mode !== "plan") return;
-
-		if (choice?.startsWith("Execute")) {
-			setMode("build", ctx);
-
-			const list = steps.map((s, i) => `${i + 1}. ${s}`).join("\n");
-			pi.sendMessage(
-				{
-					customType: "plan-mode-execute",
-					content: `Execute the plan.
-
-Reminder: seed these as todos first (one create per step), then work them in order.
-
-${list}`,
-					display: true,
-				},
-				{ triggerTurn: true, deliverAs: "followUp" },
-			);
-		} else if (choice === "Refine the plan") {
-			const refinement = await ctx.ui.editor("Refine the plan:", "");
-			if (refinement?.trim()) {
-				pi.sendUserMessage(refinement.trim(), { deliverAs: "followUp" });
-			}
-		}
 	});
 
 	pi.on("thinking_level_select", async (_event, ctx) => {
