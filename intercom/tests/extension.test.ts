@@ -79,6 +79,14 @@ afterAll(async () => {
 	await beta.emit("session_shutdown");
 	const pid = Number(readFileSync(join(agentDir, "intercom", "broker.pid"), "utf8"));
 	process.kill(pid, "SIGTERM");
+	await waitFor(() => {
+		try {
+			process.kill(pid, 0);
+			return false;
+		} catch {
+			return true;
+		}
+	});
 	rmSync(agentDir, { recursive: true, force: true });
 });
 
