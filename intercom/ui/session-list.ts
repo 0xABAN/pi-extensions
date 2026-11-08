@@ -80,7 +80,6 @@ export class SessionListOverlay implements Component {
     this.pool = pool;
   }
 
-
   invalidate(): void {}
 
   handleInput(data: string): void {

@@ -65,9 +65,6 @@ export class ReplyTracker {
 
   beginTurn(now = Date.now()): void {
     this.pruneExpired(now);
-    // Every message queued since the last turn is visible to this one, and some of them
-    // started no turn (inboundTrigger "never"/"replies"). The bare-reply target is the only
-    // ask among them, or the newest message when none asks; several asks leave it to `to`.
     const delivered = this.pendingTurnContexts.splice(0);
     const asks = delivered.filter((context) => context.message.expectsReply);
     this.currentTurnContext = asks.length > 0

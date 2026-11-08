@@ -91,7 +91,6 @@ interface DeliveryRequest {
   replyTo?: string;
   supersedes?: string;
   retryOf?: string;
-  /** Handovers are always new messages and are not sent once the signal aborts. */
   handover?: boolean;
 }
 
@@ -100,7 +99,6 @@ interface IntercomToolResult {
   details: Record<string, unknown>;
 }
 
-/** `rawTo` is the string the caller addressed; pass "" to disable the name-prefix fallback. */
 interface PrefixTarget {
   rawTo: string;
   firstTarget: string;
@@ -109,11 +107,8 @@ interface PrefixTarget {
 
 interface PrefixSend {
   result: SendResult;
-  /** The resolved session name after a prefix retry, otherwise the caller's display. */
   display: string;
-  /** ` ("<raw>" resolved to "<name>")` after a prefix retry, otherwise "". */
   resolution: string;
-  /** Set when the broker refused the raw target and no connected name starts with it. */
   noMatchText?: string;
 }
 
@@ -160,8 +155,6 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// Pi 1.2.0 runs before_agent_start for sendMessage({ triggerTurn: true }) turns (pi#5581) and marks
-// the session busy as soon as such a run starts. An unparseable version counts as older Pi.
 function triggerTurnRunsPromptLifecycle(piVersion: string): boolean {
   const match = /^(\d+)\.(\d+)\./.exec(piVersion);
   if (!match) return false;
@@ -188,7 +181,6 @@ export function explicitCrossMachineSendRestriction(options: {
   return undefined;
 }
 
-// An unconfirmed outcome must not read as a failure: the receiver may still have the message.
 function undeliveredText(target: string, result: SendResult): string {
   const reason = result.reason ?? "Session may not exist or has disconnected.";
   return result.outcomeKnown
@@ -596,18 +588,10 @@ function buildPresenceIdentity(pi: ExtensionAPI, sessionId: string): { name: str
 function resolveConfiguredIntercomSessionId(piSessionId: string, config: IntercomConfig): string {
   return process.env[STABLE_INTERCOM_SESSION_ID_ENV]?.trim() || config.stableId || piSessionId;
 }
-// The tmux pane id (e.g. "%212") the session was launched in. $TMUX_PANE is
-// inherited at process start and immutable for the lifetime — moving the pane
-// between windows keeps its id — so it is a stable join key a peer can use to
-// live-resolve the current window via tmux. Absent outside tmux.
 function currentTmuxPane(): string | undefined {
   const pane = process.env.TMUX_PANE?.trim();
   return pane ? pane : undefined;
 }
-// Herdr exports a launch-time pane alias to hosted processes. Its visible,
-// workspace-qualified id can change when the pane moves, so registration also
-// carries the stable Pi session file and the broker resolves both against a
-// fresh snapshot. Workspace and tab ids are intentionally never registered.
 function currentHerdrPane(): string | undefined {
   const pane = process.env.HERDR_PANE_ID?.trim();
   return pane ? pane : undefined;
@@ -709,8 +693,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
   let reconnectPromiseGeneration: number | null = null;
   let startupConnectTimer: NodeJS.Timeout | null = null;
   let reconnectAttempt = 0;
-  // Retrying a held session id cannot succeed until its holder exits, so background reconnects stop
-  // until the next session start (/reload) or a successful manual connect.
   let sessionHeldBlocked = false;
   let shuttingDown = false;
   let disposed = true;
@@ -771,7 +753,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
         ...(detail ? { detail } : {}),
       });
     } catch {
-      // Receipts are diagnostics; message handling should not fail when the sender disconnects.
     }
   }
   function handleMessageControl(control: MessageControl): void {
@@ -873,7 +854,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       void ctx.hasUI;
       return ctx;
     } catch {
-      // A context that throws while reading session/UI state is no longer usable.
       return null;
     }
   }
@@ -885,15 +865,12 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     try {
       liveContext.ui.notify(message, level);
     } catch {
-      // The UI can disappear during session shutdown/reload while async overlay work is settling.
     }
   }
   function notifyCommand(ctx: ExtensionContext, message: string, level: "info" | "warning" | "error", generation = runtimeGeneration): void {
     const liveContext = getLiveContext(ctx, generation);
     if (!liveContext) return;
     if (!liveContext.hasUI) {
-      // Command handlers return void and print mode supplies a no-op UI. Keep
-      // command output visible without injecting a synthetic Pi message.
       console.error(message);
       return;
     }
@@ -912,7 +889,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     try {
       localExtensions.get(namespace)?.registration.onEvent(event);
     } catch {
-      // One local extension must not break intercom or other extension channels.
     }
   }
   function createExtensionChannel(namespace: string): IntercomExtensionChannel {
@@ -983,8 +959,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     const activeClient = client;
     const connected = Boolean(activeClient?.isConnected());
     const supported = Boolean(activeClient?.supportsFeature(EXTENSION_BUS_FEATURE));
-    // Write the capability update before exposing a connected channel. Socket
-    // framing preserves this order if onReady publishes synchronously.
     if (activeClient && connected && supported) {
       activeClient.updateExtensionCapabilities(currentExtensionCapabilities());
     }
@@ -1014,7 +988,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       ...(tmuxPane ? { tmuxPane } : {}),
       ...(herdrPaneId ? { herdrPaneId } : {}),
       ...(herdrSessionPath ? { herdrSessionPath } : {}),
-      // handleIncomingMessage confirms every message it accepts; one that lands mid-reload goes unconfirmed.
       acknowledgesReceipts: true,
       ...(localExtensions.size > 0
         ? {
@@ -1023,11 +996,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
         : {}),
     };
   }
-  // Snapshot the live session's context-window usage for presence. getContextUsage()
-  // (stock SDK) reports { tokens, contextWindow, percent }, with tokens/percent null
-  // right after a compaction (before the next assistant response). We emit null in
-  // that case to CLEAR a peer's stale value rather than freeze the old percentage.
-  // Feature-detected so an older runtime without getContextUsage() just omits it.
   function currentContextUsage(): { contextPct?: number | null; contextTokens?: number | null; contextWindow?: number } {
     const usage = getLiveContext()?.getContextUsage?.();
     if (!usage) {
@@ -1082,7 +1050,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     if (!client || !currentSessionId || !getLiveContext()) {
       return;
     }
-    // context% rides the status heartbeat so peers see live usage at turn boundaries.
     client.updatePresence({ status: currentStatus(), ...currentContextUsage() });
   }
   function currentSessionTargetMatches(to: string, resolvedTo?: string | null, activeClient?: IntercomClient): boolean {
@@ -1340,8 +1307,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       },
       startTurn ? { triggerTurn: true } : trigger ? undefined : { deliverAs: "steer" }
     );
-    // Pi before 1.2.0 skips before_agent_start for sendMessage({ triggerTurn: true }) turns (pi#5581),
-    // so wake an idle session there with a user prompt that runs the normal prompt lifecycle.
     if (!wakeWithTriggerTurn && triggerContext?.isIdle() && !isIdleWakePending(triggerContext.sessionManager)) {
       reserveIdleWake(triggerContext.sessionManager);
       pi.sendUserMessage("New intercom message above.", { deliverAs: "steer" });
@@ -1366,7 +1331,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
               });
               if (result.delivered && getLiveContext(ctx, generation)) dismissIncomingAsk(entry.message.id);
             } catch {
-              // Best-effort reply; keep the busy non-interactive session running either way.
             }
           })();
         }
@@ -1440,7 +1404,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     replyTracker.recordIncomingMessage(from, receivedMessage, receiverReceivedAt);
     emitMessageReceipt(receivedMessage.id, "acknowledged", "accepted by receiver");
     const entry = { from, message: receivedMessage, replyCommand, bodyText };
-    // Busy without an agent run cannot steer; manual compaction can discard an appended custom entry.
     if (heldInboundMessages.length > 0 || (!liveContext.isIdle() && (!agentRunning || (config.busyDelivery === "human-first" && liveContext.hasUI)))) {
       holdIncomingBrokerMessage(entry, liveContext, messageGeneration);
     } else {
@@ -1549,7 +1512,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       }
     });
     nextClient.on("error", () => {
-      // Keep broker/socket noise out of the TUI. Reconnect logic runs from the disconnect path.
     });
   }
   function markLocalExtensionsDisconnected(): void {
@@ -1571,7 +1533,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       }
       reconnectAttempt += 1;
       void ensureConnected("background").catch(() => {
-        // ensureConnected("background") already queued the next retry.
       });
     }, getReconnectDelayMs());
   }
@@ -1636,7 +1597,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
           reconnectPromise = null;
           reconnectPromiseGeneration = null;
         }
-        // scheduleReconnect() skips while reconnectPromise is set, so queue the retry only after clearing it.
         if (retryAfterFailure && getLiveContext(contextAtStart, generationAtStart)) {
           scheduleReconnect();
         }
@@ -1672,13 +1632,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     }
     return null;
   }
-  /**
-   * Sends to `firstTarget` and, only when that is the raw unresolved string and the broker answered
-   * E_TARGET_NOT_FOUND for it, retries once with the unique connected session whose name starts with
-   * it. Raw-first lets the broker queue for (send) or refuse (ask) an offline session addressed by its
-   * exact name before a connected session whose name merely extends it can capture the message.
-   * `attempt` must use a fresh message id per call. Throws when several connected names share the prefix.
-   */
   async function sendWithNamePrefixFallback(activeClient: IntercomClient, target: PrefixTarget, attempt: (target: string) => Promise<SendResult>): Promise<PrefixSend> {
     const { rawTo, firstTarget, display } = target;
     const result = await attempt(firstTarget);
@@ -1699,7 +1652,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     }
     return { result: await attempt(match.id), display: match.name!, resolution: ` ("${rawTo}" resolved to "${match.name}")` };
   }
-  /** Blocking variant: each attempt registers its reply waiter before sending and releases it when refused, so a retry can register its own. */
   async function askWithNamePrefixFallback(activeClient: IntercomClient, target: PrefixTarget, payload: Omit<Parameters<IntercomClient["send"]>[1], "messageId" | "expectsReply">, wait: {
     signal: AbortSignal | undefined;
     onAttempt: (askId: string) => void;
@@ -1707,7 +1659,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
   }): Promise<PrefixSend & { reply: Promise<Message> }> {
     let reply!: Promise<Message>;
     const sent = await sendWithNamePrefixFallback(activeClient, target, async (attemptTo) => {
-      // The listSessions round trip before a retry can outlive an abort; never send an ask nobody can cancel.
       if (wait.signal?.aborted) {
         throw new Error("Cancelled");
       }
@@ -1815,7 +1766,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     });
     return { id: session.id, label: session.name || session.id, projectPane };
   }
-  /** Shared by send, handover, and /handover. Never throws; failures are returned as error results. */
   async function deliverMessage(
     connectedClient: IntercomClient,
     ctx: ExtensionContext,
@@ -2193,7 +2143,7 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     }
     startSessionRuntime(ctx);
   });
-  
+
   pi.on("session_shutdown", async () => {
     unsubscribeExtensionRegister();
     unsubscribeSubagentControlIntercom();
@@ -2226,7 +2176,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       return;
     }
     replyTracker.endTurn();
-    // Aborted/error turns cannot consume a steer; leave their peers for the idle trigger.
     if (config.busyDelivery === "human-first" && ctx.hasUI && event.message.role === "assistant"
       && event.message.stopReason !== "aborted" && event.message.stopReason !== "error"
       && heldInboundMessages.length > 0 && agentRunning
@@ -2297,7 +2246,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
     }
   });
 
-  // Key by the outer CustomMessage, which the host reuses across child rebuilds.
   const inlineMessageExpansion = new WeakMap<object, { globalExpanded: boolean; expanded: boolean }>();
   pi.registerMessageRenderer("intercom_message", (message, options, theme) => {
     const details = message.details as { from: SessionInfo; message: Message; replyCommand?: string; bodyText?: string } | undefined;
@@ -2307,7 +2255,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
       expansionState = { globalExpanded: options.expanded, expanded: options.expanded };
       inlineMessageExpansion.set(message, expansionState);
     } else if (expansionState.globalExpanded !== options.expanded) {
-      // Reset in the callback, even when two global changes occur before render.
       expansionState.globalExpanded = options.expanded;
       expansionState.expanded = options.expanded;
     }
@@ -2417,8 +2364,6 @@ export default function piIntercomExtension(pi: ExtensionAPI, piVersion = VERSIO
             details: { error: true },
           };
         }
-        // A stable supervisor id is authoritative: an unresolved one goes to the broker raw, so its
-        // mailbox lookup by id applies, and never falls back to a name-prefix guess.
         const sendTo = resolvedSupervisor ?? metadata.orchestratorSessionId ?? metadata.orchestratorTarget;
         const supervisorTarget: PrefixTarget = {
           rawTo: metadata.orchestratorSessionId ? "" : metadata.orchestratorTarget,
@@ -2716,8 +2661,6 @@ Usage:
               };
             }
 
-            // Default to the current session's cwd; an explicit `cwd` overrides
-            // (relative paths resolved against it, "." meaning the current cwd).
             const filterCwd = cwd && cwd !== "."
               ? resolvePath(currentSession.cwd, cwd)
               : currentSession.cwd;
@@ -2726,9 +2669,6 @@ Usage:
               s => s.id !== mySessionId && sameCwd(s.cwd, filterCwd),
             );
 
-            // Fail loud: filtering by a directory with no peers while the
-            // session's OWN cwd has some otherwise reads as a misleading empty
-            // result (common when a caller passes a guessed parent cwd).
             let emptyNote = "No other sessions in this directory.";
             if (otherSessions.length === 0 && !sameCwd(filterCwd, currentSession.cwd)) {
               const here = sessions.filter(
@@ -3058,7 +2998,6 @@ Usage:
       const failed = Boolean(context.isError || details?.error === true || details?.delivered === false);
       let text = failed ? theme.fg("error", "✗ ") : theme.fg("success", "✓ ");
       if (details?.roster && !failed && !context.expanded) {
-        // Collapsed rows are display-only; the model still receives the full roster text.
         const { peers, total, cwd: rosterCwd } = details.roster;
         const where = rosterCwd ? ` in ${rosterCwd}` : "";
         text += theme.fg("text", peers === 0 ? `no other sessions${where}` : `${peers} other session${peers === 1 ? "" : "s"}${where}`);
@@ -3152,9 +3091,6 @@ Usage:
       return;
     }
 
-    // Pi's session_info_changed event updates the built-in UI, but it is not
-    // an ExtensionAPI event. Push the new identity directly so broker peers
-    // see the alias without waiting for the idle name poll.
     syncPresenceIdentity(liveContext.sessionManager.getSessionId());
     notifyCommand(liveContext, `Session alias set: ${alias}`, "info", commandGeneration);
   }
@@ -3169,7 +3105,6 @@ Usage:
       return;
     }
     const nextPool = requested === "default" ? undefined : requested;
-    // A connect already in flight registered with the old pool; let it settle first.
     await reconnectPromise?.catch(() => undefined);
     if (!getLiveContext(liveContext, commandGeneration)) return;
     if (nextPool === getIntercomScopeId()) {
@@ -3177,7 +3112,6 @@ Usage:
       return;
     }
     if (replyWaiter) {
-      // The reply is routed inside the current pool and would be lost after the switch.
       notifyCommand(liveContext, `Cannot switch intercom pool while waiting for a reply from "${replyWaiter.from}". Wait for the reply or cancel the ask first.`, "warning", commandGeneration);
       return;
     }
@@ -3193,7 +3127,6 @@ Usage:
       await ensureConnected("background");
     } catch (error) {
       if (getLiveContext(liveContext, commandGeneration)) {
-        // A tool connect that started during the switch may own this failed attempt, and it does not retry.
         scheduleReconnect();
       }
       notifyCommand(liveContext, `Switched to intercom pool ${requested}, but intercom is unavailable: ${getErrorMessage(error)}. Retrying in the background.`, "warning", commandGeneration);

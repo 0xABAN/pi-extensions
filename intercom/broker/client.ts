@@ -58,7 +58,6 @@ function connectToBrokerTarget(target: BrokerConnectTarget): net.Socket {
     : net.connect({ host: target.host, port: target.port });
 }
 
-/** connect() rejected because another live process holds the requested session id. */
 export class IntercomSessionHeldError extends Error {
   readonly code = SESSION_HELD_ERROR_CODE;
   constructor(message: string, readonly holder: SessionHolder) {
@@ -109,13 +108,6 @@ export class IntercomClient extends EventEmitter {
     return Boolean(socket && this._sessionId && !this.disconnecting && !socket.destroyed && !socket.writableEnded && socket.writable);
   }
 
-  /**
-   * Start the liveness heartbeat. Must be called once the connection is
-   * registered. The heartbeat periodically round-trips a lightweight list
-   * request and tears down the socket if the broker does not respond within
-   * the liveness timeout, so a half-open connection is detected within a
-   * bounded window instead of silently lingering forever.
-   */
   private startLivenessHeartbeat(): void {
     this.stopLivenessHeartbeat();
     this.livenessTimer = setInterval(() => {
@@ -140,9 +132,6 @@ export class IntercomClient extends EventEmitter {
     try {
       await this.listSessions({ timeoutMs: getLivenessTimeoutMs() });
     } catch (error) {
-      // A timeout or write error means the socket is half-open: the broker is
-      // gone but the OS never delivered a close event. Destroy the socket so
-      // the onClose handler emits "disconnected" and the extension reconnects.
       const socket = this.socket;
       if (socket && !socket.destroyed) {
         this.disconnectError = toError(error);
@@ -199,9 +188,9 @@ export class IntercomClient extends EventEmitter {
           reject(new Error("Connection timeout"));
         }
       }, 10000);
-      
+
       let connectionEstablished = false;
-      
+
       const onRegistered = () => {
         settled = true;
         connectionEstablished = true;
@@ -209,7 +198,7 @@ export class IntercomClient extends EventEmitter {
         this.startLivenessHeartbeat();
         resolve();
       };
-      
+
       const onError = (err: Error) => {
         settled = true;
         cleanupConnectionAttempt();
@@ -220,7 +209,7 @@ export class IntercomClient extends EventEmitter {
         socket.destroy();
         reject(err);
       };
-      
+
       const onClose = () => {
         const wasConnecting = !settled && !this._sessionId;
         const wasDisconnecting = this.disconnecting;
@@ -248,10 +237,6 @@ export class IntercomClient extends EventEmitter {
         if (connectionEstablished) {
           this.disconnectError = err;
           this.emit("error", err);
-          // A socket error after registration means the connection is dead.
-          // Destroy the socket so onClose fires and emits "disconnected",
-          // driving the extension's reconnect path. Without this, a half-open
-          // socket can linger with isConnected() returning true.
           if (!socket.destroyed) {
             socket.destroy();
           }
@@ -276,7 +261,7 @@ export class IntercomClient extends EventEmitter {
       const reader = createMessageReader((msg) => {
         this.handleBrokerMessage(msg);
       }, onReaderError);
-      
+
       const cleanupConnectionAttempt = () => {
         this.off("_registered", onRegistered);
         socket.off("error", onError);
@@ -288,14 +273,14 @@ export class IntercomClient extends EventEmitter {
         socket.off("error", onSocketError);
         socket.off("close", onClose);
       };
-      
+
       socket.on("data", reader);
       socket.on("error", onError);
       socket.on("close", onClose);
-      
+
       socket.on("error", onSocketError);
       this.once("_registered", onRegistered);
-      
+
       try {
         const scopeId = getIntercomScopeId();
         writeMessage(socket, {
@@ -365,7 +350,6 @@ export class IntercomClient extends EventEmitter {
 
         const pending = this.pendingLists.get(requestId);
         if (!pending) {
-          // Late list responses can still arrive after the caller has already timed out.
           return;
         }
 
@@ -392,7 +376,6 @@ export class IntercomClient extends EventEmitter {
 
         const pending = this.pendingSends.get(messageId);
         if (!pending) {
-          // Late send responses are harmless once the caller has already timed out.
           return;
         }
 
@@ -409,7 +392,6 @@ export class IntercomClient extends EventEmitter {
 
         const pending = this.pendingSends.get(messageId);
         if (!pending) {
-          // Late send responses are harmless once the caller has already timed out.
           return;
         }
 
@@ -588,7 +570,6 @@ export class IntercomClient extends EventEmitter {
         writeMessage(socket, { type: "unregister" });
         socket.end();
       } catch {
-        // Disconnect should still finish even if the unregister write fails.
         socket.destroy();
       }
     });
@@ -607,7 +588,7 @@ export class IntercomClient extends EventEmitter {
     } catch (error) {
       return Promise.reject(toError(error));
     }
-    
+
     return new Promise((resolve, reject) => {
       const requestId = randomUUID();
       const wrappedResolve = (sessions: SessionInfo[]) => {
@@ -642,7 +623,7 @@ export class IntercomClient extends EventEmitter {
     } catch (error) {
       throw toError(error);
     }
-    
+
     const messageId = options.messageId ?? randomUUID();
     const message: Message = {
       id: messageId,
@@ -769,7 +750,6 @@ export class IntercomClient extends EventEmitter {
     try {
       writeMessage(socket, { type: "cancel_ask", messageId });
     } catch {
-      // Cancellation is best-effort; local waiter cleanup must still proceed.
     }
   }
 

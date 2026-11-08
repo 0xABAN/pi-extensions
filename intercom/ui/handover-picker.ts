@@ -19,7 +19,6 @@ export interface HandoverPickerResult {
   goal?: string;
 }
 
-/** Remote listing runs over SSH through Herdr, so it is injected. */
 export interface RemoteSessionLister {
   listMachines(): Promise<SavedMachine[]>;
   listAgents(machine: SavedMachine): Promise<RemoteAgent[]>;
@@ -49,7 +48,6 @@ type Item =
   | { kind: "fetch" }
   | { kind: "remote"; machine: SavedMachine; agent: RemoteAgent };
 
-/** pi-subagents registers children under a "subagent-<agent>-<run>" session id; their name is the task text. */
 function isSubagentChild(session: SessionInfo): boolean {
   return session.id.startsWith("subagent-");
 }
@@ -160,7 +158,6 @@ export class HandoverPicker implements Component {
       || (this.remote.state === "machines" && this.remote.machines.some((entry) => entry.state === "fetching"));
     if (busy) return;
     this.remote = { state: "listing" };
-    // A new fetch drops the previous remote rows.
     this.selectedIndex = Math.min(this.selectedIndex, this.items().length - 1);
     this.tui.requestRender();
 
@@ -186,7 +183,6 @@ export class HandoverPicker implements Component {
         entry = { machine, state: "error", error: errorMessage(error) };
       }
       if (this.closed) return;
-      // Earlier machines can finish later, so keep the highlighted remote session selected.
       const selected = this.items()[this.selectedIndex];
       entries[index] = entry;
       if (selected?.kind === "remote") {
@@ -224,7 +220,6 @@ export class HandoverPicker implements Component {
     const body: string[] = [];
     let selectedStart = 0;
     let selectedEnd = 0;
-    // `suffix` follows the title and keeps its own colors; `details` are dim secondary lines.
     const pushItem = (item: Item, title: string, details: string[] = [], suffix = "") => {
       const selected = itemIndex.get(item) === this.selectedIndex;
       if (selected) selectedStart = body.length;

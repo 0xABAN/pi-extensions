@@ -45,7 +45,6 @@ const MAILBOX_MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 const MAX_MAILBOX_MESSAGES = 256;
 const DELIVERY_RECORD_RETENTION_MS = 60 * 60 * 1000;
 const MAX_DELIVERY_RECORDS = 4096;
-// Must stay below the client's 10s send timeout, so an unconfirmed send resolves as unknown instead of throwing.
 const RECEIPT_TIMEOUT_MS = readPositiveIntEnv(process.env.PI_INTERCOM_RECEIPT_TIMEOUT_MS, 5000, 10_000);
 const RECEIPT_PROOF_STATUSES = new Set<MessageReceiptStatus>(["receiver_received", "acknowledged", "queued", "injected"]);
 const LIVENESS_MISSED_INTERVALS = 3;
@@ -74,16 +73,12 @@ interface ConnectedSession {
   lastPresenceBroadcastAt: number;
   ownerOrder: number;
   extensions?: ExtensionCapability[];
-  /** Stable Pi session identity used only for live Herdr snapshot joins. This
-   * is a self-asserted local-client hint, not authenticated location evidence. */
   herdrSessionPath?: string;
   acknowledgesReceipts: boolean;
-  /** Heartbeat interval the client promised; absent for clients that never heartbeat. */
   livenessIntervalMs?: number;
   lastInboundAt: number;
 }
 
-/** A socket delivery whose success reply waits for the receiver's receipt. */
 interface PendingReceipt {
   senderSocket: net.Socket;
   fromKey: string;
@@ -170,8 +165,6 @@ function normalizeScopeId(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-// Clients share this host, so a signal-0 probe tells whether a claimed pid still runs.
-// EPERM means it exists under another user.
 function isProcessAlive(pid: number): boolean {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
@@ -268,7 +261,6 @@ class IntercomBroker {
       try {
         unlinkSync(LISTEN_TARGET);
       } catch {
-        // A clean startup has no stale socket to remove.
       }
     }
     this.server = net.createServer(this.handleConnection.bind(this));
@@ -307,15 +299,10 @@ class IntercomBroker {
     setInterval(() => this.evictSilentSessions(), LIVENESS_SWEEP_MS).unref();
   }
 
-  // A process that died without closing its socket can leave it open, and writes to it
-  // still succeed. Dropping a session whose client stopped heartbeating hands its mail
-  // to the mailbox through the normal close path.
   private evictSilentSessions(): void {
     const now = Date.now();
     const sinceLastSweepMs = now - this.lastLivenessSweepAt;
     this.lastLivenessSweepAt = now;
-    // A sweep this late means the broker itself was paused (system sleep suspends the
-    // broker and its clients together); a missed tick plus 1s covers ordinary timer lag.
     if (sinceLastSweepMs > 2 * LIVENESS_SWEEP_MS + 1000) {
       for (const session of this.sessions.values()) session.lastInboundAt = now;
       return;
@@ -331,7 +318,6 @@ class IntercomBroker {
 
   private handleConnection(socket: net.Socket): void {
     this.connections.add(socket);
-    // Lets the OS notice a dead peer on the TCP transport; pipes and Unix sockets ignore it.
     socket.setKeepAlive(true, TCP_KEEPALIVE_DELAY_MS);
     let sessionKey: string | null = null;
     let registrationTimeout: NodeJS.Timeout | null = null;
@@ -445,7 +431,6 @@ class IntercomBroker {
       if (this.sessions.size > 0) return;
       const now = Date.now();
       this.pruneMailboxMessages(now);
-      // Queued mail keeps the broker up until it is delivered or expires; recheck at the next expiry.
       if (this.mailboxMessages.length > 0) {
         const oldestQueuedAt = Math.min(...this.mailboxMessages.map(entry => entry.queuedAt));
         this.scheduleShutdownCheck(Math.max(oldestQueuedAt + MAILBOX_MESSAGE_RETENTION_MS - now + 1, 1000));
@@ -503,7 +488,7 @@ class IntercomBroker {
         if (currentKey) {
           throw new Error("Received duplicate register message");
         }
-        
+
         let id: string = randomUUID();
         if (clientMessage.sessionId !== undefined) {
           if (!isSessionId(clientMessage.sessionId)) {
@@ -535,8 +520,6 @@ class IntercomBroker {
           break;
         }
         if (previous && previous.info.pid !== session.pid && isProcessAlive(previous.info.pid)) {
-          // Another live process holds this id. Keep it; handing the id over makes the
-          // two processes evict each other on every reconnect (#155).
           const holder = previous.info;
           writeMessage(socket, {
             type: "error",
@@ -583,15 +566,12 @@ class IntercomBroker {
         };
         this.sessions.set(key, connectedSession);
         this.disconnectedSessions.delete(key);
-        
+
         if (this.shutdownTimer) {
           clearTimeout(this.shutdownTimer);
           this.shutdownTimer = null;
         }
 
-        // This must be the first broker message. Older clients ignore the
-        // additive features field; newer clients use it to avoid sending
-        // extension operations to an older broker.
         writeMessage(socket, {
           type: "registered",
           sessionId: id,
@@ -693,8 +673,6 @@ class IntercomBroker {
           .filter(session => sameScope(session.scopeId, requester.scopeId))
           .map(s => s.info);
         const requestId = clientMessage.requestId;
-        // Resolve all hosted panes from one bounded live snapshot. Never retain
-        // the result: moved panes must be re-resolved by the next list request.
         const herdrSessionPaths = new Map(
           Array.from(this.sessions.values())
             .filter(session => sameScope(session.scopeId, requester.scopeId) && session.herdrSessionPath)
@@ -1028,9 +1006,6 @@ class IntercomBroker {
               changed = true;
             }
           }
-          // Context-usage fields: a number updates, an explicit null CLEARS (the
-          // value is unknown right after a compaction — delete rather than carry
-          // the stale-high value forward), undefined leaves the field untouched.
           if (clientMessage.contextPct !== undefined) {
             if (clientMessage.contextPct === null) {
               if (session.info.contextPct !== undefined) { delete session.info.contextPct; changed = true; }
@@ -1157,8 +1132,6 @@ class IntercomBroker {
     this.removePendingAskRecord(replyTo, scopeId);
   }
 
-  // A receiver that promised receipts must confirm before the sender hears "delivered":
-  // a socket whose process died still accepts writes.
   private completeSocketDelivery(senderSocket: net.Socket, fromKey: string, scopeId: string | undefined, target: ConnectedSession, message: Message, fingerprint: string): void {
     if (!target.acknowledgesReceipts) {
       this.releaseReplyEdge(message.replyTo, scopeId);
@@ -1188,11 +1161,9 @@ class IntercomBroker {
     if (!pending || pending.targetSocket !== receiverSocket) return;
     clearTimeout(pending.timer);
     this.pendingReceipts.delete(key);
-    // A cancel or supersede may already have settled the record while the receipt was in flight.
     if (this.deliveryRecords.get(key)?.state === "unknown") {
       this.updateDeliveryRecord(pending.fromKey, pending.messageId, "socket_delivered");
     }
-    // Release the answered ask only now, so a retry of an unconfirmed reply still matches it.
     this.releaseReplyEdge(pending.replyTo, pending.scopeId);
     if (pending.senderSocket.writable) this.writeDeliverySuccess(pending.senderSocket, pending.messageId, "socket_delivered");
   }
@@ -1202,8 +1173,6 @@ class IntercomBroker {
     if (!pending) return;
     clearTimeout(pending.timer);
     this.pendingReceipts.delete(key);
-    // An unconfirmed ask keeps its edge, so a receiver that was only slow can still
-    // reply. pruneAskEdges expires it after the ask timeout if no reply comes.
     if (pending.senderSocket.writable) {
       writeMessage(pending.senderSocket, { type: "delivery_failed", messageId: pending.messageId, reason, delivery: "unknown", code, retryable: true, outcomeKnown: false });
     }
@@ -1211,7 +1180,6 @@ class IntercomBroker {
 
   private settlePendingReceiptsForSocket(socket: net.Socket): void {
     for (const [key, pending] of this.pendingReceipts) {
-      // A closed sender socket is unwritable, so this reason only ever reaches a live sender.
       if (pending.targetSocket === socket || pending.senderSocket === socket) {
         this.failPendingReceipt(key, "Receiver disconnected before confirming receipt", "E_RECEIVER_DISCONNECTED");
       }
@@ -1234,11 +1202,9 @@ class IntercomBroker {
     if (record.state === "unknown") {
       const pending = this.pendingReceipts.get(key);
       if (pending) {
-        // The receipt is still in flight; its outcome answers this retry.
         pending.senderSocket = socket;
         return true;
       }
-      // Receivers drop duplicate message ids, so a retry of an unconfirmed delivery is safe.
       this.deliveryRecords.delete(key);
       return false;
     }
@@ -1314,7 +1280,6 @@ class IntercomBroker {
         index += 1;
         continue;
       }
-      // The only bulk write to one socket: pace it so a large mailbox cannot trip writeMessage's queue cap.
       if (session.socket.writableLength >= MAX_FRAME_BYTES) {
         session.socket.once("drain", () => {
           if (this.sessions.get(session.key) === session) this.flushMailboxForSession(session);
@@ -1467,17 +1432,6 @@ class IntercomBroker {
     return matches.length === 1 ? matches[0]! : null;
   }
 
-  /**
-   * Mailbox identity is an explicit name plus directory, never name alone. A
-   * runtime fallback alias is derived from the session id rather than chosen as
-   * a durable identity, so it must not transfer mail to another process. This
-   * also prevents two unnamed UUIDv7 sessions started close together from
-   * inheriting each other's mailbox through a shared short alias.
-   *
-   * Directories compare through sameCwd so a relaunch that reports the same
-   * directory differently (trailing slash, "."/"..", or a symlink such as macOS
-   * /tmp vs /private/tmp) still matches.
-   */
   private findLiveSessionsSharingMailboxIdentity(sessionInfo: ConnectedSession | DisconnectedSession): ConnectedSession[] {
     const lowerName = sessionInfo.info.name?.toLowerCase();
     if (!lowerName || sessionInfo.info.runtimeFallbackAlias) {
@@ -1511,7 +1465,6 @@ class IntercomBroker {
   }
 
   private validateNamespace(ns: string): boolean {
-    // ^[a-z0-9][a-z0-9._/-]{0,63}$
     if (ns.length === 0 || ns.length > 64) {
       return false;
     }
@@ -1541,7 +1494,6 @@ class IntercomBroker {
       }
     }
 
-    // For each namespace, elect owner by (startedAt, sessionId).
     for (const [namespaceKey, scopedNamespace] of namespaces) {
       const { namespace, scopeId } = scopedNamespace;
       const candidates: Array<{ sessionKey: string; session: ConnectedSession }> = [];
@@ -1569,9 +1521,6 @@ class IntercomBroker {
         continue;
       }
 
-      // Use broker-owned registration order so clients cannot seize authority
-      // by backdating their advertised session start time. Stable-ID socket
-      // replacements preserve the original order.
       candidates.sort((a, b) => {
         if (a.session.ownerOrder !== b.session.ownerOrder) {
           return a.session.ownerOrder - b.session.ownerOrder;
@@ -1656,7 +1605,6 @@ class IntercomBroker {
       return;
     }
 
-    // Verify sender has capability for this namespace
     const hasCapability = session.extensions?.some((ext) => ext.namespace === namespace);
     if (!hasCapability) {
       writeMessage(socket, { type: "error", error: "Sender does not have capability for this namespace" });
@@ -1669,7 +1617,6 @@ class IntercomBroker {
       return;
     }
 
-    // For owner-only messages, validate exact socket and epoch
     if (ownerOnly && owner) {
       if (typeof ownerEpoch !== "string") {
         writeMessage(socket, { type: "error", error: "ownerEpoch required for owner-only messages" });
@@ -1681,7 +1628,6 @@ class IntercomBroker {
       }
     }
 
-    // Route message to appropriate audience
     for (const [recipientId, recipientSession] of this.sessions) {
       if (!sameScope(recipientSession.scopeId, session.scopeId)) {
         continue;
@@ -1796,7 +1742,6 @@ class IntercomBroker {
       return;
     }
 
-    // Verify sender has capability for this namespace
     const hasCapability = session.extensions?.some((ext) => ext.namespace === namespace);
     if (!hasCapability) {
       writeMessage(socket, {
@@ -1821,7 +1766,6 @@ class IntercomBroker {
       return;
     }
 
-    // Validate owner, socket, and epoch
     if (currentKey !== owner.sessionKey || socket !== owner.socket || ownerEpoch !== owner.epoch) {
       writeMessage(socket, {
         type: "extension_state_result",
@@ -1835,7 +1779,6 @@ class IntercomBroker {
 
     const result = this.extensionStateManager.commitState(stateNamespace, expectedRevision, payload);
 
-    // Send result to committer
     writeMessage(socket, {
       type: "extension_state_result",
       namespace,
@@ -1844,7 +1787,6 @@ class IntercomBroker {
       reason: result.reason,
     });
 
-    // If committed, broadcast new state to all capable sessions
     if (result.committed) {
       for (const recipientSession of this.sessions.values()) {
         if (!sameScope(recipientSession.scopeId, session.scopeId)) {
@@ -1881,18 +1823,15 @@ class IntercomBroker {
       try {
         unlinkSync(LISTEN_TARGET);
       } catch {
-        // The socket may already be gone if shutdown started after a disconnect.
       }
     }
     try {
       unlinkSync(PORT_PATH);
     } catch {
-      // The TCP endpoint file only exists when opt-in TCP transport is active.
     }
     try {
       unlinkSync(PID_PATH);
     } catch {
-      // The PID file may already be gone if startup never completed.
     }
     this.server.close();
     process.exit(0);

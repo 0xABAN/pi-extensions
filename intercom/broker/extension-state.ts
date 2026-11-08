@@ -158,7 +158,6 @@ export class ExtensionStateManager {
 
     try {
       writeFileSync(tempPath, JSON.stringify(envelope), { mode: 0o600 });
-      // Windows rejects fsync on a read-only handle with EPERM.
       const file = openSync(tempPath, "r+");
       try {
         fsyncSync(file);
@@ -179,7 +178,6 @@ export class ExtensionStateManager {
           closeSync(directory);
         }
       } catch {
-        // Directory fsync is unavailable on some platforms.
       }
 
       const state = { revision: envelope.revision, payload };

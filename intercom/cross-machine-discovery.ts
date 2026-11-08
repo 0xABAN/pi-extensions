@@ -12,7 +12,6 @@ export interface RemoteAgent {
   name: string;
   sessionId?: string;
   cwd?: string;
-  /** Herdr agent_status, e.g. "idle" or "working". */
   status?: string;
 }
 
@@ -63,7 +62,6 @@ export function parseRemoteAgents(raw: string): RemoteAgent[] {
     const agentSession = isRecord(row.agent_session) ? row.agent_session : undefined;
     const sessionPath = agentSession?.kind === "path" && typeof agentSession.value === "string" ? agentSession.value : undefined;
     const sessionId = sessionPath?.match(SESSION_ID_IN_PATH)?.[1];
-    // Herdr only reports a name for renamed panes; an unnamed Pi session is addressed by its session id.
     const name = typeof row.name === "string" && row.name ? row.name : sessionId;
     if (!name) return [];
     return [{
@@ -92,7 +90,6 @@ export async function listSavedMachines(deps: DiscoveryDeps): Promise<SavedMachi
 export async function listMachineAgents(machine: SavedMachine, deps: DiscoveryDeps): Promise<RemoteAgent[]> {
   const result = await deps.run(deps.herdrBin, ["--machine", machine.label, "agent", "list"], undefined, deps.discoveryTimeoutMs ?? DISCOVERY_TIMEOUT_MS);
   if (result.code !== 0) {
-    // Herdr prints Rust debug errors: Error: Custom { kind: …, error: "machine 'x': reason" }.
     const herdrError = result.stderr.match(/error: "((?:[^"\\]|\\.)*)"/)?.[1]?.replace(/\\(.)/g, "$1").replace(/^machine '[^']*': /, "");
     const detail = result.timedOut ? "timed out" : herdrError ?? (result.stderr.trim() || `exit ${result.code}`);
     const hint = /does not support machine API forwarding/.test(detail)

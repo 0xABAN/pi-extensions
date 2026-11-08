@@ -25,7 +25,6 @@ export function getIntercomScopeId(env: NodeJS.ProcessEnv = process.env): string
   return scopeId ? scopeId : undefined;
 }
 
-/** Sets this process's broker routing scope. Children launched afterwards inherit it. */
 export function setIntercomScopeId(scopeId: string | undefined): void {
   if (scopeId) process.env[INTERCOM_SCOPE_ID_ENV] = scopeId;
   else delete process.env[INTERCOM_SCOPE_ID_ENV];
@@ -35,41 +34,29 @@ export type InboundTriggerPolicy = "always" | "replies" | "never";
 export type BusyDeliveryPolicy = "steer" | "human-first";
 
 export interface CrossMachineConfig {
-  /** Name peers use for this host in their Herdr saved-machine lists. */
   machineName: string;
-  /** Command invoked through SSH on remote machines. */
   remoteCommand: string;
 }
 
 export interface IntercomConfig {
-  /** Broker command used to spawn the broker process (e.g. "npx" or "bun") */
   brokerCommand: string;
 
-  /** Arguments passed to the broker command before the broker script path */
   brokerArgs: string[];
 
-  /** Require confirmation before non-reply sends from interactive sessions */
   confirmSend: boolean;
 
-  /** Controls whether inbound broker messages may automatically trigger a model turn */
   inboundTrigger: InboundTriggerPolicy;
 
-  /** Delivery priority for peers arriving during interactive agent runs */
   busyDelivery: BusyDeliveryPolicy;
 
-  /** Optional custom status suffix shown after automatic lifecycle status */
   status?: string;
 
-  /** Optional stable intercom session ID for restart-stable addressing */
   stableId?: string;
-  
-  /** Enable/disable intercom (default: true) */
+
   enabled: boolean;
-  
-  /** Show reply hint in incoming messages (default: true) */
+
   replyHint: boolean;
 
-  /** Cross-machine discovery and SSH relay settings. */
   crossMachine: CrossMachineConfig;
 }
 
@@ -96,7 +83,7 @@ export function loadConfig(): IntercomConfig {
   if (!existsSync(configPath)) {
     return { ...defaults, crossMachine: { ...defaults.crossMachine } };
   }
-  
+
   try {
     const raw = readFileSync(configPath, "utf-8");
     const parsed: unknown = JSON.parse(raw);

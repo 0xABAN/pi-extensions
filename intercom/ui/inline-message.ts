@@ -11,8 +11,6 @@ export class InlineMessageComponent implements Component {
   private replyCommand?: string;
   private bodyText?: string;
   private outputPad: number;
-  // Caches assume message/bodyText never mutate after construction; theme
-  // styling stays outside the caches so live theme changes apply per render.
   private collapsedPreview?: string;
   private wrappedBody?: { width: number; lines: string[] };
 

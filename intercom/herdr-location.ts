@@ -33,26 +33,16 @@ function unavailable(paneId: string, reason: Extract<HerdrLocation, { status: "u
   return { status: "unavailable", paneId, reason, ...(detail ? { detail } : {}) };
 }
 
-/**
- * Resolve every Herdr-hosted session against one live Herdr snapshot. The
- * registration-time pane id is only a stable join key; workspace and tab are
- * always taken from this snapshot and are never cached.
- */
 export async function resolveHerdrLocations(
   sessions: SessionInfo[],
   options: { client?: HerdrClient; now?: () => number; sessionPaths?: ReadonlyMap<string, string> } = {},
 ): Promise<SessionInfo[]> {
   const hosted = sessions.filter((session) => session.herdrPaneId);
   if (hosted.length === 0) {
-    // Preserve the upstream roster byte-for-byte in installations where Herdr
-    // is not in use: no subprocess and no additive rendering/state.
     return sessions;
   }
 
   const client = options.client ?? createHerdrClient();
-  // Injected clients remain isolated for deterministic tests. Production calls
-  // share only an already-in-flight snapshot, collapsing concurrent list bursts
-  // without caching a result for a later request.
   const snapshotResult = await (options.client
     ? client.run(["api", "snapshot"], { timeoutMs: 3_000 })
     : readCurrentSnapshot(client));
@@ -101,10 +91,6 @@ export async function resolveHerdrLocations(
   return sessions.map((session): SessionInfo => {
     const paneId = session.herdrPaneId;
     if (!paneId) return { ...session, herdrLocation: { status: "not_hosted" } };
-    // Pane ids are workspace-qualified launch aliases and change when a pane is
-    // moved. New clients register the Pi session file, which Herdr carries with
-    // the terminal across moves. Older clients fall back to a direct pane-id
-    // lookup and explicitly become unavailable after a move.
     const sessionPath = options.sessionPaths?.get(session.id);
     const pane = sessionPath
       ? panesBySessionPath.get(sessionPath)

@@ -1,6 +1,5 @@
 export const EXTENSION_BUS_FEATURE = "extension-bus-v1";
 export const EXACT_SEND_FEATURE = "exact-send-v1";
-/** Broker refused a register because another live process holds the session id. */
 export const SESSION_HELD_ERROR_CODE = "E_SESSION_HELD";
 
 export type DeliveryState = "socket_delivered" | "queued" | "failed" | "unknown";
@@ -18,7 +17,6 @@ export type HerdrLocation =
       workspace: { id: string; label: string };
       tab: { id: string; label: string };
       paneId: string;
-      /** Time when the broker requested the live Herdr snapshot. */
       refreshedAt: number;
     }
   | { status: "not_hosted" }
@@ -31,10 +29,8 @@ export type HerdrLocation =
 
 export interface SessionInfo {
   id: string;
-  /** Broker-owned lifetime of this live endpoint. */
   endpointEpoch?: string;
   name?: string;
-  /** True only when the extension synthesized name for an unnamed runtime. */
   runtimeFallbackAlias?: boolean;
   cwd: string;
   model: string;
@@ -44,25 +40,11 @@ export interface SessionInfo {
   status?: string;
   peerUid?: number;
   trustedLocal?: boolean;
-  /** Live context-window usage, pushed via presence from the source session's
-   *  getContextUsage(). contextPct is 0..100 (rounded); contextTokens /
-   *  contextWindow are raw token counts. All optional: unknown right after a
-   *  compaction (before the next assistant response), when no model is selected,
-   *  or on older clients that never report it. */
   contextPct?: number;
   contextTokens?: number;
   contextWindow?: number;
-  /** tmux pane id (e.g. "%212") of the session's terminal, read from
-   *  $TMUX_PANE at registration. Present only when the session runs inside a
-   *  tmux pane; absent for cloud, headless, IDE-embedded, or Herdr sessions.
-   *  The pane id is immutable for the process lifetime — unlike the window
-   *  name, which is mutable — so a peer can live-resolve the current window
-   *  from it via tmux when it needs to introspect or drive that pane. */
   tmuxPane?: string;
-  /** Launch-time Herdr pane alias. It may differ from the current pane id after a move. */
   herdrPaneId?: string;
-  /** Present on list responses. `current` is freshly resolved for that request;
-   *  other states explicitly distinguish non-Herdr sessions from failures. */
   herdrLocation?: HerdrLocation;
 }
 
@@ -141,11 +123,8 @@ export interface ExtensionCapability {
 
 export type SessionRegistration = Omit<SessionInfo, "id" | "endpointEpoch" | "peerUid" | "trustedLocal" | "herdrLocation"> & {
   extensions?: ExtensionCapability[];
-  /** Broker-only join hint; never returned in the public roster. */
   herdrSessionPath?: string;
-  /** The client sends `receiver_received` for every message it is handed, so the broker may wait for it before reporting delivery. */
   acknowledgesReceipts?: boolean;
-  /** The client sends a frame at least this often, so the broker may drop it after several silent intervals. */
   livenessIntervalMs?: number;
 };
 

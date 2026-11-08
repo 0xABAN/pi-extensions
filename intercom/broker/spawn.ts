@@ -35,11 +35,6 @@ function sleep(ms: number): Promise<void> {
 }
 
 export function getTsxLoaderPath(extensionDir: string = EXTENSION_DIR): string {
-  // Resolve tsx via Node's module resolution so it works regardless of whether
-  // tsx is bundled under extensionDir/node_modules or hoisted to a workspace
-  // root by npm. The tsx package main entry is its loader. If resolution
-  // fails, prefer the flat plugin-store layout before the legacy nested
-  // fallback.
   try {
     const requireFromExtension = createRequire(join(extensionDir, "package.json"));
     return requireFromExtension.resolve("tsx");
@@ -85,9 +80,6 @@ export function getBrokerLaunchSpec(
   nodePath: string = process.execPath,
 ): BrokerLaunchSpec {
   if (usesDefaultBrokerCommand(brokerCommand, brokerArgs)) {
-    // Load tsx in the broker process itself. The tsx CLI would re-spawn Node
-    // without windowsHide, and that grandchild opens a visible console window
-    // on Windows because the detached broker has no console to share.
     return {
       command: getNodeCommand(nodePath),
       args: ["--import", pathToFileURL(getTsxLoaderPath(extensionDir)).href, brokerPath],
@@ -116,7 +108,6 @@ export function getBrokerSpawnOptions(
   return {
     detached: true,
     stdio: captureStderr ? ["ignore", "ignore", "pipe"] : "ignore",
-    // Windows locks a process's cwd against renames, so keep it outside the package.
     cwd: getIntercomDirPath(agentDir),
     env: { ...env, PI_CODING_AGENT_DIR: agentDir, NODE_NO_WARNINGS: "1" },
     windowsHide: true,
@@ -212,7 +203,6 @@ async function isBrokerRunning(): Promise<boolean> {
     process.kill(pid, 0);
     return checkSocketConnectable();
   } catch {
-    // Missing or unreadable PID state means there is no live broker to reuse.
     return false;
   }
 }
@@ -289,7 +279,6 @@ function acquireSpawnLock(): boolean {
         try {
           unlinkSync(BROKER_SPAWN_LOCK);
         } catch {
-          // If we can't delete the stale lock, retry a few times before giving up
         }
         continue;
       }
@@ -314,14 +303,12 @@ function isSpawnLockStale(): boolean {
       try {
         process.kill(pid, 0);
       } catch {
-        // The process that created the lock is gone.
         return true;
       }
     }
 
     return !Number.isFinite(createdAt) || ageMs > 10_000;
   } catch {
-    // Unreadable lock contents are treated as stale so a new broker can start.
     return true;
   }
 }
@@ -330,7 +317,6 @@ function releaseSpawnLock(): void {
   try {
     unlinkSync(BROKER_SPAWN_LOCK);
   } catch {
-    // Another cleanup path may already have removed the lock.
   }
 }
 

@@ -160,7 +160,6 @@ export function isMessage(value: unknown): value is Message {
     || (Array.isArray(value.content.attachments) && value.content.attachments.every(isAttachment));
 }
 
-/** Canonical authored-message identity used by the broker's replay guard. */
 export function messageDeliveryFingerprint(message: Message, targetId: string): string {
   return JSON.stringify({
     targetId,

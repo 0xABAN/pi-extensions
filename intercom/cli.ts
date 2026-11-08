@@ -1,23 +1,4 @@
 #!/usr/bin/env -S npx tsx
-/**
- * Minimal CLI for scripted access to the local pi-intercom broker.
- *
- * Commands:
- *   npx --yes tsx ~/.pi/agent/npm/node_modules/pi-intercom/cli.ts list [--json]
- *   npx --yes tsx ~/.pi/agent/npm/node_modules/pi-intercom/cli.ts send --to worker --text "build failed" [--name <bridge-name>] [--json]
- *   npx --yes tsx ~/.pi/agent/npm/node_modules/pi-intercom/cli.ts ask --to worker --text "status?" [--timeout-ms N] [--name <bridge-name>] [--json]
- *
- * The CLI registers as a regular session, so it shows up in the roster and
- * replies can be routed back to it while it stays connected (`ask`).
- *
- * Exit codes: 0 ok | 1 usage, connection, or delivery failure | 2 ask timeout.
- *
- * Because it talks to the same-machine broker only, it can also be run over
- * ssh on a remote machine to bridge coordination without opening any network
- * listener:
- *
- *   ssh myserver 'npx --yes tsx ~/.pi/agent/npm/node_modules/pi-intercom/cli.ts list'
- */
 
 import { pathToFileURL } from "node:url";
 import { IntercomClient } from "./broker/client.ts";
@@ -121,7 +102,6 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
   return opts;
 }
 
-/** The part of IntercomClient the CLI uses; injectable for tests. */
 export interface CliClient {
   sessionId?: string | null;
   connect(session: SessionRegistration, sessionId?: string): Promise<void>;
@@ -254,7 +234,6 @@ export async function runCli(argv: readonly string[], deps: CliDeps): Promise<nu
       return 0;
     }
 
-    // A reply can arrive before send() returns its message id.
     type AskOutcome =
       | { kind: "timeout" }
       | { kind: "delivery-failure"; reason: string }
