@@ -55,7 +55,6 @@ export class QueryContext {
 	lastRateLimitWarnStep: number | null = null;
 	lastRateLimitWarnThreshold: number | undefined;
 	piSessionId: string | null = null;
-	traceQueryId: string | undefined;
 	historyStale = false;
 
 	turnOutput: AssistantMessage | null = null;

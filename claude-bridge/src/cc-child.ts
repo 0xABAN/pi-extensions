@@ -1,6 +1,6 @@
 import type { EffortLevel, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-export const CC_CHILD_ENV = {
+const CC_CHILD_ENV = {
 	ENABLE_CLAUDEAI_MCP_SERVERS: "0",
 	DISABLE_AUTO_COMPACT: "1",
 	CLAUDE_CODE_ELEGANT_MEADOW: "0",
