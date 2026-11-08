@@ -8,13 +8,12 @@ import { createMessageReader, writeMessage } from "./framing.ts";
 import {
   ensureIntercomRuntimeDir,
   getAgentDirPath,
-  getBrokerConnectTarget,
+  getBrokerSocketPath,
   getIntercomDirPath,
   INTERCOM_PROTOCOL_NAME,
   INTERCOM_PROTOCOL_VERSION,
   INTERCOM_RUNTIME_FILE_MODE,
   restrictIntercomRuntimeFile,
-  type BrokerConnectTarget,
 } from "./paths.ts";
 
 const INTERCOM_DIR = getIntercomDirPath();
@@ -136,29 +135,16 @@ async function isBrokerRunning(): Promise<boolean> {
   }
 }
 
-function connectToBrokerTarget(target: BrokerConnectTarget): net.Socket {
-  return typeof target === "string"
-    ? net.connect(target)
-    : net.connect({ host: target.host, port: target.port });
-}
-
 function checkSocketConnectable(): Promise<boolean> {
   return new Promise((resolve) => {
-    let target: BrokerConnectTarget;
-    try {
-      target = getBrokerConnectTarget();
-    } catch {
-      resolve(false);
-      return;
-    }
-    if (typeof target === "string" && !existsSync(target)) {
+    const socketPath = getBrokerSocketPath();
+    if (!existsSync(socketPath)) {
       resolve(false);
       return;
     }
 
-    const socket = connectToBrokerTarget(target);
+    const socket = net.connect(socketPath);
     const requestId = randomUUID();
-    const expectedStateId = typeof target === "string" ? undefined : target.stateId;
     let settled = false;
     const finish = (isConnected: boolean) => {
       if (settled) {
@@ -174,11 +160,7 @@ function checkSocketConnectable(): Promise<boolean> {
     };
     const onConnect = () => {
       try {
-        writeMessage(socket, {
-          type: "health",
-          requestId,
-          ...(expectedStateId ? { stateId: expectedStateId } : {}),
-        });
+        writeMessage(socket, { type: "health", requestId });
       } catch {
         finish(false);
       }

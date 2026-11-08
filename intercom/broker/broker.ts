@@ -1,20 +1,18 @@
 import net from "net";
 import { chmodSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
-import { createHash, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import { writeMessage, createMessageReader, MAX_FRAME_BYTES } from "./framing.ts";
 import { isMessage, isMessageReceipt, isSessionId, isSessionRegistration, messageDeliveryFingerprint } from "./protocol.ts";
 import {
   ensureIntercomRuntimeDir,
-  getBrokerListenTarget,
-  getBrokerPortFilePath,
+  getBrokerSocketPath,
   getIntercomDirPath,
   INTERCOM_DIR_MODE,
   INTERCOM_PROTOCOL_NAME,
   INTERCOM_PROTOCOL_VERSION,
   INTERCOM_RUNTIME_FILE_MODE,
   restrictIntercomRuntimeFile,
-  type BrokerConnectTarget,
 } from "./paths.ts";
 import { sameCwd } from "../cwd.ts";
 import { ASK_TIMEOUT_MS, EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE } from "../types.ts";
@@ -23,11 +21,9 @@ import { assertNoLiveBroker } from "./runtime-claim.ts";
 import { resolveHerdrLocations } from "../herdr-location.ts";
 
 const INTERCOM_DIR = getIntercomDirPath();
-const LISTEN_TARGET = getBrokerListenTarget();
+const SOCKET_PATH = getBrokerSocketPath();
 const PID_PATH = join(INTERCOM_DIR, "broker.pid");
-const PORT_PATH = getBrokerPortFilePath(INTERCOM_DIR);
 const PENDING_ASKS_DIR = join(INTERCOM_DIR, "pending-asks");
-const BROKER_STATE_ID = randomUUID();
 const MAX_SESSIONS = 128;
 const MAX_UNREGISTERED_CONNECTIONS = 32;
 const REGISTRATION_TIMEOUT_MS = 1000;
@@ -44,7 +40,6 @@ const RECEIPT_TIMEOUT_MS = readPositiveIntEnv(process.env.PI_INTERCOM_RECEIPT_TI
 const RECEIPT_PROOF_STATUSES = new Set<MessageReceiptStatus>(["receiver_received", "acknowledged", "queued", "injected"]);
 const LIVENESS_MISSED_INTERVALS = 3;
 const LIVENESS_SWEEP_MS = readPositiveIntEnv(process.env.PI_INTERCOM_LIVENESS_SWEEP_MS, 10_000);
-const TCP_KEEPALIVE_DELAY_MS = 30_000;
 
 function readPositiveIntEnv(raw: string | undefined, fallback: number, limit = Infinity): number {
   const value = Number(raw);
@@ -168,9 +163,7 @@ function pendingAskRecordPath(messageId: string): string {
 
 function ensurePendingAskRecordDir(): void {
   mkdirSync(PENDING_ASKS_DIR, { recursive: true, mode: INTERCOM_DIR_MODE });
-  if (process.platform !== "win32") {
-    chmodSync(PENDING_ASKS_DIR, INTERCOM_DIR_MODE);
-  }
+  chmodSync(PENDING_ASKS_DIR, INTERCOM_DIR_MODE);
 }
 
 class IntercomBroker {
@@ -192,43 +185,22 @@ class IntercomBroker {
     assertNoLiveBroker(PID_PATH);
     ensurePendingAskRecordDir();
     this.prunePendingAskRecords();
-    if (typeof LISTEN_TARGET === "string" && process.platform !== "win32") {
-      try {
-        unlinkSync(LISTEN_TARGET);
-      } catch {
-      }
+    try {
+      unlinkSync(SOCKET_PATH);
+    } catch {
     }
     this.server = net.createServer(this.handleConnection.bind(this));
   }
 
   start(): void {
     const onListening = () => {
-      if (typeof LISTEN_TARGET === "string") {
-        restrictIntercomRuntimeFile(LISTEN_TARGET);
-      } else {
-        const address = this.server.address();
-        if (!address || typeof address === "string") {
-          throw new Error("Intercom TCP broker started without a TCP address");
-        }
-        const endpoint: BrokerConnectTarget = {
-          transport: "tcp",
-          host: LISTEN_TARGET.host,
-          port: address.port,
-          stateId: BROKER_STATE_ID,
-        };
-        writeFileSync(PORT_PATH, `${JSON.stringify(endpoint)}\n`, { mode: INTERCOM_RUNTIME_FILE_MODE });
-        restrictIntercomRuntimeFile(PORT_PATH);
-      }
+      restrictIntercomRuntimeFile(SOCKET_PATH);
       writeFileSync(PID_PATH, String(process.pid), { mode: INTERCOM_RUNTIME_FILE_MODE });
       restrictIntercomRuntimeFile(PID_PATH);
       console.log(`Intercom broker started (pid: ${process.pid})`);
     };
 
-    if (typeof LISTEN_TARGET === "string") {
-      this.server.listen(LISTEN_TARGET, onListening);
-    } else {
-      this.server.listen({ host: LISTEN_TARGET.host, port: LISTEN_TARGET.port }, onListening);
-    }
+    this.server.listen(SOCKET_PATH, onListening);
     process.on("SIGTERM", () => this.shutdown());
     process.on("SIGINT", () => this.shutdown());
     setInterval(() => this.evictSilentSessions(), LIVENESS_SWEEP_MS).unref();
@@ -253,7 +225,6 @@ class IntercomBroker {
 
   private handleConnection(socket: net.Socket): void {
     this.connections.add(socket);
-    socket.setKeepAlive(true, TCP_KEEPALIVE_DELAY_MS);
     let sessionKey: string | null = null;
     let registrationTimeout: NodeJS.Timeout | null = null;
     const armRegistrationTimeout = () => {
@@ -386,15 +357,10 @@ class IntercomBroker {
     }
 
     const clientMessage = msg as { type: string } & Record<string, unknown>;
-    const requiresEndpointAuth = typeof LISTEN_TARGET !== "string";
-    const hasEndpointAuth = clientMessage.stateId === BROKER_STATE_ID;
 
     if (clientMessage.type === "health") {
       if (typeof clientMessage.requestId !== "string") {
         throw new Error("Invalid health message");
-      }
-      if (requiresEndpointAuth && !hasEndpointAuth) {
-        throw new Error("Invalid intercom TCP endpoint credentials");
       }
       writeMessage(socket, {
         type: "health_ok",
@@ -403,10 +369,6 @@ class IntercomBroker {
         version: INTERCOM_PROTOCOL_VERSION,
       });
       return;
-    }
-
-    if (requiresEndpointAuth && clientMessage.type === "register" && !hasEndpointAuth) {
-      throw new Error("Invalid intercom TCP endpoint credentials");
     }
 
     if (currentKey === null && clientMessage.type !== "register") {
@@ -470,7 +432,7 @@ class IntercomBroker {
           ...(session.status !== undefined ? { status: session.status } : {}),
           ...(session.tmuxPane !== undefined ? { tmuxPane: session.tmuxPane } : {}),
           ...(session.herdrPaneId !== undefined ? { herdrPaneId: session.herdrPaneId } : {}),
-          trustedLocal: typeof LISTEN_TARGET === "string" && process.platform !== "win32",
+          trustedLocal: true,
         };
 
         const connectedSession: ConnectedSession = {
@@ -1299,14 +1261,8 @@ class IntercomBroker {
     this.messageReceiptRoutes.clear();
     this.disconnectedSessions.clear();
     this.mailboxMessages.length = 0;
-    if (typeof LISTEN_TARGET === "string" && process.platform !== "win32") {
-      try {
-        unlinkSync(LISTEN_TARGET);
-      } catch {
-      }
-    }
     try {
-      unlinkSync(PORT_PATH);
+      unlinkSync(SOCKET_PATH);
     } catch {
     }
     try {

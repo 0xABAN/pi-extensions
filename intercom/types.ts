@@ -101,7 +101,7 @@ export type SessionRegistration = Omit<SessionInfo, "id" | "endpointEpoch" | "pe
 };
 
 export type ClientMessage =
-  | { type: "register"; session: SessionRegistration; sessionId?: string; stateId?: string }
+  | { type: "register"; session: SessionRegistration; sessionId?: string }
   | { type: "unregister" }
   | { type: "list"; requestId: string }
   | { type: "send"; to: string; message: Message; targetId?: string; targetEpoch?: string }

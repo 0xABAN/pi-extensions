@@ -2,7 +2,7 @@ import { EventEmitter } from "events";
 import net from "net";
 import { randomUUID } from "crypto";
 import { writeMessage, createMessageReader } from "./framing.ts";
-import { getBrokerConnectTarget, type BrokerConnectTarget } from "./paths.ts";
+import { getBrokerSocketPath } from "./paths.ts";
 import { isMessage, isMessageControl, isMessageReceipt, isSessionInfo } from "./protocol.ts";
 import { EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE, type DeliveryDetails } from "../types.ts";
 import type {
@@ -45,12 +45,6 @@ function getLivenessIntervalMs(): number {
 function getLivenessTimeoutMs(): number {
   const raw = Number.parseInt(process.env.PI_INTERCOM_LIVENESS_TIMEOUT_MS ?? "", 10);
   return Number.isSafeInteger(raw) && raw > 0 ? Math.min(raw, getLivenessIntervalMs()) : 5_000;
-}
-
-function connectToBrokerTarget(target: BrokerConnectTarget): net.Socket {
-  return typeof target === "string"
-    ? net.connect(target)
-    : net.connect({ host: target.host, port: target.port });
 }
 
 export class IntercomSessionHeldError extends Error {
@@ -160,15 +154,7 @@ export class IntercomClient extends EventEmitter {
     }
 
     return new Promise((resolve, reject) => {
-      let socket: net.Socket;
-      let target: BrokerConnectTarget;
-      try {
-        target = getBrokerConnectTarget();
-        socket = connectToBrokerTarget(target);
-      } catch (error) {
-        reject(toError(error));
-        return;
-      }
+      const socket = net.connect(getBrokerSocketPath());
       this.socket = socket;
       this.disconnectError = null;
       let settled = false;
@@ -281,7 +267,6 @@ export class IntercomClient extends EventEmitter {
           type: "register",
           session: { ...session, livenessIntervalMs: getLivenessIntervalMs() },
           ...(sessionId ? { sessionId } : {}),
-          ...(typeof target === "string" ? {} : { stateId: target.stateId }),
         });
       } catch (error) {
         cleanupConnectionAttempt();
