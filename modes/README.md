@@ -57,10 +57,9 @@ Learn uses the read-only tools. The agent may run read-only commands but not
 programs; you write the code and run experiments yourself. Existing source files
 and tool results remain visible; Learn does not redact them.
 
-The teaching policy is the `learn_mode` system prompt section. Like Plan, Learn
-adds a short hidden note after each of your messages that points the model back
-to those rules, so a session started in Build or Plan does not drift from them.
-Each mode drops the other modes' notes from context.
+The teaching policy is the `learn_mode` system prompt section. A short hidden
+note after each of your messages points the model back to those rules, so a
+session started in Build or Plan does not drift from them.
 
 Tool restrictions are enforced in code. Teaching behavior relies on the model
 following its instructions, so this is not a guarantee against answer leakage.
@@ -82,26 +81,38 @@ its response-rewriting pipeline.
 
 ## Plan
 
-Plan uses the read-only tools. Ask the agent to explore the code and produce
-numbered steps under `Plan:`:
+Plan uses the read-only tools plus `plan`. Its rules are the `plan_mode` system
+prompt section: change nothing, answer questions normally, and when proposing a
+change, write the plan as the reply and request approval through `plan` instead
+of asking in text. A plan has a short Context, numbered Steps naming the files
+and functions they change, and a Verification section, and recommends one
+approach. A short hidden note after each of your messages points back to those
+rules.
 
-```text
-Plan:
-1. First step description
-2. Second step description
-```
+The `plan` tool replaces the prompt with two choices:
 
-After a plan, choose Execute, Stay, or Refine. Execute returns to Build and reminds
-the agent to seed the steps as todos before working through them. The reminder is
-not a tool gate.
+- Approve switches to Build. The agent starts implementing in the same turn,
+  creating one todo per step first.
+- Revise, or Esc, ends the turn and stays in Plan. Type your feedback at the
+  prompt.
+
+Pi keeps a turn's system prompt until the turn ends, so after Approve the
+`plan_mode` section stays for the rest of that turn. The tool's reply tells the
+model those rules no longer apply.
+
+## Prompt sections and notes
+
+Each mode drops the other modes' notes from context, and Build keeps none. Prompt
+sections reach Claude through pi-claude-bridge 0.11.0 or later; 0.9.1 drops them,
+so only the notes arrive.
 
 ## Structure
 
-- `index.ts`: the controller. It owns the shortcut and flags, the tool guard, mode
-  notes, Learn's prompt section, the Plan execute flow, status publication, and
-  persistence.
+- `index.ts`: the controller. It owns the shortcut and flags, the tool guard, each
+  mode's prompt section and note, status publication, and persistence.
+- `plan.ts`: Plan's rules and the `plan` tool.
 - `learn.ts`: the teaching policy.
-- `utils.ts`: the read-only tool set, the Bash allowlist, and Plan step extraction.
+- `utils.ts`: the read-only tool set and the Bash allowlist.
 - `status.ts`: pure status badge formatting.
 - `tests/modes.test.ts`: the checks below.
 
@@ -114,9 +125,15 @@ bun test modes
 ```
 
 The tests cover mode transitions, direct and nested tool guards, the Bash
-allowlist, Learn's prompt section and note, context filtering, session state,
-and distinct Learn colors. They do not call a model. After `/reload`, check the
-visible badge and try these teaching cases:
+allowlist, each mode's prompt section and note, the `plan` tool's Approve and
+Revise, context filtering, session state, and distinct Learn colors. They do not
+call a model. After `/reload`, check the visible badge.
+
+In Plan, ask a question about the code: expect an answer and no approval prompt.
+Then ask for a change: expect a plan with Context, Steps, and Verification,
+followed by Approve and Revise.
+
+In Learn, try these teaching cases:
 
 - Ask for a complete solution: expect useful guidance, not code or a recipe.
 - State that you already know `return` exits a function, but have not traced why
