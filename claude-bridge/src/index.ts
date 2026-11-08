@@ -5,12 +5,10 @@ import { query, type EffortLevel, type SDKMessage, type SettingSource, type Thin
 import type { Base64ImageSource, ContentBlockParam } from "@anthropic-ai/sdk/resources";
 import { createSession, deleteSession, getSessionPath } from "cc-session-io";
 import { createHash, randomUUID } from "node:crypto";
-import { appendFileSync, mkdirSync, readFileSync, realpathSync, statSync } from "fs";
-import { dirname } from "path";
+import { readFileSync, realpathSync, statSync } from "fs";
 import { PROVIDER_ID, messageContentToText } from "./convert.js";
 import { QueryProcess } from "./query-process.js";
 import { readTranscript, recordedToolResults, resolveRecordingCut, savePrefixSession } from "./session-transcript.js";
-import { debugLogPath, diagLogPath } from "./log-paths.js";
 import { buildModels, claudeCodeModelId } from "./models.js";
 import { verifyWrittenSession as _verifyWrittenSession } from "./session-verify.js";
 import { extractAllToolResults as _extractAllToolResults, type McpResult } from "./extract-tool-results.js";
@@ -25,17 +23,8 @@ import { createToolServer, MCP_SERVER_NAME, MCP_TOOL_PREFIX } from "./mcp-server
 import { nonSystemMessages, toBridgeContext } from "./transcript.js";
 import { updateUsage, type SdkUsage } from "./usage.js";
 import { rateLimitResponse } from "./rate-limit.js";
-import { DEBUG, debug, makeCliDebugOptions, moduleInstanceId } from "./debug.js";
+import { DEBUG, debug, makeCliDebugOptions } from "./debug.js";
 import { ccChildEnv, CLAUDE_MD_EXCLUDES, errorMessage, REASONING_TO_EFFORT, resultErrorText } from "./cc-child.js";
-
-function diagDump(label: string, data: Record<string, unknown>) {
-	const ts = new Date().toISOString();
-	const entry = { ts, moduleInstanceId, label, ...data };
-	const logPath = diagLogPath();
-	mkdirSync(dirname(logPath), { recursive: true });
-	appendFileSync(logPath, JSON.stringify(entry) + "\n");
-	debug(`DIAG: ${label} (see ${logPath})`);
-}
 
 const MODELS = buildModels(getModels("anthropic"));
 
@@ -53,7 +42,7 @@ function currentCwd(): string {
 function sessionStateFor(piSessionId: string | null | undefined): SessionState | null {
 	if (piSessionId == null) return null;
 	if (!loadedSessionStates.has(piSessionId)) {
-		const stored = loadSessionState(piSessionId, (message) => diagDump("session_state_rejected", { piSessionId, message }));
+		const stored = loadSessionState(piSessionId, (message) => debug("session_state_rejected", { piSessionId, message }));
 		loadedSessionStates.add(piSessionId);
 		if (stored) sharedSessions.set(piSessionId, stored);
 	}
@@ -324,15 +313,8 @@ function verifyWrittenSession(
 ): void {
 	const warnings = _verifyWrittenSession(jsonlPath, expectedSessionId, expectedRecordCount);
 	for (const msg of warnings) {
-		debug(`WARNING session verify: ${msg}`);
-		piUI?.notify(
-			`Session file issue: ${msg}\n` +
-			`cwd=${cwd} realpath=${safeRealpath(cwd)} CLAUDE_CONFIG_DIR=${process.env.CLAUDE_CONFIG_DIR ?? "(unset)"}\n` +
-			`Please copy and paste this message into a new issue at https://github.com/elidickinson/pi-claude-bridge/issues/new` +
-			(DEBUG ? ` and attach ${debugLogPath()}` : ` (rerun with CLAUDE_BRIDGE_DEBUG=1 to capture a debug log)`),
-			"warning",
-		);
-		diagDump("session_verify_fail", { msg, jsonlPath, cwd, realpath: safeRealpath(cwd), claudeConfigDir: process.env.CLAUDE_CONFIG_DIR ?? null });
+		debug("session_verify_fail", { msg, jsonlPath, cwd, realpath: safeRealpath(cwd), claudeConfigDir: process.env.CLAUDE_CONFIG_DIR ?? null });
+		piUI?.notify(`claude-bridge: Claude Code session file issue: ${msg}`, "warning");
 	}
 }
 
@@ -1213,7 +1195,7 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 		}
 
 		if (!promptText && !promptBlocks) {
-			diagDump("empty_prompt", {
+			debug("empty_prompt", {
 				contextLength: context.messages.length,
 				lastMsgRole: lastMsg?.role,
 				isReentrant,

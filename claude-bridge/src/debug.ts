@@ -1,33 +1,34 @@
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { appendFileSync, mkdirSync } from "fs";
-import { dirname, join } from "path";
-import { debugLogPath } from "./log-paths.js";
+import { join } from "path";
 
 export const DEBUG = process.env.CLAUDE_BRIDGE_DEBUG === "1";
 
-export const moduleInstanceId = Math.random().toString(36).slice(2, 8);
+export function debugLogPath(): string {
+	return join(getAgentDir(), "claude-bridge.log");
+}
+
+function format(value: unknown): string {
+	if (typeof value === "string") return value;
+	if (value instanceof Error) return `${value.name}: ${value.message}${value.stack ? `\n${value.stack}` : ""}`;
+	return JSON.stringify(value);
+}
 
 export function debug(...args: unknown[]) {
 	if (!DEBUG) return;
-	const logPath = debugLogPath();
-	try { mkdirSync(dirname(logPath), { recursive: true }); } catch {  }
-	const ts = new Date().toISOString();
-	const fmt = (a: unknown): string => {
-		if (typeof a === "string") return a;
-		if (a instanceof Error) return `${a.name}: ${a.message}${a.stack ? "\n" + a.stack : ""}`;
-		return JSON.stringify(a);
-	};
-	const msg = args.map(fmt).join(" ");
-	appendFileSync(logPath, `[${ts}] [${moduleInstanceId}] ${msg}\n`);
+	mkdirSync(getAgentDir(), { recursive: true });
+	appendFileSync(debugLogPath(), `[${new Date().toISOString()}] ${args.map(format).join(" ")}\n`);
 }
 
 let nextCliDebugSeq = 1;
+
 export function makeCliDebugOptions(tag: string): { debug?: boolean; debugFile?: string; stderr?: (data: string) => void } {
 	if (!DEBUG) return {};
+
 	const seq = nextCliDebugSeq++;
-	const ts = new Date().toISOString().replace(/[:.]/g, "-");
-	const logDir = join(dirname(debugLogPath()), "cc-cli-logs");
-	try { mkdirSync(logDir, { recursive: true }); } catch {  }
-	const debugFile = join(logDir, `${ts}-${tag}-${seq}.log`);
+	const logDir = join(getAgentDir(), "cc-cli-logs");
+	mkdirSync(logDir, { recursive: true });
+	const debugFile = join(logDir, `${new Date().toISOString().replace(/[:.]/g, "-")}-${tag}-${seq}.log`);
 	debug(`cli-debug: ${tag} #${seq} → ${debugFile}`);
 	return {
 		debug: true,

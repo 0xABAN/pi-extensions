@@ -1,5 +1,5 @@
 import { contentText, type SystemMessage } from "@earendil-works/pi-ai";
-import { debugLogPath } from "./log-paths.js";
+import { debugLogPath } from "./debug.js";
 import { MCP_TOOL_PREFIX } from "./mcp-server.js";
 
 const BUILT_IN_SECTIONS = new Set(["preamble", "tools", "rules", "docs", "addendum", "project_context", "skills", "cwd"]);
