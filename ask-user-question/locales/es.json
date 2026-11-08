@@ -7,8 +7,6 @@
   "submit.label": "Enviar respuestas",
   "submit.cancel": "Cancelar",
 
-  "hint.enter": "Enter para seleccionar",
-  "hint.navigate": "↑/↓ para navegar",
   "hint.newline": "Mayús+Enter para nueva línea",
   "hint.clear": "Ctrl+U para borrar",
   "hint.toggle": "Espacio para alternar",

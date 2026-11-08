@@ -11,8 +11,6 @@ import {
 	HINT_PART_CANCEL,
 	HINT_PART_CLEAR,
 	HINT_PART_COLLAPSE_TEMPLATE,
-	HINT_PART_ENTER,
-	HINT_PART_NAV,
 	HINT_PART_NEW_LINE,
 	HINT_PART_NOTES_TEMPLATE,
 	HINT_PART_TAB,
@@ -297,7 +295,7 @@ export class SubmitTabStrategy implements TabContentStrategy {
 
 /**
  * Build the controls hint line. Order:
- *   Enter · ↑/↓ [· Space toggle] [· n notes] [· Tab switch] · Esc [· <key> collapse]
+ *   [Space toggle ·] [n notes ·] [Tab switch ·] Esc [· <key> collapse]
  *   [· Shift+Enter newline] [· Ctrl+U clear]
  *
  * `NOTES` is part of the resting (notes-closed) core — it drops while the notes
@@ -317,7 +315,7 @@ export function buildHintText(
 	collapseKey: string,
 	notesKey: string,
 ): string {
-	const parts: string[] = [t("hint.enter", HINT_PART_ENTER), t("hint.navigate", HINT_PART_NAV)];
+	const parts: string[] = [];
 	if (question?.multiSelect === true) parts.push(t("hint.toggle", HINT_PART_TOGGLE));
 	if (question && !state.notesVisible && !state.inputMode)
 		parts.push(notesHint("hint.notes", HINT_PART_NOTES_TEMPLATE, notesKey));
@@ -335,12 +333,12 @@ export function buildHintText(
 
 /**
  * Submit-tab counterpart of `buildHintText` — the same `·`-joined bottom-row idiom.
- * Resting: Enter · ↑/↓ · `n to add a note` · Esc. While the global-note editor is
+ * Resting: `n to add a note` · Esc. While the global-note editor is
  * open the note part drops (the editor is the affordance then) and the Shift+Enter
  * newline hint is appended after cancel, mirroring the question tabs' notes-open shape.
  */
 export function buildSubmitHintText(state: DialogState, notesKey: string): string {
-	const parts: string[] = [t("hint.enter", HINT_PART_ENTER), t("hint.navigate", HINT_PART_NAV)];
+	const parts: string[] = [];
 	if (!state.notesVisible) parts.push(notesHint("review.global_hint", REVIEW_GLOBAL_HINT_TEMPLATE, notesKey));
 	parts.push(t("hint.cancel", HINT_PART_CANCEL));
 	if (state.notesVisible) parts.push(t("hint.newline", HINT_PART_NEW_LINE));

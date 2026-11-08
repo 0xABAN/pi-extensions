@@ -7,8 +7,6 @@
   "submit.label": "Отправить ответы",
   "submit.cancel": "Отмена",
 
-  "hint.enter": "Enter — выбрать",
-  "hint.navigate": "↑/↓ — навигация",
   "hint.newline": "Shift+Enter — новая строка",
   "hint.clear": "Ctrl+U — очистить",
   "hint.toggle": "Space — переключить",
