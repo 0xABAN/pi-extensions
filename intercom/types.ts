@@ -100,16 +100,6 @@ export type SessionRegistration = Omit<SessionInfo, "id" | "endpointEpoch" | "pe
   livenessIntervalMs?: number;
 };
 
-export type ClientMessage =
-  | { type: "register"; session: SessionRegistration; sessionId?: string }
-  | { type: "unregister" }
-  | { type: "list"; requestId: string }
-  | { type: "send"; to: string; message: Message; targetId?: string; targetEpoch?: string }
-  | { type: "message_receipt"; receipt: MessageReceipt }
-  | { type: "cancel_message"; messageId: string }
-  | { type: "cancel_ask"; messageId: string }
-  | { type: "presence"; name?: string; runtimeFallbackAlias?: boolean; status?: string; model?: string; contextPct?: number | null; contextTokens?: number | null; contextWindow?: number | null }
-
 export type BrokerMessage =
   | { type: "registered"; sessionId: string; features?: string[] }
   | { type: "sessions"; requestId: string; sessions: SessionInfo[] }

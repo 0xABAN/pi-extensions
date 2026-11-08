@@ -49,7 +49,6 @@ export class ReplyTracker {
   private readonly pendingTurnContexts: IntercomContext[] = [];
   private currentTurnContext: IntercomContext | null = null;
 
-
   recordIncomingMessage(from: SessionInfo, message: Message, receivedAt = Date.now()): IntercomContext {
     const context = { from, message, receivedAt };
     if (message.expectsReply) {
@@ -130,10 +129,6 @@ export class ReplyTracker {
       return null;
     }
     return this.currentTurnContext.from.id === to ? null : this.currentTurnContext;
-  }
-
-  markReplied(replyTo: string): void {
-    this.dismissPendingAsk(replyTo);
   }
 
   dismissPendingAsk(replyTo: string): void {

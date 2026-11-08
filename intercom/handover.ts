@@ -35,7 +35,7 @@ Rules:
 - Be concise. Prefer short bullets over prose. Leave out chit-chat and dead ends that do not affect the next task.
 - Do not continue the conversation or answer questions in it. Output only the handover, with no preamble.`;
 
-export async function generateHandoverBody(
+async function generateHandoverBody(
   ctx: Pick<ExtensionContext, "model" | "modelRegistry" | "sessionManager">,
   goal: string | undefined,
   signal: AbortSignal | undefined,
@@ -81,7 +81,7 @@ interface GitState {
   head: string;
 }
 
-export function readGitState(cwd: string): Promise<GitState | undefined> {
+function readGitState(cwd: string): Promise<GitState | undefined> {
   return new Promise((resolve) => {
     execFile("git", ["rev-parse", "HEAD", "--abbrev-ref", "HEAD"], { cwd, timeout: GIT_TIMEOUT_MS, windowsHide: true }, (error, stdout) => {
       const [head, branch] = error ? [] : stdout.trim().split("\n");
@@ -90,7 +90,7 @@ export function readGitState(cwd: string): Promise<GitState | undefined> {
   });
 }
 
-export function formatHandoverMessage(options: {
+function formatHandoverMessage(options: {
   senderName: string;
   senderCwd: string;
   sessionFile?: string;
@@ -112,4 +112,24 @@ export function formatHandoverMessage(options: {
     options.body,
   );
   return lines.join("\n");
+}
+
+export async function buildHandoverText(
+  ctx: ExtensionContext,
+  senderName: string,
+  goal: string | undefined,
+  signal: AbortSignal | undefined,
+): Promise<string> {
+  const [body, git] = await Promise.all([generateHandoverBody(ctx, goal, signal), readGitState(ctx.cwd)]);
+  if (signal?.aborted) {
+    throw new Error("Handover generation was aborted.");
+  }
+
+  return formatHandoverMessage({
+    senderName,
+    senderCwd: ctx.cwd,
+    sessionFile: ctx.sessionManager.getSessionFile(),
+    git,
+    body,
+  });
 }

@@ -8,7 +8,6 @@ import { EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE, type DeliveryDetails } fro
 import type {
   Attachment,
   BrokerMessage,
-  ClientMessage,
   Message,
   MessageControl,
   MessageReceipt,

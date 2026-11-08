@@ -46,15 +46,6 @@ function readPositiveIntEnv(raw: string | undefined, fallback: number, limit = I
   return Number.isSafeInteger(value) && value > 0 && value < limit ? value : fallback;
 }
 
-function serializedPayloadSize(payload: unknown): number | null {
-  try {
-    const json = JSON.stringify(payload);
-    return json === undefined ? null : Buffer.byteLength(json, "utf8");
-  } catch {
-    return null;
-  }
-}
-
 interface ConnectedSession {
   socket: net.Socket;
   info: SessionInfo;
@@ -1116,15 +1107,6 @@ class IntercomBroker {
     this.prunePendingAskRecords(now);
     for (const [messageId, edge] of this.askEdges) {
       if (now - edge.createdAt > ASK_TIMEOUT_MS) {
-        this.askEdges.delete(messageId);
-        this.removePendingAskRecord(messageId);
-      }
-    }
-  }
-
-  private clearAskEdgesForSession(sessionKey: string): void {
-    for (const [messageId, edge] of this.askEdges) {
-      if (edge.from === sessionKey || edge.to === sessionKey) {
         this.askEdges.delete(messageId);
         this.removePendingAskRecord(messageId);
       }
