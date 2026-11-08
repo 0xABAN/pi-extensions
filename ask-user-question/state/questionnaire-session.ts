@@ -2,7 +2,6 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Editor, TUI } from "@earendil-works/pi-tui";
 import type { QuestionData, QuestionnaireResult, QuestionParams } from "../tool/types.ts";
 import type { WrappingSelectItem } from "../view/components/wrapping-select.ts";
-import { COLLAPSED_HINT } from "../view/dialog-copy.ts";
 import type { QuestionnairePropsAdapter } from "../view/props-adapter.ts";
 import { buildQuestionnaire, type QuestionnaireBuilt } from "./build-questionnaire.ts";
 import { type QuestionnaireAction, routeKey } from "./key-router.ts";
@@ -36,7 +35,6 @@ function initialState(): QuestionnaireState {
 		notesByTab: new Map(),
 		submitChoiceIndex: 0,
 		notesDraft: "",
-		collapsed: false,
 	};
 }
 
@@ -78,13 +76,13 @@ export class QuestionnaireSession {
 		this.inlineInput = built.inlineInput;
 		this.viewAdapter = built.adapter;
 
-		this.component = this.assembleComponent(built, config.theme);
+		this.component = this.assembleComponent(built);
 		this.viewAdapter.apply(this.state);
 	}
 
-	private assembleComponent(built: QuestionnaireBuilt, theme: Theme): QuestionnaireSessionComponent {
+	private assembleComponent(built: QuestionnaireBuilt): QuestionnaireSessionComponent {
 		return {
-			render: (width) => (this.state.collapsed ? [theme.fg("dim", ` ${COLLAPSED_HINT} `)] : built.render(width)),
+			render: (width) => built.render(width),
 			invalidate: built.invalidate,
 			handleInput: (data) => this.dispatch(data),
 		};

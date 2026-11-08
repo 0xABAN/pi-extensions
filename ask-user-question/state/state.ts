@@ -12,7 +12,6 @@ export interface QuestionnaireState {
 	notesByTab: ReadonlyMap<number, string>;
 	submitChoiceIndex: number;
 	notesDraft: string;
-	collapsed: boolean;
 }
 
 export interface QuestionnaireRuntime {

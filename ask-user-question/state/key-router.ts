@@ -14,7 +14,6 @@ const KEYBIND_EDITOR_DOWN = "tui.editor.cursorDown";
 const KEYBIND_CLEAR = "tui.editor.deleteToLineStart";
 
 export const NOTES_KEY = "n";
-export const COLLAPSE_KEY = "ctrl+]";
 
 export type QuestionnaireAction =
 	| { kind: "nav"; nextIndex: number; inputValue: string }
@@ -29,7 +28,6 @@ export type QuestionnaireAction =
 	| { kind: "submit" }
 	| { kind: "submit_nav"; nextIndex: 0 | 1 }
 	| { kind: "notes_forward"; data: string }
-	| { kind: "toggle_collapsed" }
 	| { kind: "ignore" };
 
 export interface QuestionnaireKeybindings {
@@ -148,11 +146,6 @@ function prevNavOnUp(state: QuestionnaireState, runtime: QuestionnaireRuntime): 
 	};
 }
 
-function routeCollapsed(kb: QuestionnaireKeybindings, data: string): QuestionnaireAction {
-	if (kb.matches(data, KEYBIND_CANCEL)) return { kind: "cancel" };
-	return { kind: "ignore" };
-}
-
 function routeNotesMode(kb: QuestionnaireKeybindings, data: string): QuestionnaireAction {
 	if (kb.matches(data, KEYBIND_CANCEL)) return { kind: "notes_exit" };
 	if (kb.matches(data, KEYBIND_NEW_LINE)) return { kind: "notes_forward", data };
@@ -269,9 +262,6 @@ function routeSingleSelectTab(
 export function routeKey(data: string, state: QuestionnaireState, runtime: QuestionnaireRuntime): QuestionnaireAction {
 	const kb = runtime.keybindings;
 
-	if (matchesKey(data, COLLAPSE_KEY)) return { kind: "toggle_collapsed" };
-
-	if (state.collapsed) return routeCollapsed(kb, data);
 	if (state.notesVisible) return routeNotesMode(kb, data);
 	if (state.inputMode) return routeInputMode(kb, data, state, runtime);
 	if (runtime.isMulti && state.currentTab === runtime.questions.length) {

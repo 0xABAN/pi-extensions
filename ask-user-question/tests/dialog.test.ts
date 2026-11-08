@@ -10,7 +10,6 @@ const KEY = {
 	escape: "\x1b",
 	down: "\x1b[B",
 	space: " ",
-	collapse: "\x1d",
 };
 
 const theme = new Proxy(
@@ -124,14 +123,9 @@ test("walks two questions and submits from the review tab", async () => {
 	expect(content[0]!.text).toContain('="Search"');
 });
 
-test("collapses to one hint row and expands again", () => {
+test("shows the keys in the footer", () => {
 	const dialog = open([database]);
-	expect(dialog.screen()).toContain("n to add notes · esc to cancel · ctrl+] to collapse");
-
-	dialog.press(KEY.collapse);
-	expect(dialog.screen()).toBe(" ctrl+] to expand · esc to cancel ");
-	dialog.press(KEY.collapse);
-	expect(dialog.screen()).toContain(database.question);
+	expect(dialog.screen()).toContain("n to add notes · esc to cancel");
 });
 
 test("treats escape as declining", async () => {

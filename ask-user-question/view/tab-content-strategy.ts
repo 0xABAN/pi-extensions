@@ -8,7 +8,6 @@ import type { DialogState } from "./dialog-builder.ts";
 import {
 	HINT_PART_CANCEL,
 	HINT_PART_CLEAR,
-	HINT_PART_COLLAPSE,
 	HINT_PART_NEW_LINE,
 	HINT_PART_NOTES,
 	HINT_PART_REVIEW_NOTE,
@@ -224,7 +223,6 @@ export function buildHintText(question: QuestionData | undefined, isMulti: boole
 	if (question && !state.notesVisible && !state.inputMode) parts.push(HINT_PART_NOTES);
 	if (isMulti) parts.push(HINT_PART_TAB);
 	parts.push(HINT_PART_CANCEL);
-	parts.push(HINT_PART_COLLAPSE);
 	if (state.notesVisible || state.inputMode) parts.push(HINT_PART_NEW_LINE);
 	if (state.inputMode) parts.push(HINT_PART_CLEAR);
 	return parts.join(" · ");
