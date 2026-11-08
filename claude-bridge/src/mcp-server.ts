@@ -2,6 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { McpResult } from "./extract-tool-results.js";
 
+export const MCP_SERVER_NAME = "custom-tools";
+export const MCP_TOOL_PREFIX = `mcp__${MCP_SERVER_NAME}__`;
+
 const TOOL_USE_ID_META = "claudecode/toolUseId";
 
 interface McpToolDef {

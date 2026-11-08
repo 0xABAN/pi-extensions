@@ -1,4 +1,4 @@
-import { createAssistantMessageEventStream, type AssistantMessage, type AssistantMessageEvent, type AssistantMessageEventStream, type Context, type ImageContent, type Model, type SimpleStreamOptions, type TextContent, type Tool, type UserMessage } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, getCurrentSystemMessage, type AssistantMessage, type AssistantMessageEvent, type AssistantMessageEventStream, type Context, type ImageContent, type Model, type SimpleStreamOptions, type TextContent, type Tool, type UserMessage } from "@earendil-works/pi-ai";
 import { getModels } from "@earendil-works/pi-ai/compat";
 import { isToolCallEventType, type ExtensionAPI, type ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 import { query, type EffortLevel, type SDKMessage, type SettingSource, type ThinkingConfig } from "@anthropic-ai/claude-agent-sdk";
@@ -12,7 +12,6 @@ import { QueryProcess } from "./query-process.js";
 import { readTranscript, recordedToolResults, resolveRecordingCut, savePrefixSession } from "./session-transcript.js";
 import { debugLogPath, diagLogPath } from "./log-paths.js";
 import { buildModels, claudeCodeModelId } from "./models.js";
-import { MCP_SERVER_NAME, MCP_TOOL_PREFIX } from "./skills.js";
 import { verifyWrittenSession as _verifyWrittenSession } from "./session-verify.js";
 import { extractAllToolResults as _extractAllToolResults, type McpResult } from "./extract-tool-results.js";
 import { digestMessage, digestMessages } from "./message-digests.js";
@@ -20,13 +19,9 @@ import { compareHistory, copyRecording, importHistory, LiveRecording, type Recor
 import { deleteSessionState, loadSessionState, saveSessionState } from "./session-store.js";
 import { newAssistantOutput, QueryContext, type AssistantStep } from "./query-state.js";
 import { makePromptStream, userMessage, type PromptStream } from "./prompt-stream.js";
-import {
-	projectPromptCapture,
-	sharedPromptCaptures,
-	type PromptCapture,
-} from "./prompt-capture.js";
+import { claudeCodeAppend } from "./prompt.js";
 import { collectCarriedAttachments } from "./attachments.js";
-import { createToolServer } from "./mcp-server.js";
+import { createToolServer, MCP_SERVER_NAME, MCP_TOOL_PREFIX } from "./mcp-server.js";
 import { nonSystemMessages, toBridgeContext } from "./transcript.js";
 import { forgetSessionCwd, rememberSessionCwd, rememberSummarySession, sessionCwdFor, summarySessionFor } from "./session-cwd.js";
 import { updateUsage, type SdkUsage } from "./usage.js";
@@ -493,17 +488,6 @@ let piUI: ExtensionUIContext | null = null;
 const activeQueryContexts = new Set<QueryContext>();
 
 
-const promptCaptures = sharedPromptCaptures((diagnostic) => {
-	const first = diagnostic.matches[0];
-	debug(
-		`prompt-capture: no match for ${diagnostic.systemPrompt.length}-char system prompt. `
-		+ (first
-			? `closest known (${first.key.length}-char) shares its first ${first.firstDivergent} chars and diverges at offset ${first.firstDivergent}: `
-			  + JSON.stringify(diagnostic.systemPrompt.slice(first.firstDivergent - 40, first.firstDivergent + 60))
-			: "no known captures to compare against."
-		) + ` known keys=${diagnostic.matches.length}`,
-	);
-});
 
 function closeSessionQueries(piSessionId: string): void {
 	for (const c of [...activeQueryContexts]) {
@@ -1137,6 +1121,7 @@ function dropParkedQuery(c: QueryContext): void {
 }
 
 function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: SimpleStreamOptions): AssistantMessageEventStream {
+	const system = getCurrentSystemMessage(context.messages);
 	context = toBridgeContext(context);
 
 	if (options?.cacheRetention === "none") {
@@ -1208,22 +1193,10 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 	debug(`provider: fresh query setup, isReentrant=${isReentrant}, activeContexts=${activeQueryContexts.size}`);
 
 	const { mcpTools, customToolNameToSdk, customToolNameToPi } = resolveMcpTools(context);
-	let promptCapture: PromptCapture | undefined;
 	let systemPromptAppend: string | undefined;
 	try {
-		promptCapture = promptCaptures.resolveOrDerive(context.systemPrompt);
-		systemPromptAppend = promptCapture
-			? projectPromptCapture(promptCapture, {
-				hasReadTool: mcpTools.some((tool) => tool.name === "read"),
-			})
-			: undefined;
+		systemPromptAppend = claudeCodeAppend(system);
 	} catch (err) {
-		diagDump("prompt_capture_unresolved", {
-			promptChars: context.systemPrompt?.length ?? 0,
-			knownKeys: promptCaptures.size,
-			reentrantUserQuery: isReentrantUserQuery,
-			error: errorMessage(err),
-		});
 		return failBeforeQuery(err);
 	}
 
@@ -1325,7 +1298,7 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 		debug("provider: fresh query",
 			`model=${cliModel} msgs=${context.messages.length} tools=${mcpTools.length}`,
 			`resume=${resumeSessionId?.slice(0, 8) ?? "none"} effort=${effort ?? "default"}`,
-			`ctxFiles=${promptCapture?.contextFiles.length ?? 0} ${sessionTag(queryCtx.piSessionId)}`,
+			sessionTag(queryCtx.piSessionId),
 			`prompt=${promptText.slice(0, 60)}${promptBlocks ? " [+images]" : ""}`);
 
 		let wasAborted = false;
@@ -1495,37 +1468,6 @@ export default function (pi: ExtensionAPI) {
 	});
 	pi.on("session_before_tree", (event, ctx) => {
 		rememberSummarySession(event.signal, ctx.sessionManager.getSessionId());
-	});
-	type RecordOptions = Parameters<typeof recordSystemPrompt>[2];
-	let lastSystemPromptOptions: RecordOptions | undefined;
-	function recordSystemPrompt(source: string, systemPrompt: string | undefined, options: {
-		customPrompt?: string;
-		appendSystemPrompt?: string;
-		contextFiles?: { path: string; content: string }[];
-		skills?: Parameters<typeof promptCaptures.record>[1]["skills"];
-		sections?: Record<string, string>;
-		selectedTools?: string[];
-	} | undefined) {
-		if (!systemPrompt) return;
-		const hasRead = !options?.selectedTools || options.selectedTools.includes("read");
-		promptCaptures.record(systemPrompt, {
-			custom: options?.customPrompt,
-			append: options?.appendSystemPrompt,
-			contextFiles: options?.contextFiles ?? [],
-			skills: hasRead ? options?.skills ?? [] : [],
-			sections: options?.sections,
-		}, source);
-	}
-	pi.on("before_agent_start", (event) => {
-		lastSystemPromptOptions = event.systemPromptOptions;
-		recordSystemPrompt("before_agent_start", event.systemPrompt, event.systemPromptOptions);
-	});
-	pi.on("agent_start", (_event, ctx) => {
-		recordSystemPrompt("agent_start", ctx.getSystemPrompt(), lastSystemPromptOptions);
-	});
-
-	pi.on("turn_start", (_event, ctx) => {
-		recordSystemPrompt("turn_start", ctx.getSystemPrompt(), lastSystemPromptOptions);
 	});
 	pi.on("session_shutdown", (_event, ctx) => {
 		forgetSessionCwd(ctx.sessionManager.getSessionId());

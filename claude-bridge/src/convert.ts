@@ -1,6 +1,6 @@
 import type { Message as PiMessage } from "@earendil-works/pi-ai";
 import type { Message as SessionMessage, ToolResultBlock } from "cc-session-io";
-import { MCP_TOOL_PREFIX } from "./skills.js";
+import { MCP_TOOL_PREFIX } from "./mcp-server.js";
 
 export const PROVIDER_ID = "claude-bridge";
 
