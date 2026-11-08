@@ -16,7 +16,12 @@ const RECOMMENDED_SUFFIX = /\s*\(Recommended\)$/;
 type ToolResultView = { content: ReadonlyArray<{ type: string; text?: string }>; details?: unknown };
 
 class WidthLines implements Component {
-	constructor(private readonly layout: (width: number) => string[]) {}
+	private readonly layout: (width: number) => string[];
+
+	constructor(layout: (width: number) => string[]) {
+		this.layout = layout;
+	}
+
 	render(width: number): string[] {
 		return this.layout(width);
 	}

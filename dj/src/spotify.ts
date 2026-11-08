@@ -8,13 +8,15 @@ const SCOPE = "user-read-playback-state",
 
 /** Safe UI error plus retry policy; unauthorized permits one refresh, auth requires login. */
 class SpotifyFailure extends Error {
-  constructor(
-    message: string,
-    readonly auth = false,
-    readonly retryMs = 30_000,
-    readonly unauthorized = false,
-  ) {
+  readonly auth: boolean;
+  readonly retryMs: number;
+  readonly unauthorized: boolean;
+
+  constructor(message: string, auth = false, retryMs = 30_000, unauthorized = false) {
     super(message);
+    this.auth = auth;
+    this.retryMs = retryMs;
+    this.unauthorized = unauthorized;
   }
 }
 

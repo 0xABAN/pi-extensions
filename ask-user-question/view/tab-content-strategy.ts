@@ -27,10 +27,13 @@ const REVIEW_NOTE_LABEL = "Note";
 const SAVED_NOTE_LABEL = "Note for this answer:";
 
 class OneLineClippedText implements Component {
-	constructor(
-		private readonly text: string,
-		private readonly paddingLeft: number = 0,
-	) {}
+	private readonly text: string;
+	private readonly paddingLeft: number;
+
+	constructor(text: string, paddingLeft = 0) {
+		this.text = text;
+		this.paddingLeft = paddingLeft;
+	}
 
 	render(width: number): string[] {
 		const pad = " ".repeat(this.paddingLeft);
@@ -71,8 +74,11 @@ export interface QuestionTabStrategyConfig {
 
 export class QuestionTabStrategy implements TabContentStrategy {
 	readonly footerRowCount = 2;
+	private readonly config: QuestionTabStrategyConfig;
 
-	constructor(private readonly config: QuestionTabStrategyConfig) {}
+	constructor(config: QuestionTabStrategyConfig) {
+		this.config = config;
+	}
 
 	headingRows(state: DialogState): Component[] {
 		const out: Component[] = [];
@@ -145,8 +151,11 @@ export interface SubmitTabStrategyConfig {
 
 export class SubmitTabStrategy implements TabContentStrategy {
 	readonly footerRowCount = 5;
+	private readonly config: SubmitTabStrategyConfig;
 
-	constructor(private readonly config: SubmitTabStrategyConfig) {}
+	constructor(config: SubmitTabStrategyConfig) {
+		this.config = config;
+	}
 
 	headingRows(_state: DialogState): Component[] {
 		return [

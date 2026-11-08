@@ -41,13 +41,14 @@ interface MultiSelectBuild {
 }
 
 export class MultiSelectView implements StatefulView<MultiSelectViewProps> {
+	private readonly theme: Theme;
+	private readonly question: QuestionData;
 	private props: MultiSelectViewProps;
 	private cachedLayout: { width: number; value: MultiSelectLayout } | undefined;
 
-	constructor(
-		private readonly theme: Theme,
-		private readonly question: QuestionData,
-	) {
+	constructor(theme: Theme, question: QuestionData) {
+		this.theme = theme;
+		this.question = question;
 		this.props = {
 			rows: [],
 			other: { active: false, checked: false, inputMode: false, inputBuffer: "", inputCursorOffset: undefined },

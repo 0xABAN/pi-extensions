@@ -8,9 +8,11 @@ export interface TabBarProps {
 }
 
 export class TabBar implements StatefulView<TabBarProps> {
+	private readonly theme: Theme;
 	private props: TabBarProps;
 
-	constructor(private readonly theme: Theme) {
+	constructor(theme: Theme) {
+		this.theme = theme;
 		this.props = { tabs: [], submit: { active: false, allAnswered: false } };
 	}
 
