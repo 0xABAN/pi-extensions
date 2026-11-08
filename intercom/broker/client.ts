@@ -5,7 +5,7 @@ import { writeMessage, createMessageReader } from "./framing.ts";
 import { getBrokerConnectTarget, type BrokerConnectTarget } from "./paths.ts";
 import { isMessage, isMessageControl, isMessageReceipt, isSessionInfo } from "./protocol.ts";
 import { getIntercomScopeId } from "../config.ts";
-import { EXACT_SEND_FEATURE, EXTENSION_BUS_FEATURE, SESSION_HELD_ERROR_CODE, type DeliveryDetails } from "../types.ts";
+import { EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE, type DeliveryDetails } from "../types.ts";
 import type {
   Attachment,
   BrokerMessage,
@@ -13,7 +13,6 @@ import type {
   ClientMessage,
   Message,
   MessageControl,
-  MessageProvenance,
   MessageReceipt,
   SessionInfo,
   SessionHolder,
@@ -28,7 +27,6 @@ interface SendOptions {
   messageId?: string;
   supersedes?: string;
   retryOf?: string;
-  provenance?: MessageProvenance;
   crossMachine?: CrossMachineProvenance;
 }
 
@@ -466,67 +464,6 @@ export class IntercomClient extends EventEmitter {
         break;
       }
 
-      case "extension_owner": {
-        const hasOwnerId = typeof brokerMessage.ownerId === "string";
-        const hasOwnerEpoch = typeof brokerMessage.ownerEpoch === "string";
-        if (
-          typeof brokerMessage.namespace !== "string"
-          || hasOwnerId !== hasOwnerEpoch
-          || (brokerMessage.ownerId !== undefined && !hasOwnerId)
-          || (brokerMessage.ownerEpoch !== undefined && !hasOwnerEpoch)
-        ) {
-          throw new Error("Invalid extension_owner message");
-        }
-        this.emit("broker_message", brokerMessage as BrokerMessage);
-        this.emit("extension_owner", brokerMessage);
-        break;
-      }
-
-      case "extension_message": {
-        const hasOwnerId = typeof brokerMessage.ownerId === "string";
-        const hasOwnerEpoch = typeof brokerMessage.ownerEpoch === "string";
-        if (
-          typeof brokerMessage.namespace !== "string"
-          || typeof brokerMessage.fromSessionId !== "string"
-          || hasOwnerId !== hasOwnerEpoch
-          || (brokerMessage.ownerId !== undefined && !hasOwnerId)
-          || (brokerMessage.ownerEpoch !== undefined && !hasOwnerEpoch)
-        ) {
-          throw new Error("Invalid extension_message");
-        }
-        this.emit("broker_message", brokerMessage as BrokerMessage);
-        this.emit("extension_message", brokerMessage);
-        break;
-      }
-
-      case "extension_state": {
-        if (
-          typeof brokerMessage.namespace !== "string"
-          || !Number.isSafeInteger(brokerMessage.revision)
-          || Number(brokerMessage.revision) < 0
-        ) {
-          throw new Error("Invalid extension_state");
-        }
-        this.emit("broker_message", brokerMessage as BrokerMessage);
-        this.emit("extension_state", brokerMessage);
-        break;
-      }
-
-      case "extension_state_result": {
-        if (
-          typeof brokerMessage.namespace !== "string"
-          || typeof brokerMessage.committed !== "boolean"
-          || !Number.isSafeInteger(brokerMessage.revision)
-          || Number(brokerMessage.revision) < 0
-          || (brokerMessage.reason !== undefined && typeof brokerMessage.reason !== "string")
-        ) {
-          throw new Error("Invalid extension_state_result");
-        }
-        this.emit("broker_message", brokerMessage as BrokerMessage);
-        this.emit("extension_state_result", brokerMessage);
-        break;
-      }
-
       default:
         throw new Error(`Unknown broker message type: ${brokerMessage.type}`);
     }
@@ -573,12 +510,6 @@ export class IntercomClient extends EventEmitter {
         socket.destroy();
       }
     });
-  }
-
-  updateExtensionCapabilities(extensions: SessionRegistration["extensions"]): void {
-    if (!this.supportsFeature(EXTENSION_BUS_FEATURE)) return;
-    const socket = this.requireActiveSocket();
-    writeMessage(socket, { type: "extension_capabilities_update", extensions: extensions ?? [] });
   }
 
   listSessions(options: { timeoutMs?: number } = {}): Promise<SessionInfo[]> {
@@ -633,7 +564,6 @@ export class IntercomClient extends EventEmitter {
       retryOf: options.retryOf,
       replyTo: options.replyTo,
       expectsReply: options.expectsReply,
-      provenance: options.provenance,
       crossMachine: options.crossMachine,
       content: {
         text: options.text,
@@ -764,14 +694,6 @@ export class IntercomClient extends EventEmitter {
     }
 
     writeMessage(socket, { type: "presence", ...updates });
-  }
-
-  sendExtensionMessage(message: Extract<ClientMessage, { type: "extension_publish" | "extension_state_commit" }>): void {
-    if (!this.supportsFeature(EXTENSION_BUS_FEATURE)) {
-      throw new Error(`Connected broker does not support ${EXTENSION_BUS_FEATURE}`);
-    }
-    const socket = this.requireActiveSocket();
-    writeMessage(socket, message);
   }
 
   onBrokerMessage(handler: (message: BrokerMessage) => void): () => void {

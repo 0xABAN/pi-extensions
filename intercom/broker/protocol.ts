@@ -2,7 +2,6 @@ import type {
   Attachment,
   Message,
   MessageControl,
-  MessageProvenance,
   MessageReceipt,
   MessageReceiptStatus,
   SessionInfo,
@@ -91,16 +90,6 @@ function isAttachment(value: unknown): value is Attachment {
   return value.language === undefined || typeof value.language === "string";
 }
 
-function isMessageProvenance(value: unknown): value is MessageProvenance {
-  if (!isRecord(value)) {
-    return false;
-  }
-  return value.type === "extension_outbox"
-    && typeof value.extensionId === "string"
-    && typeof value.extensionName === "string"
-    && typeof value.requestId === "string";
-}
-
 function isCrossMachineProvenance(value: unknown): boolean {
   if (
     !isRecord(value)
@@ -145,9 +134,6 @@ export function isMessage(value: unknown): value is Message {
     return false;
   }
 
-  if (value.provenance !== undefined && !isMessageProvenance(value.provenance)) {
-    return false;
-  }
   if (value.crossMachine !== undefined && !isCrossMachineProvenance(value.crossMachine)) {
     return false;
   }
@@ -169,7 +155,6 @@ export function messageDeliveryFingerprint(message: Message, targetId: string): 
     expectsReply: message.expectsReply,
     supersedes: message.supersedes,
     retryOf: message.retryOf,
-    provenance: message.provenance,
     crossMachine: message.crossMachine,
   });
 }

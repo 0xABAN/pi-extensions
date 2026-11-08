@@ -48,10 +48,6 @@ type Item =
   | { kind: "fetch" }
   | { kind: "remote"; machine: SavedMachine; agent: RemoteAgent };
 
-function isSubagentChild(session: SessionInfo): boolean {
-  return session.id.startsWith("subagent-");
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -82,7 +78,7 @@ export class HandoverPicker implements Component {
     this.lister = options.lister;
     this.done = done;
     this.localSessions = options.sessions
-      .filter((session) => session.id !== options.currentSession.id && !isSubagentChild(session))
+      .filter((session) => session.id !== options.currentSession.id)
       .sort((a, b) => b.lastActivity - a.lastActivity);
     const preselected = this.localSessions.findIndex((session) => session.id === options.preselectSessionId);
     if (preselected >= 0) {

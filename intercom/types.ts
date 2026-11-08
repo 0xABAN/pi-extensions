@@ -1,4 +1,3 @@
-export const EXTENSION_BUS_FEATURE = "extension-bus-v1";
 export const EXACT_SEND_FEATURE = "exact-send-v1";
 export const SESSION_HELD_ERROR_CODE = "E_SESSION_HELD";
 
@@ -75,19 +74,11 @@ export interface Message {
   retryOf?: string;
   replyTo?: string;
   expectsReply?: boolean;
-  provenance?: MessageProvenance;
   crossMachine?: CrossMachineProvenance;
   content: {
     text: string;
     attachments?: Attachment[];
   };
-}
-
-export interface MessageProvenance {
-  type: "extension_outbox";
-  extensionId: string;
-  extensionName: string;
-  requestId: string;
 }
 
 export interface Attachment {
@@ -116,13 +107,7 @@ export interface MessageControl {
   detail?: string;
 }
 
-export interface ExtensionCapability {
-  namespace: string;
-  ownerEligible: boolean;
-}
-
 export type SessionRegistration = Omit<SessionInfo, "id" | "endpointEpoch" | "peerUid" | "trustedLocal" | "herdrLocation"> & {
-  extensions?: ExtensionCapability[];
   herdrSessionPath?: string;
   acknowledgesReceipts?: boolean;
   livenessIntervalMs?: number;
@@ -131,28 +116,12 @@ export type SessionRegistration = Omit<SessionInfo, "id" | "endpointEpoch" | "pe
 export type ClientMessage =
   | { type: "register"; session: SessionRegistration; sessionId?: string; stateId?: string; scopeId?: string }
   | { type: "unregister" }
-  | { type: "extension_capabilities_update"; extensions: ExtensionCapability[] }
   | { type: "list"; requestId: string }
   | { type: "send"; to: string; message: Message; targetId?: string; targetEpoch?: string }
   | { type: "message_receipt"; receipt: MessageReceipt }
   | { type: "cancel_message"; messageId: string }
   | { type: "cancel_ask"; messageId: string }
   | { type: "presence"; name?: string; runtimeFallbackAlias?: boolean; status?: string; model?: string; contextPct?: number | null; contextTokens?: number | null; contextWindow?: number | null }
-  | {
-      type: "extension_publish";
-      namespace: string;
-      audience: "owner" | "capable";
-      ownerEpoch?: string;
-      ownerOnly?: boolean;
-      payload: unknown;
-    }
-  | {
-      type: "extension_state_commit";
-      namespace: string;
-      ownerEpoch: string;
-      expectedRevision: number;
-      payload: unknown;
-    };
 
 export type BrokerMessage =
   | { type: "registered"; sessionId: string; features?: string[] }
@@ -166,25 +135,3 @@ export type BrokerMessage =
   | ({ type: "delivery_failed"; messageId: string; reason: string } & DeliveryDetails)
   | { type: "message_receipt"; from: SessionInfo; receipt: MessageReceipt }
   | { type: "message_control"; from: SessionInfo; control: MessageControl }
-  | { type: "extension_owner"; namespace: string; ownerId?: string; ownerEpoch?: string }
-  | {
-      type: "extension_message";
-      namespace: string;
-      fromSessionId: string;
-      ownerId?: string;
-      ownerEpoch?: string;
-      payload: unknown;
-    }
-  | {
-      type: "extension_state";
-      namespace: string;
-      revision: number;
-      payload: unknown;
-    }
-  | {
-      type: "extension_state_result";
-      namespace: string;
-      committed: boolean;
-      revision: number;
-      reason?: string;
-    };

@@ -86,7 +86,6 @@ export class InlineMessageComponent implements Component {
     add(`Message: ${this.message.id}`);
     if (this.replyCommand) add(`${replyLabel} ${this.replyCommand}`);
     if (this.message.replyTo && !this.message.expectsReply) add(`Reply to ${this.message.replyTo.slice(0, 8)}`);
-    if (this.message.provenance?.type === "extension_outbox") add(`Via extension: ${this.message.provenance.extensionName}`);
     for (const attachment of this.message.content.attachments ?? []) {
       add(`Attachment: ${attachment.name}`);
     }
