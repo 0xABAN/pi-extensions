@@ -50,7 +50,7 @@ export function formatSessionLabel(session: SessionInfo, sessions: SessionInfo[]
 
   const name = session.name.toLowerCase();
   const shared = sessions.filter((other) => other.name?.toLowerCase() === name).length > 1;
-  return shared ? `${session.name} (${session.id.slice(0, 8)})` : session.name;
+  return shared ? `${session.name} (${sessionIdPrefixes(sessions).get(session.id)})` : session.name;
 }
 
 function formatTokenCount(tokens: number): string {

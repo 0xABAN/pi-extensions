@@ -1,6 +1,7 @@
 import type { Component } from "@earendil-works/pi-tui";
 import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
+import { sessionIdPrefixes } from "../format.ts";
 import type { SessionInfo } from "../types.ts";
 
 export function middleTruncate(text: string, maxWidth: number): string {
@@ -29,10 +30,6 @@ export function middleTruncate(text: string, maxWidth: number): string {
   return truncateToWidth(`${left}…${right}`, maxWidth, "");
 }
 
-export function shortSessionId(sessionId: string): string {
-  return sessionId.slice(0, 8);
-}
-
 export function herdrLocationText(session: SessionInfo): string | undefined {
   const location = session.herdrLocation;
   if (!location) return undefined;
@@ -41,12 +38,12 @@ export function herdrLocationText(session: SessionInfo): string | undefined {
   return `${location.workspace.label} [${location.workspace.id}] / ${location.tab.label} [${location.tab.id}] / ${location.paneId}`;
 }
 
-function sessionTitle(session: SessionInfo, options?: { self?: boolean; sameCwd?: boolean }): string {
+function sessionTitle(session: SessionInfo, idPrefix: string, options?: { self?: boolean; sameCwd?: boolean }): string {
   const name = session.name || "Unnamed session";
   const tags = [options?.self ? "self" : undefined, options?.sameCwd ? "same cwd" : undefined]
     .filter((tag): tag is string => Boolean(tag));
   const suffix = tags.length ? ` [${tags.join(", ")}]` : "";
-  return `${name} (${shortSessionId(session.id)})${suffix}`;
+  return `${name} (${idPrefix})${suffix}`;
 }
 
 export interface SessionListSelection {
@@ -60,6 +57,7 @@ export class SessionListOverlay implements Component {
   private currentSession: SessionInfo;
   private done: (result: SessionListSelection | undefined) => void;
   private sessions: SessionInfo[];
+  private idPrefixes: Map<string, string>;
   private selectedIndex = 0;
   private maxVisible = 8;
 
@@ -74,6 +72,7 @@ export class SessionListOverlay implements Component {
     this.keybindings = keybindings;
     this.currentSession = currentSession;
     this.sessions = sessions;
+    this.idPrefixes = sessionIdPrefixes([currentSession, ...sessions]);
     this.done = done;
   }
 
@@ -127,7 +126,7 @@ export class SessionListOverlay implements Component {
     lines.push(row(this.theme.bold(" Current session")));
     lines.push(border(`├${"─".repeat(contentWidth)}┤`));
     lines.push(row());
-    lines.push(row(`  ${this.theme.fg("dim", sessionTitle(this.currentSession, { self: true }))}`));
+    lines.push(row(`  ${this.theme.fg("dim", sessionTitle(this.currentSession, this.idPrefixes.get(this.currentSession.id)!, { self: true }))}`));
     lines.push(row(`  ${this.theme.fg("dim", `${middleTruncate(this.currentSession.cwd, Math.max(8, contentWidth - 4))} • ${this.currentSession.model}`)}`));
     const currentHerdrLocation = herdrLocationText(this.currentSession);
     if (currentHerdrLocation) lines.push(row(`  ${this.theme.fg("dim", currentHerdrLocation)}`));
@@ -150,7 +149,7 @@ export class SessionListOverlay implements Component {
         const isSelected = index === this.selectedIndex;
         const sameCwd = session.cwd === this.currentSession.cwd;
         const prefix = isSelected ? this.theme.fg("accent", "→ ") : "  ";
-        const title = sessionTitle(session, { sameCwd });
+        const title = sessionTitle(session, this.idPrefixes.get(session.id)!, { sameCwd });
         const pathText = `${middleTruncate(session.cwd, Math.max(8, contentWidth - 4))} • ${session.model}`;
 
         lines.push(row(`${prefix}${isSelected ? this.theme.fg("accent", title) : title}`));

@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { realpathSync, statSync } from "fs";
 import { resolve } from "path";
 import { sameCwd } from "./cwd.ts";
+import { sessionIdPrefixes } from "./format.ts";
 import type { SessionInfo } from "./types.ts";
 
 const DEFAULT_PROJECT_AGENT_TIMEOUT_MS = 20_000;
@@ -197,7 +198,7 @@ export function resolveTargetInCwd(input: {
     if (candidates.length === 0) {
       return { kind: "missing", targetCwd: input.targetCwd, reason: `No other intercom sessions are connected in ${input.targetCwd}.` };
     }
-    throw new Error(`Multiple intercom sessions are connected in ${input.targetCwd}: ${formatSessionRefs(candidates)}. Specify 'to'.`);
+    throw new Error(`Multiple intercom sessions are connected in ${input.targetCwd}: ${formatSessionRefs(candidates, input.sessions)}. Specify 'to'.`);
   }
 
   const byId = inCwd.find((session) => session.id === target);
@@ -207,7 +208,7 @@ export function resolveTargetInCwd(input: {
   const byName = inCwd.filter((session) => session.name?.toLowerCase() === lowerName);
   if (byName.length === 1) return { kind: "found", session: byName[0], targetCwd: input.targetCwd };
   if (byName.length > 1) {
-    throw new Error(`Multiple intercom sessions named "${target}" are connected in ${input.targetCwd}: ${formatSessionRefs(byName)}. Address one by session ID.`);
+    throw new Error(`Multiple intercom sessions named "${target}" are connected in ${input.targetCwd}: ${formatSessionRefs(byName, input.sessions)}. Address one by session ID.`);
   }
 
   const byIdPrefix = inCwd.filter((session) => session.id.startsWith(target));
@@ -281,7 +282,7 @@ export async function waitForProjectSession(client: ListSessionsClient, input: {
     );
     if (newInProject.length === 1) return newInProject[0]!;
     if (newInProject.length > 1) {
-      throw new Error(`Multiple new intercom sessions registered in ${input.projectRoot}: ${formatSessionRefs(newInProject)}. Address one explicitly.`);
+      throw new Error(`Multiple new intercom sessions registered in ${input.projectRoot}: ${formatSessionRefs(newInProject, sessions)}. Address one explicitly.`);
     }
 
     await sleep(pollMs, input.signal);
@@ -290,9 +291,10 @@ export async function waitForProjectSession(client: ListSessionsClient, input: {
   throw new Error(`Timed out waiting for a Pi intercom session to register in ${input.projectRoot}. The Herdr pane may still be starting, or pi-intercom may not be loaded there.`);
 }
 
-function formatSessionRefs(sessions: SessionInfo[]): string {
-  return sessions
-    .map((session) => `${session.name || "Unnamed session"} (${session.id.slice(0, 8)})`)
+function formatSessionRefs(matches: SessionInfo[], sessions: SessionInfo[]): string {
+  const prefixes = sessionIdPrefixes(sessions);
+  return matches
+    .map((session) => `${session.name || "Unnamed session"} (${prefixes.get(session.id)})`)
     .join(", ");
 }
 

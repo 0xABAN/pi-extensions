@@ -129,7 +129,7 @@ async function cancelMessage(client: IntercomClient, messageId: string): Promise
 async function connectionStatus(client: IntercomClient): Promise<ToolResult> {
   const sessions = await client.listSessions();
   const self = sessions.find((session) => session.id === client.sessionId);
-  const shortId = (client.sessionId ?? "unknown").slice(0, 8);
+  const shortId = sessionIdPrefixes(sessions).get(client.sessionId ?? "") ?? "unknown";
   return textResult(`**Intercom status:**\nConnected: Yes\nSession ID: ${client.sessionId}\nSession name: ${self?.name ?? "(unnamed)"} (short id: ${shortId})\nActive sessions: ${sessions.length}`);
 }
 

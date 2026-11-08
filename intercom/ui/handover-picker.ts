@@ -2,7 +2,8 @@ import type { Component, TUI } from "@earendil-works/pi-tui";
 import { Input, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import type { SessionInfo } from "../types.ts";
-import { herdrLocationText, middleTruncate, shortSessionId } from "./session-list.ts";
+import { sessionIdPrefixes } from "../format.ts";
+import { herdrLocationText, middleTruncate } from "./session-list.ts";
 
 const PICKER_WIDTH = 88;
 const MAX_BODY_LINES = 24;
@@ -33,6 +34,7 @@ export class HandoverPicker implements Component {
   private readonly keybindings: KeybindingsManager;
   private readonly done: (result: HandoverPickerResult | undefined) => void;
   private readonly localSessions: SessionInfo[];
+  private readonly idPrefixes: Map<string, string>;
   private selectedIndex = 0;
   private focus: "list" | "task" = "list";
   private readonly taskInput = new Input();
@@ -48,6 +50,7 @@ export class HandoverPicker implements Component {
     this.theme = theme;
     this.keybindings = keybindings;
     this.done = done;
+    this.idPrefixes = sessionIdPrefixes(options.sessions);
     this.localSessions = options.sessions
       .filter((session) => session.id !== options.currentSession.id)
       .sort((a, b) => b.lastActivity - a.lastActivity);
@@ -142,7 +145,7 @@ export class HandoverPicker implements Component {
       const location = herdrLocationText(session);
       pushItem(
         item,
-        `${session.name || "Unnamed session"} (${shortSessionId(session.id)})`,
+        `${session.name || "Unnamed session"} (${this.idPrefixes.get(session.id)})`,
         [`${middleTruncate(session.cwd, pathWidth)} • ${session.model}`, ...(location ? [location] : [])],
         `${status}${pct}`,
       );
