@@ -1,9 +1,9 @@
 import { spawn } from "child_process";
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
-import net from "net";
-import { randomUUID } from "crypto";
+import { randomUUID } from "node:crypto";
+import { closeSync, existsSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import net from "node:net";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createMessageReader, writeMessage } from "./framing.ts";
 import {
   ensureIntercomRuntimeDir,
@@ -16,232 +16,144 @@ import {
   restrictIntercomRuntimeFile,
 } from "./paths.ts";
 
-const INTERCOM_DIR = getIntercomDirPath();
-const BROKER_PID = join(INTERCOM_DIR, "broker.pid");
-const BROKER_SPAWN_LOCK = join(INTERCOM_DIR, "broker.spawn.lock");
-const BROKER_STARTUP_STDERR_LIMIT = 4_000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-export function isBrokerHealthOkMessage(message: unknown, requestId: string): boolean {
-  if (typeof message !== "object" || message === null || !("type" in message)) {
-    return false;
-  }
-  const response = message as Record<string, unknown>;
-  return response.type === "health_ok"
-    && response.requestId === requestId
-    && response.protocol === INTERCOM_PROTOCOL_NAME
-    && response.version === INTERCOM_PROTOCOL_VERSION;
-}
-
-
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
-}
+const BROKER_PATH = join(dirname(fileURLToPath(import.meta.url)), "broker.ts");
+const BROKER_STARTUP_TIMEOUT_MS = 5000;
+const BROKER_STDERR_LIMIT = 4000;
+const HEALTH_CHECK_TIMEOUT_MS = 1000;
+const SPAWN_LOCK_STALE_MS = 10_000;
 
 export async function spawnBrokerIfNeeded(): Promise<void> {
-  ensureIntercomRuntimeDir(INTERCOM_DIR);
-
-  if (await isBrokerRunning()) {
+  const intercomDir = getIntercomDirPath();
+  ensureIntercomRuntimeDir(intercomDir);
+  if (await isBrokerHealthy()) {
     return;
   }
 
-  const ownsLock = acquireSpawnLock();
-  if (!ownsLock) {
+  const lockPath = join(intercomDir, "broker.spawn.lock");
+  if (!acquireSpawnLock(lockPath)) {
     await waitForBroker();
     return;
   }
 
   try {
-    if (await isBrokerRunning()) {
-      return;
+    if (!(await isBrokerHealthy())) {
+      await startBroker(intercomDir);
     }
-
-    const brokerPath = join(dirname(fileURLToPath(import.meta.url)), "broker.ts");
-    const agentDir = getAgentDirPath();
-    const child = spawn(process.execPath, [brokerPath], {
-      detached: true,
-      stdio: ["ignore", "ignore", "pipe"],
-      cwd: getIntercomDirPath(agentDir),
-      env: { ...process.env, PI_CODING_AGENT_DIR: agentDir, NODE_NO_WARNINGS: "1" },
-    });
-    let brokerStderr = "";
-    const rememberBrokerStderr = (chunk: Buffer | string) => {
-      brokerStderr = `${brokerStderr}${chunk.toString()}`.slice(-BROKER_STARTUP_STDERR_LIMIT);
-    };
-    const brokerStartupError = (message: string, cause?: unknown) => {
-      const stderr = brokerStderr.trim();
-      const errorMessage = stderr ? `${message}\nBroker stderr:\n${stderr}` : message;
-      return cause === undefined ? new Error(errorMessage) : new Error(errorMessage, { cause });
-    };
-    child.stderr?.on("data", rememberBrokerStderr);
-    (child.stderr as net.Socket).unref();
-    child.unref();
-
-    await new Promise<void>((resolve, reject) => {
-      const cleanup = () => {
-        child.stderr?.off("data", rememberBrokerStderr);
-        child.stderr?.resume();
-        child.off("error", onError);
-        child.off("close", onExit);
-      };
-
-      const onError = (error: Error) => {
-        cleanup();
-        reject(brokerStartupError(`Failed to spawn intercom broker: ${error.message}`, error));
-      };
-
-      const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
-        cleanup();
-        if (signal) {
-          reject(brokerStartupError(`Intercom broker exited before startup with signal ${signal}`));
-          return;
-        }
-        reject(brokerStartupError(`Intercom broker exited before startup with code ${code ?? "unknown"}`));
-      };
-
-      child.once("error", onError);
-      child.once("close", onExit);
-      waitForBroker().then(() => {
-        cleanup();
-        resolve();
-      }, (error) => {
-        cleanup();
-        const startupError = toError(error);
-        reject(brokerStartupError(startupError.message, startupError));
-      });
-    });
   } finally {
-    releaseSpawnLock();
+    rmSync(lockPath, { force: true });
   }
 }
 
-async function isBrokerRunning(): Promise<boolean> {
-  if (await checkSocketConnectable()) {
-    return true;
-  }
+async function startBroker(intercomDir: string): Promise<void> {
+  const logPath = join(intercomDir, "broker.log");
+  const log = openSync(logPath, "w", INTERCOM_RUNTIME_FILE_MODE);
+  restrictIntercomRuntimeFile(logPath);
 
-  if (!existsSync(BROKER_PID)) return false;
+  const child = spawn(process.execPath, [BROKER_PATH], {
+    detached: true,
+    stdio: ["ignore", "ignore", log],
+    cwd: intercomDir,
+    env: { ...process.env, PI_CODING_AGENT_DIR: getAgentDirPath(), NODE_NO_WARNINGS: "1" },
+  });
+  closeSync(log);
+  child.unref();
+
+  const exited = new Promise<never>((_, reject) => {
+    child.once("error", (error) => reject(new Error(`Failed to spawn intercom broker: ${error.message}`, { cause: error })));
+    child.once("exit", (code, signal) => reject(new Error(`Intercom broker exited before startup with ${signal ? `signal ${signal}` : `code ${code}`}`)));
+  });
 
   try {
-    const pid = parseInt(readFileSync(BROKER_PID, "utf-8").trim(), 10);
-    if (!Number.isFinite(pid)) return false;
-    process.kill(pid, 0);
-    return checkSocketConnectable();
-  } catch {
-    return false;
+    await Promise.race([waitForBroker(), exited]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const stderr = readFileSync(logPath, "utf8").trim().slice(-BROKER_STDERR_LIMIT);
+    throw new Error(stderr ? `${message}\nBroker stderr:\n${stderr}` : message, { cause: error });
+  } finally {
+    child.removeAllListeners();
   }
 }
 
-function checkSocketConnectable(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socketPath = getBrokerSocketPath();
-    if (!existsSync(socketPath)) {
-      resolve(false);
+async function waitForBroker(): Promise<void> {
+  const deadline = Date.now() + BROKER_STARTUP_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (await isBrokerHealthy()) {
       return;
     }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("Broker failed to start within timeout");
+}
 
+function isBrokerHealthy(): Promise<boolean> {
+  const socketPath = getBrokerSocketPath();
+  if (!existsSync(socketPath)) {
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
     const socket = net.connect(socketPath);
     const requestId = randomUUID();
-    let settled = false;
-    const finish = (isConnected: boolean) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
+    const finish = (healthy: boolean) => {
       clearTimeout(timeout);
-      socket.off("connect", onConnect);
-      socket.off("error", onError);
-      socket.off("data", reader);
+      socket.removeAllListeners();
       socket.destroy();
-      resolve(isConnected);
+      resolve(healthy);
     };
-    const onConnect = () => {
-      try {
-        writeMessage(socket, { type: "health", requestId });
-      } catch {
-        finish(false);
-      }
-    };
-    const onError = () => finish(false);
-    const reader = createMessageReader((message) => {
-      finish(isBrokerHealthOkMessage(message, requestId));
-    }, () => finish(false));
-    socket.on("connect", onConnect);
-    socket.on("error", onError);
-    socket.on("data", reader);
-    const timeout = setTimeout(() => finish(false), 1000);
+    const timeout = setTimeout(() => finish(false), HEALTH_CHECK_TIMEOUT_MS);
+
+    socket.on("connect", () => writeMessage(socket, { type: "health", requestId }));
+    socket.on("error", () => finish(false));
+    socket.on("data", createMessageReader((message) => {
+      const response = message as Record<string, unknown>;
+      finish(response.type === "health_ok"
+        && response.requestId === requestId
+        && response.protocol === INTERCOM_PROTOCOL_NAME
+        && response.version === INTERCOM_PROTOCOL_VERSION);
+    }, () => finish(false)));
   });
 }
 
-function acquireSpawnLock(): boolean {
-  const maxRetries = 5;
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+function acquireSpawnLock(lockPath: string): boolean {
+  for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      writeFileSync(BROKER_SPAWN_LOCK, `${process.pid}\n${Date.now()}\n`, {
-        flag: "wx",
-        mode: INTERCOM_RUNTIME_FILE_MODE,
-      });
-      restrictIntercomRuntimeFile(BROKER_SPAWN_LOCK);
+      writeFileSync(lockPath, `${process.pid}\n${Date.now()}\n`, { flag: "wx", mode: INTERCOM_RUNTIME_FILE_MODE });
       return true;
     } catch (error) {
-      if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== "EEXIST") {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
         throw error;
       }
-      if (isSpawnLockStale()) {
-        try {
-          unlinkSync(BROKER_SPAWN_LOCK);
-        } catch {
-        }
-        continue;
+      if (!isSpawnLockStale(lockPath)) {
+        return false;
       }
-      return false;
+      rmSync(lockPath, { force: true });
     }
   }
   return false;
 }
 
-function isSpawnLockStale(): boolean {
-  if (!existsSync(BROKER_SPAWN_LOCK)) {
-    return false;
+function isSpawnLockStale(lockPath: string): boolean {
+  let lock: string;
+  try {
+    lock = readFileSync(lockPath, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return true;
+    }
+    throw error;
+  }
+
+  const [pidLine = "", createdAtLine = "0"] = lock.trim().split("\n");
+  const pid = Number.parseInt(pidLine, 10);
+  const createdAt = Number.parseInt(createdAtLine, 10);
+  if (!Number.isFinite(createdAt) || Date.now() - createdAt > SPAWN_LOCK_STALE_MS) {
+    return true;
   }
 
   try {
-    const [pidLine = "", createdAtLine = "0"] = readFileSync(BROKER_SPAWN_LOCK, "utf-8").trim().split("\n");
-    const pid = Number.parseInt(pidLine, 10);
-    const createdAt = Number.parseInt(createdAtLine, 10);
-    const ageMs = Date.now() - createdAt;
-
-    if (Number.isFinite(pid)) {
-      try {
-        process.kill(pid, 0);
-      } catch {
-        return true;
-      }
-    }
-
-    return !Number.isFinite(createdAt) || ageMs > 10_000;
+    process.kill(pid, 0);
+    return false;
   } catch {
     return true;
   }
-}
-
-function releaseSpawnLock(): void {
-  try {
-    unlinkSync(BROKER_SPAWN_LOCK);
-  } catch {
-  }
-}
-
-async function waitForBroker(timeoutMs = 5000): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (await checkSocketConnectable()) {
-      return;
-    }
-    await sleep(100);
-  }
-  throw new Error("Broker failed to start within timeout");
 }
