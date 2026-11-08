@@ -1,4 +1,6 @@
-import type { EffortLevel, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { Model, ThinkingLevel } from "@earendil-works/pi-ai";
+import type { EffortLevel, SDKMessage, ThinkingConfig } from "@anthropic-ai/claude-agent-sdk";
+import { DEBUG, debug } from "./debug.js";
 
 const CC_CHILD_ENV = {
 	ENABLE_CLAUDEAI_MCP_SERVERS: "0",
@@ -33,7 +35,7 @@ export function ccChildEnv(overrides: Record<string, string> = {}, parent: NodeJ
 
 export const CLAUDE_MD_EXCLUDES = ["**/CLAUDE.md", "**/AGENTS.md", "**/.claude/rules/**"];
 
-export const REASONING_TO_EFFORT: Record<string, EffortLevel> = {
+const REASONING_TO_EFFORT: Record<string, EffortLevel> = {
 	minimal: "low", low: "low", medium: "medium", high: "high", xhigh: "max", max: "max",
 };
 
@@ -54,4 +56,27 @@ export function errorMessage(err: unknown): string {
 		try { return JSON.stringify(err); } catch {}
 	}
 	return String(err);
+}
+
+export function logServedContextWindow(label: string, message: SDKMessage, model: Model<any>): void {
+	if (!DEBUG) return;
+	const modelUsage = (message as any).modelUsage as Record<string, { contextWindow?: number; maxOutputTokens?: number }> | undefined;
+	if (!modelUsage) return;
+	for (const [k, v] of Object.entries(modelUsage)) {
+		debug(`${label}: served contextWindow=${v.contextWindow ?? "?"} maxOutputTokens=${v.maxOutputTokens ?? "?"} servedModel=${k} registered=${model.contextWindow}`);
+	}
+}
+
+const VALID_EFFORTS = new Set<string>(["low", "medium", "high", "xhigh", "max"]);
+
+export function effortForReasoning(model: Model<any>, reasoning: ThinkingLevel | undefined): EffortLevel | undefined {
+	if (!reasoning) return undefined;
+	const mapped = model.thinkingLevelMap?.[reasoning];
+	if (mapped === undefined) return REASONING_TO_EFFORT[reasoning];
+	return VALID_EFFORTS.has(mapped as EffortLevel) ? mapped as EffortLevel : undefined;
+}
+
+export function thinkingForReasoning(model: Model<any>, reasoning: ThinkingLevel | undefined): ThinkingConfig | undefined {
+	if (reasoning || !model.reasoning || model.thinkingLevelMap?.off === null) return undefined;
+	return { type: "disabled" };
 }

@@ -32,7 +32,7 @@ function boundaryIndex(records: readonly RecordEntry[], uuid: string | null): nu
 	return index;
 }
 
-export function resolveCut(records: readonly RecordEntry[], uuid: string | null): { uuid: string; index: number } {
+function resolveCut(records: readonly RecordEntry[], uuid: string | null): { uuid: string; index: number } {
 	const index = boundaryIndex(records, uuid);
 	const byUuid = new Map(records.filter(chainEntry).map((r) => [r.uuid!, r]));
 	const path = new Set<string>();

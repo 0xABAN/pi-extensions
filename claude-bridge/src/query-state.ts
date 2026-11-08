@@ -97,3 +97,5 @@ export class QueryContext {
 		this.turnFallbackMessageId = undefined;
 	}
 }
+
+export const activeQueryContexts = new Set<QueryContext>();
