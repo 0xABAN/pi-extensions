@@ -12,6 +12,7 @@ export class InlineMessageComponent implements Component {
   private outputPad: number;
   private collapsedPreview?: string;
   private wrappedBody?: { width: number; lines: string[] };
+  private expansionState: { expanded: boolean };
 
   constructor(
     from: SessionInfo,
@@ -20,7 +21,7 @@ export class InlineMessageComponent implements Component {
     replyCommand?: string,
     bodyText?: string,
     collapsed = false,
-    private expansionState: { expanded: boolean } = { expanded: !collapsed },
+    expansionState: { expanded: boolean } = { expanded: !collapsed },
     outputPad = 1,
   ) {
     this.from = from;
@@ -29,6 +30,7 @@ export class InlineMessageComponent implements Component {
     this.replyCommand = replyCommand;
     this.bodyText = bodyText;
     this.outputPad = outputPad;
+    this.expansionState = expansionState;
   }
 
   invalidate(): void {}
