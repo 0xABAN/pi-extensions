@@ -23,7 +23,6 @@ import { claudeCodeAppend } from "./prompt.js";
 import { collectCarriedAttachments } from "./attachments.js";
 import { createToolServer, MCP_SERVER_NAME, MCP_TOOL_PREFIX } from "./mcp-server.js";
 import { nonSystemMessages, toBridgeContext } from "./transcript.js";
-import { forgetSessionCwd, rememberSessionCwd, rememberSummarySession, sessionCwdFor, summarySessionFor } from "./session-cwd.js";
 import { updateUsage, type SdkUsage } from "./usage.js";
 import { rateLimitResponse } from "./rate-limit.js";
 import { DEBUG, debug, makeCliDebugOptions, moduleInstanceId } from "./debug.js";
@@ -38,28 +37,22 @@ function diagDump(label: string, data: Record<string, unknown>) {
 	debug(`DIAG: ${label} (see ${logPath})`);
 }
 
-const ACTIVE_STREAM_SIMPLE_KEY = Symbol.for("claude-bridge:activeStreamSimple");
-
 const MODELS = buildModels(getModels("anthropic"));
 
-const SESSION_REGISTRY_KEY = Symbol.for("claude-bridge:sessionRegistry");
-interface SessionRegistry {
-	states: Map<string, SessionState>;
-	loaded: Set<string>;
-	known: Set<string>;
-	writers: Map<string, Promise<void>>;
+const sharedSessions = new Map<string, SessionState>();
+const loadedSessionStates = new Set<string>();
+const sessionWriters = new Map<string, Promise<void>>();
+
+let sessionCwd: string | null = null;
+
+function currentCwd(): string {
+	if (!sessionCwd) throw new Error("claude-bridge: no pi session has started");
+	return sessionCwd;
 }
-const sessionRegistry: SessionRegistry = ((globalThis as Record<symbol, unknown>)[SESSION_REGISTRY_KEY] as SessionRegistry | undefined)
-	?? { states: new Map(), loaded: new Set(), known: new Set(), writers: new Map() };
-(globalThis as Record<symbol, unknown>)[SESSION_REGISTRY_KEY] = sessionRegistry;
-const sharedSessions = sessionRegistry.states;
-const loadedSessionStates = sessionRegistry.loaded;
-const knownSessionIds = sessionRegistry.known;
 
 function sessionStateFor(piSessionId: string | null | undefined): SessionState | null {
 	if (piSessionId == null) return null;
 	if (!loadedSessionStates.has(piSessionId)) {
-		knownSessionIds.add(piSessionId);
 		const stored = loadSessionState(piSessionId, (message) => diagDump("session_state_rejected", { piSessionId, message }));
 		loadedSessionStates.add(piSessionId);
 		if (stored) sharedSessions.set(piSessionId, stored);
@@ -83,19 +76,12 @@ function inheritSessionState(parentFile: string, piSessionId: string): void {
 }
 
 function setSessionStateFor(piSessionId: string, state: SessionState | null): void {
-	knownSessionIds.add(piSessionId);
 	loadedSessionStates.add(piSessionId);
 	if (state === null) sharedSessions.delete(piSessionId);
 	else sharedSessions.set(piSessionId, state);
 }
 
 const historyRewrittenBySession = new Set<string>();
-
-const MARK_REBUILD_HOOKS_KEY = Symbol.for("claude-bridge:markRebuildHooks");
-type MarkRebuildHook = (piSession: string | null, event: string) => void;
-const markRebuildHooks: Set<MarkRebuildHook> =
-	((globalThis as Record<symbol, unknown>)[MARK_REBUILD_HOOKS_KEY] as Set<MarkRebuildHook> | undefined) ?? new Set();
-(globalThis as Record<symbol, unknown>)[MARK_REBUILD_HOOKS_KEY] = markRebuildHooks;
 
 function markRebuildForSession(piSession: string | null, event: string): void {
 	const state = piSession != null ? sharedSessions.get(piSession) : undefined;
@@ -113,12 +99,6 @@ function armStaleContexts(): void {
 	for (const c of activeQueryContexts) {
 		if (c.piSessionId && historyRewrittenBySession.has(c.piSessionId)) c.historyStale = true;
 	}
-}
-
-markRebuildHooks.add(markRebuildForSession);
-
-function sponsorMarkRebuildForSession(piSession: string | null, event: string): void {
-	for (const hook of markRebuildHooks) hook(piSession, event);
 }
 
 function extractAllToolResults(context: Context): McpResult[] {
@@ -228,7 +208,7 @@ async function runIsolatedSummary(
 	try {
 		const promptText = extractUserPrompt(context.messages);
 		if (!promptText) throw new Error("runIsolatedSummary: one-off summary without a user prompt (last message is not user?)");
-		const cwd = sessionCwdFor(summarySessionFor(options?.signal) ?? options?.sessionId);
+		const cwd = currentCwd();
 		const cliModel = claudeCodeModelId(model);
 		const effort = effortForReasoning(model, options?.reasoning);
 		const thinking = thinkingForReasoning(model, options?.reasoning);
@@ -318,7 +298,6 @@ interface SyncResult {
 	state: SessionState | null;
 }
 
-const sessionWriters = sessionRegistry.writers;
 async function waitForSessionWriter(sessionId: string | undefined, signal?: AbortSignal): Promise<void> {
 	const exited = sessionId ? sessionWriters.get(sessionId) : undefined;
 	if (!exited) return;
@@ -489,15 +468,16 @@ const activeQueryContexts = new Set<QueryContext>();
 
 
 
-function closeSessionQueries(piSessionId: string): void {
-	for (const c of [...activeQueryContexts]) {
-		if (c.piSessionId !== piSessionId) continue;
+async function closeSessionQueries(piSessionId: string): Promise<void> {
+	const closing = [...activeQueryContexts].filter((c) => c.piSessionId === piSessionId);
+	for (const c of closing) {
 		debug(
 			`${c.activeQuery ? "session_shutdown: closing parked query" : "WARNING: session_shutdown left a context with no query"} — `
 			+ `pendingToolCalls=${c.pendingToolCalls.size} promptStream=${c.promptStream !== null}`,
 		);
 		discardRewrittenQuery(c);
 	}
+	await Promise.allSettled(closing.map((c) => c.settled));
 }
 
 function contextForToolResults(results: McpResult[], piSessionId: string | null): QueryContext | undefined {
@@ -1210,7 +1190,7 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 		if (queryCtx.discarded) return;
 
 
-		const cwd = sessionCwdFor(options?.sessionId);
+		const cwd = currentCwd();
 		const cliModel = claudeCodeModelId(model);
 		const piSessionId = options?.sessionId ?? null;
 		const historyRewritten = rewrittenUnderQuery || (piSessionId !== null && historyRewrittenBySession.has(piSessionId));
@@ -1391,7 +1371,7 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 			finally { failStream(error); }
 		};
 
-		void consumeQuery(sdkQuery, customToolNameToPi, model, () => wasAborted, queryCtx)
+		queryCtx.settled = consumeQuery(sdkQuery, customToolNameToPi, model, () => wasAborted, queryCtx)
 			.then(async ({ capturedSessionId, failure }) => {
 				if (queryCtx.discarded) return;
 				if (capturedSessionId && capturedSessionId !== syncResult.targetSessionId) {
@@ -1446,38 +1426,19 @@ function streamClaudeAgentSdk(model: Model<any>, context: Context, options?: Sim
 }
 
 export default function (pi: ExtensionAPI) {
-	const clearSession = (event: string) => {
-		debug(`${event}: retaining ${sharedSessions.size} shared session${sharedSessions.size === 1 ? "" : "s"}`);
-
-		const g = globalThis as Record<symbol, any>;
-		if (g[ACTIVE_STREAM_SIMPLE_KEY] === streamClaudeAgentSdk) {
-			debug(`${event}: clearing ACTIVE_STREAM_SIMPLE_KEY`);
-			g[ACTIVE_STREAM_SIMPLE_KEY] = undefined;
-		}
-	};
 	pi.on("session_start", (event, ctx) => {
 		piUI = ctx.ui;
-		rememberSessionCwd(ctx.sessionManager.getSessionId(), ctx.cwd);
-		if (event.reason === "new" || event.reason === "resume" || event.reason === "fork") {
-			clearSession(`session_start:${event.reason}`);
-		}
+		sessionCwd = ctx.cwd;
 		if (event.reason === "fork" && event.previousSessionFile) inheritSessionState(event.previousSessionFile, ctx.sessionManager.getSessionId());
 	});
-	pi.on("session_before_compact", (event, ctx) => {
-		rememberSummarySession(event.signal, ctx.sessionManager.getSessionId());
-	});
-	pi.on("session_before_tree", (event, ctx) => {
-		rememberSummarySession(event.signal, ctx.sessionManager.getSessionId());
-	});
-	pi.on("session_shutdown", (_event, ctx) => {
-		forgetSessionCwd(ctx.sessionManager.getSessionId());
-		closeSessionQueries(ctx.sessionManager.getSessionId());
-		clearSession("session_shutdown");
+
+	pi.on("session_shutdown", async (_event, ctx) => {
+		await closeSessionQueries(ctx.sessionManager.getSessionId());
 	});
 
 	pi.on("session_compact", (event, ctx) =>
-		sponsorMarkRebuildForSession(ctx.sessionManager.getSessionId(), `session_compact:${event.reason}:willRetry=${event.willRetry}`));
-	pi.on("session_tree", (_event, ctx) => sponsorMarkRebuildForSession(ctx.sessionManager.getSessionId(), "session_tree"));
+		markRebuildForSession(ctx.sessionManager.getSessionId(), `session_compact:${event.reason}:willRetry=${event.willRetry}`));
+	pi.on("session_tree", (_event, ctx) => markRebuildForSession(ctx.sessionManager.getSessionId(), "session_tree"));
 
 	pi.on("tool_call", (event, ctx) => {
 		if (isToolCallEventType("bash", event) && event.input.timeout == null && ctx.model?.provider === PROVIDER_ID
@@ -1486,26 +1447,11 @@ export default function (pi: ExtensionAPI) {
 		}
 	});
 
-	const g = globalThis as Record<symbol, any>;
-	const providerConfig = {
+	pi.registerProvider(PROVIDER_ID, {
 		baseUrl: "claude-bridge",
 		apiKey: "not-used",
 		api: "claude-bridge",
 		models: MODELS,
 		streamSimple: streamClaudeAgentSdk as any,
-	};
-	if (!g[ACTIVE_STREAM_SIMPLE_KEY]) {
-		g[ACTIVE_STREAM_SIMPLE_KEY] = streamClaudeAgentSdk;
-		pi.registerProvider(PROVIDER_ID, providerConfig);
-	} else {
-		debug(`provider: deferring registration decision to session_start (module=${moduleInstanceId})`);
-		pi.on("session_start", (_event, ctx) => {
-			if (ctx.modelRegistry.getProvider(PROVIDER_ID)) {
-				debug(`provider: registry already has ${PROVIDER_ID}, skipping registration (module=${moduleInstanceId})`);
-				return;
-			}
-			debug(`provider: registry lacks ${PROVIDER_ID}, registering (module=${moduleInstanceId})`);
-			pi.registerProvider(PROVIDER_ID, providerConfig);
-		});
-	}
+	});
 }

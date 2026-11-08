@@ -56,6 +56,7 @@ export class QueryContext {
 	lastRateLimitWarnThreshold: number | undefined;
 	piSessionId: string | null = null;
 	historyStale = false;
+	settled: Promise<unknown> = Promise.resolve();
 
 	turnOutput: AssistantMessage | null = null;
 	turnStarted = false;
