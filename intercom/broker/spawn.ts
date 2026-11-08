@@ -77,7 +77,7 @@ export async function spawnBrokerIfNeeded(): Promise<void> {
       return cause === undefined ? new Error(errorMessage) : new Error(errorMessage, { cause });
     };
     child.stderr?.on("data", rememberBrokerStderr);
-    child.stderr?.unref();
+    (child.stderr as net.Socket).unref();
     child.unref();
 
     await new Promise<void>((resolve, reject) => {

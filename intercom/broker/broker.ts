@@ -152,6 +152,8 @@ function isPendingAskRecord(value: unknown): value is PendingAskRecord {
     && typeof value.target.sessionId === "string"
     && (typeof value.target.name === "string" || value.target.name === null)
     && typeof value.question === "string"
+    && typeof value.createdAt === "number"
+    && typeof value.expiresAt === "number"
     && Number.isSafeInteger(value.createdAt)
     && Number.isSafeInteger(value.expiresAt)
     && value.expiresAt >= value.createdAt;
@@ -523,6 +525,7 @@ class IntercomBroker {
           this.writeDeliveryFailure(socket, messageId, "Invalid message format", "E_INVALID_MESSAGE");
           break;
         }
+        let to = clientMessage.to;
         const fromSession = this.sessions.get(currentKey);
         if (!fromSession || fromSession.socket !== socket) {
           this.writeDeliveryFailure(socket, message.id, "Sender session not found", "E_SENDER_NOT_FOUND");
@@ -562,10 +565,10 @@ class IntercomBroker {
             this.writeDeliveryFailure(socket, message.id, "Target endpoint changed before delivery", "E_TARGET_REBOUND", true);
             break;
           }
-          clientMessage.to = targetId;
+          to = targetId;
         }
 
-        const targets = this.findSessions(clientMessage.to);
+        const targets = this.findSessions(to);
         if (targets.length === 1) {
           if (message.replyTo && !replyEdge) {
             this.writeDeliveryFailure(socket, message.id, "Reply target does not match a pending ask", "E_REPLY_TARGET");
@@ -630,11 +633,11 @@ class IntercomBroker {
         }
 
         if (targets.length > 1) {
-          this.writeDeliveryFailure(socket, message.id, `Multiple sessions named \"${clientMessage.to}\" are connected. Use the session ID instead.`, "E_AMBIGUOUS_TARGET");
+          this.writeDeliveryFailure(socket, message.id, `Multiple sessions named \"${to}\" are connected. Use the session ID instead.`, "E_AMBIGUOUS_TARGET");
           break;
         }
 
-        const disconnectedTargets = this.findDisconnectedSessions(clientMessage.to);
+        const disconnectedTargets = this.findDisconnectedSessions(to);
         if (disconnectedTargets.length === 1) {
           if (message.replyTo && !replyEdge) {
             this.writeDeliveryFailure(socket, message.id, "Reply target does not match a pending ask", "E_REPLY_TARGET");
@@ -682,7 +685,7 @@ class IntercomBroker {
         }
 
         if (disconnectedTargets.length > 1) {
-          this.writeDeliveryFailure(socket, message.id, `Multiple disconnected sessions named \"${clientMessage.to}\" can receive queued mail. Use the session ID instead.`, "E_AMBIGUOUS_TARGET");
+          this.writeDeliveryFailure(socket, message.id, `Multiple disconnected sessions named \"${to}\" can receive queued mail. Use the session ID instead.`, "E_AMBIGUOUS_TARGET");
           break;
         }
 
