@@ -1,6 +1,6 @@
+import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
 import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { sessionIdPrefixes } from "../format.ts";
 import type { SessionInfo } from "../types.ts";
 

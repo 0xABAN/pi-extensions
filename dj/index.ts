@@ -2,14 +2,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
 	BorderedLoader,
-	getAgentDir,
 	type ExtensionAPI,
 	type ExtensionCommandContext,
 	type ExtensionContext,
+	getAgentDir,
 } from "@earendil-works/pi-coding-agent";
-import { createStore } from "./src/state.ts";
-import { createSpotify } from "./src/spotify.ts";
 import { renderLine } from "./src/display.ts";
+import { createSpotify } from "./src/spotify.ts";
+import { createStore } from "./src/state.ts";
 import { pickLayout, pickTheme } from "./src/theme-picker.ts";
 import { DEFAULTS, type Layout, type Playback, type Settings, type Theme } from "./src/types.ts";
 

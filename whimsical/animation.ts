@@ -1,4 +1,4 @@
-import { COLORS, SYMBOLS, messages } from "./catalog.ts";
+import { COLORS, messages, SYMBOLS } from "./catalog.ts";
 
 const RESET = "\x1b[39m";
 

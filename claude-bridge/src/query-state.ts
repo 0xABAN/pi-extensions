@@ -1,8 +1,8 @@
 import type { AssistantMessage, AssistantMessageEventStream, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type { McpResult } from "./extract-tool-results.js";
 import type { PromptStream } from "./prompt-stream.js";
-import { LiveRecording } from "./session-sync.js";
 import type { RateLimitInfo } from "./rate-limit.js";
+import { LiveRecording } from "./session-sync.js";
 
 export function newAssistantOutput(
 	model: Model<any>,

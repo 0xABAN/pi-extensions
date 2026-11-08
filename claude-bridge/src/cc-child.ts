@@ -1,5 +1,5 @@
-import type { Model, ThinkingLevel } from "@earendil-works/pi-ai";
 import type { EffortLevel, SDKMessage, ThinkingConfig } from "@anthropic-ai/claude-agent-sdk";
+import type { Model, ThinkingLevel } from "@earendil-works/pi-ai";
 import { DEBUG, debug } from "./debug.js";
 
 const CC_CHILD_ENV = {

@@ -1,4 +1,4 @@
-import { getCurrentSystemPrompt, getCurrentTools, type Context } from "@earendil-works/pi-ai";
+import { type Context, getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 
 export function toBridgeContext(context: Context): Context {
 	if (!context.messages.some((message) => message.role === "system")) return context;

@@ -1,10 +1,10 @@
-import { getSessionPath, parseJsonl, type JsonlRecord, type Session, type ToolResultBlock } from "cc-session-io";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Message as PiMessage } from "@earendil-works/pi-ai";
+import { getSessionPath, type JsonlRecord, parseJsonl, type Session, type ToolResultBlock } from "cc-session-io";
 import { sanitizeToolId } from "./convert.js";
 import { digestMessage } from "./message-digests.js";
-import { validateRecording, type Recording, type SessionState } from "./session-sync.js";
+import { type Recording, type SessionState, validateRecording } from "./session-sync.js";
 
 const AUDIT = new Set(["api-request", "api-request-shape", "api-request-blob"]);
 type RecordEntry = JsonlRecord & {
@@ -115,7 +115,7 @@ export function savePrefixSession(session: Session, prefix: readonly JsonlRecord
 	const kept = prefix.map((record) => ({ ...record, sessionId: session.sessionId }));
 	const suffix = session.records.map((record, index) => (index === 0 ? { ...record, parentUuid } : record));
 	mkdirSync(dirname(session.jsonlPath), { recursive: true });
-	writeFileSync(session.jsonlPath, [...kept, ...suffix].map((record) => JSON.stringify(record) + "\n").join(""), {
+	writeFileSync(session.jsonlPath, [...kept, ...suffix].map((record) => `${JSON.stringify(record)}\n`).join(""), {
 		flag: "wx",
 	});
 	return kept.length + suffix.length;

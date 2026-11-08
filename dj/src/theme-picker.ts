@@ -1,7 +1,7 @@
 import type { ExtensionCommandContext, Theme as PiTheme } from "@earendil-works/pi-coding-agent";
-import { Input, SelectList, truncateToWidth, type SelectItem } from "@earendil-works/pi-tui";
+import { Input, type SelectItem, SelectList, truncateToWidth } from "@earendil-works/pi-tui";
 import { colorize, parseColors, renderLine } from "./display.ts";
-import { PASTELS, type Layout, type Settings, type Theme } from "./types.ts";
+import { type Layout, PASTELS, type Settings, type Theme } from "./types.ts";
 
 const palettes = [
 	{ value: "rainbow", label: "Pastel rainbow", colors: PASTELS },
@@ -20,16 +20,16 @@ const sameTheme = (a: Theme, b: Theme) => a.mode === b.mode && a.colors.join() =
 function frame(lines: string[], width: number): string[] {
 	const black = "\x1b[48;2;0;0;0m";
 	const border = (text: string) => colorize(text, "#FFFFFF");
-	if (width < 4) return [black + " ".repeat(Math.max(0, width)) + "\x1b[49m"];
+	if (width < 4) return [`${black}${" ".repeat(Math.max(0, width))}\x1b[49m`];
 
 	return [
-		border("╭" + "─".repeat(width - 2) + "╮"),
-		...lines.map((line) => border("│") + " " + truncateToWidth(line, width - 4, "", true) + " " + border("│")),
-		border("╰" + "─".repeat(width - 2) + "╯"),
+		border(`╭${"─".repeat(width - 2)}╮`),
+		...lines.map((line) => `${border("│")} ${truncateToWidth(line, width - 4, "", true)} ${border("│")}`),
+		border(`╰${"─".repeat(width - 2)}╯`),
 	].map(
 		(line) =>
 			// Truncation and child styling can reset ANSI attributes; restore our background after them.
-			black + line.replace(/\x1b\[(?:0|49)m/g, (reset) => reset + black) + "\x1b[49m",
+			`${black}${line.replace(/\x1b\[(?:0|49)m/g, (reset) => reset + black)}\x1b[49m`,
 	);
 }
 
@@ -226,7 +226,7 @@ export async function pickTheme(
 			let selected = choices.find((choice) => sameTheme(choice.theme, settings.theme))?.value ?? choices[0].value;
 			for (const choice of choices) {
 				if (choice.value === selected && settings.theme.mode === mode) choice.label += " ✓";
-				choice.label += " " + choice.theme.colors.map((color) => colorize("■", color)).join("");
+				choice.label += ` ${choice.theme.colors.map((color) => colorize("■", color)).join("")}`;
 				choice.description = choice.theme.colors.join(" ");
 			}
 

@@ -1,9 +1,9 @@
-import { spawn } from "child_process";
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawn } from "child_process";
 import { createMessageReader, writeMessage } from "./framing.ts";
 import {
 	ensureIntercomRuntimeDir,

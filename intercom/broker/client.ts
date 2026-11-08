@@ -1,20 +1,20 @@
+import { randomUUID } from "crypto";
 import { EventEmitter } from "events";
 import net from "net";
-import { randomUUID } from "crypto";
-import { writeMessage, createMessageReader } from "./framing.ts";
-import { getBrokerSocketPath } from "./paths.ts";
-import { isMessage, isMessageControl, isMessageReceipt, isSessionInfo } from "./protocol.ts";
-import { EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE, type DeliveryDetails } from "../types.ts";
 import type {
 	Attachment,
 	BrokerMessage,
 	Message,
 	MessageControl,
 	MessageReceipt,
-	SessionInfo,
 	SessionHolder,
+	SessionInfo,
 	SessionRegistration,
 } from "../types.ts";
+import { type DeliveryDetails, EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE } from "../types.ts";
+import { createMessageReader, writeMessage } from "./framing.ts";
+import { getBrokerSocketPath } from "./paths.ts";
+import { isMessage, isMessageControl, isMessageReceipt, isSessionInfo } from "./protocol.ts";
 
 interface SendOptions {
 	text: string;

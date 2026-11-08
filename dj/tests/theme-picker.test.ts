@@ -2,13 +2,13 @@ import { expect, test } from "bun:test";
 import { stripVTControlCharacters } from "node:util";
 import type { ExtensionCommandContext, ExtensionUIContext, Theme as PiTheme } from "@earendil-works/pi-coding-agent";
 import {
+	type Component,
 	CURSOR_MARKER,
+	type Focusable,
 	getKeybindings,
 	stripTerminalSequences,
-	visibleWidth,
-	type Component,
-	type Focusable,
 	type TUI,
+	visibleWidth,
 } from "@earendil-works/pi-tui";
 import { pickLayout, pickTheme } from "../src/theme-picker.ts";
 import { DEFAULTS, PASTELS, type Theme } from "../src/types.ts";
@@ -16,14 +16,15 @@ import { DEFAULTS, PASTELS, type Theme } from "../src/types.ts";
 const down = "\x1b[B",
 	up = "\x1b[A",
 	enter = "\r",
-	escape = "\x1b";
+	esc = "\x1b";
 type Dialog = Component & Partial<Focusable> & { dispose?(): void };
 type Step = (dialog: Dialog) => void;
 const text = (dialog: Dialog) => stripTerminalSequences(dialog.render(64).join("\n"));
 const keys =
 	(...values: string[]): Step =>
-	(dialog) =>
-		values.forEach((value) => dialog.handleInput!(value));
+	(dialog) => {
+		for (const value of values) dialog.handleInput!(value);
+	};
 
 function ui(steps: Step[]) {
 	let count = 0,
@@ -46,8 +47,8 @@ function ui(steps: Step[]) {
 				for (const line of dialog.render(width)) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 			}
 			const framed = dialog.render(64);
-			expect(stripVTControlCharacters(framed[0])).toBe("╭" + "─".repeat(62) + "╮");
-			expect(stripVTControlCharacters(framed.at(-1)!)).toBe("╰" + "─".repeat(62) + "╯");
+			expect(stripVTControlCharacters(framed[0])).toBe(`╭${"─".repeat(62)}╮`);
+			expect(stripVTControlCharacters(framed.at(-1)!)).toBe(`╰${"─".repeat(62)}╯`);
 			for (const line of framed) {
 				expect(visibleWidth(line)).toBe(64);
 				expect(line).toStartWith("\x1b[48;2;0;0;0m");
@@ -82,7 +83,7 @@ test("root cancel clears preview; highlighting previews without mutating setting
 			expect(text(dialog)).toContain("Midnight City");
 			keys(down)(dialog);
 			expect(previews.at(-1)?.mode).toBe("solid");
-			keys(escape)(dialog);
+			keys(esc)(dialog);
 		},
 	]);
 	expect(await pickTheme(fake.ctx, settings, (theme) => previews.push(theme))).toBeUndefined();
@@ -116,12 +117,12 @@ test("back recreates disposed menus and root cancellation restores original prev
 		},
 		(dialog) => {
 			seen.add(dialog);
-			keys(down, escape)(dialog);
+			keys(down, esc)(dialog);
 		},
 		(dialog) => {
 			expect(seen.has(dialog)).toBe(false);
 			expect(previews.at(-1)).toEqual(DEFAULTS.theme);
-			keys(escape)(dialog);
+			keys(esc)(dialog);
 		},
 	]);
 	expect(await pickTheme(fake.ctx, DEFAULTS, (theme) => previews.push(theme))).toBeUndefined();
@@ -168,7 +169,7 @@ test("custom animated roundtrips, selects active custom theme, and cancels input
 		},
 		(dialog) => {
 			expect(text(dialog)).toContain(colors.join(" "));
-			keys(escape)(dialog);
+			keys(esc)(dialog);
 		},
 		keys(enter),
 		keys(enter),
@@ -185,12 +186,12 @@ test("canceling a custom edit returns to Custom without changing saved settings"
 	const fake = ui([
 		keys(enter),
 		keys(up, enter),
-		keys("\x05", "\x15", "#bad", escape),
+		keys("\x05", "\x15", "#bad", esc),
 		(dialog) => {
 			expect(text(dialog)).toContain("→ Custom…");
-			keys(escape)(dialog);
+			keys(esc)(dialog);
 		},
-		keys(escape),
+		keys(esc),
 	]);
 	expect(await pickTheme(fake.ctx, settings, () => {})).toBeUndefined();
 	expect(settings).toEqual(DEFAULTS);
@@ -243,7 +244,7 @@ test("layout uses the same frame and native selection, with the active layout fi
 			expect(text(dialog)).toContain("1:24 / 3:42");
 			keys(down, enter)(dialog);
 		},
-		keys(escape),
+		keys(esc),
 	]);
 	expect(await pickLayout(fake.ctx, "full")).toBe("minimal");
 	expect(await pickLayout(fake.ctx, "medium")).toBeUndefined();

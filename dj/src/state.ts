@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
 	chmodSync,
 	existsSync,
@@ -9,9 +10,8 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
-import { lock } from "proper-lockfile";
 import { setTimeout as delay } from "node:timers/promises";
+import { lock } from "proper-lockfile";
 import { DEFAULTS, type Playback, type Settings } from "./types.ts";
 
 /** Stored expiry is epoch milliseconds, unlike the legacy Python token file's seconds. */
@@ -60,7 +60,7 @@ function colors(value: unknown, solid = false): string[] {
 		throw new Error("Expected hex colors: one for solid, two or more for animated");
 	}
 	return value.map((color) =>
-		(color.length === 4 ? "#" + [...color.slice(1)].map((c) => c + c).join("") : color).toUpperCase(),
+		(color.length === 4 ? `#${[...color.slice(1)].map((c) => c + c).join("")}` : color).toUpperCase(),
 	);
 }
 
@@ -176,7 +176,7 @@ export function createStore(directory: string, legacyDirectory?: string) {
 		lease.check();
 		const temporary = `${path}.${randomUUID()}.tmp`;
 		try {
-			writeFileSync(temporary, JSON.stringify(value) + "\n", { mode: 0o600, flag: "wx" });
+			writeFileSync(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600, flag: "wx" });
 			lease.check();
 			renameSync(temporary, path);
 		} finally {

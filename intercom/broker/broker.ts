@@ -1,15 +1,19 @@
-import net from "net";
-import { chmodSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
-import { join } from "path";
 import { randomUUID } from "crypto";
-import { writeMessage, createMessageReader, MAX_FRAME_BYTES } from "./framing.ts";
-import {
-	isMessage,
-	isMessageReceipt,
-	isSessionId,
-	isSessionRegistration,
-	messageDeliveryFingerprint,
-} from "./protocol.ts";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import net from "net";
+import { join } from "path";
+import { sameCwd } from "../cwd.ts";
+import { resolveHerdrLocations } from "../herdr-location.ts";
+import type {
+	BrokerMessage,
+	DeliveryState,
+	Message,
+	MessageControl,
+	MessageReceiptStatus,
+	SessionInfo,
+} from "../types.ts";
+import { ASK_TIMEOUT_MS, EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE } from "../types.ts";
+import { createMessageReader, MAX_FRAME_BYTES, writeMessage } from "./framing.ts";
 import {
 	ensureIntercomRuntimeDir,
 	getBrokerSocketPath,
@@ -20,18 +24,14 @@ import {
 	INTERCOM_RUNTIME_FILE_MODE,
 	restrictIntercomRuntimeFile,
 } from "./paths.ts";
-import { sameCwd } from "../cwd.ts";
-import { ASK_TIMEOUT_MS, EXACT_SEND_FEATURE, SESSION_HELD_ERROR_CODE } from "../types.ts";
-import type {
-	DeliveryState,
-	SessionInfo,
-	Message,
-	BrokerMessage,
-	MessageControl,
-	MessageReceiptStatus,
-} from "../types.ts";
+import {
+	isMessage,
+	isMessageReceipt,
+	isSessionId,
+	isSessionRegistration,
+	messageDeliveryFingerprint,
+} from "./protocol.ts";
 import { assertNoLiveBroker } from "./runtime-claim.ts";
-import { resolveHerdrLocations } from "../herdr-location.ts";
 
 const INTERCOM_DIR = getIntercomDirPath();
 const SOCKET_PATH = getBrokerSocketPath();
@@ -721,7 +721,7 @@ class IntercomBroker {
 					this.writeDeliveryFailure(
 						socket,
 						message.id,
-						`Multiple sessions named \"${to}\" are connected. Use the session ID instead.`,
+						`Multiple sessions named "${to}" are connected. Use the session ID instead.`,
 						"E_AMBIGUOUS_TARGET",
 					);
 					break;
@@ -805,7 +805,7 @@ class IntercomBroker {
 					this.writeDeliveryFailure(
 						socket,
 						message.id,
-						`Multiple disconnected sessions named \"${to}\" can receive queued mail. Use the session ID instead.`,
+						`Multiple disconnected sessions named "${to}" can receive queued mail. Use the session ID instead.`,
 						"E_AMBIGUOUS_TARGET",
 					);
 					break;

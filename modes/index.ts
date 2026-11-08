@@ -7,10 +7,10 @@
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type AgentMode, isSafeCommand, READ_ONLY_TOOLS } from "./utils.ts";
-import { formatModeStatus } from "./status.ts";
 import { LEARN_MODE_PROMPT } from "./learn.ts";
 import { PLAN_MODE_PROMPT, PLAN_TOOL, registerPlanTool } from "./plan.ts";
+import { formatModeStatus } from "./status.ts";
+import { type AgentMode, isSafeCommand, READ_ONLY_TOOLS } from "./utils.ts";
 
 const MODE_PROMPTS = {
 	plan: PLAN_MODE_PROMPT,

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { InvalidRecordingError, validateRecording, type SessionState } from "./session-sync.js";
+import { InvalidRecordingError, type SessionState, validateRecording } from "./session-sync.js";
 
 const FORMAT_VERSION = 1;
 

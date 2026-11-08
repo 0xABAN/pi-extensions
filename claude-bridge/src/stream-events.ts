@@ -1,3 +1,4 @@
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type {
 	AssistantMessage,
 	AssistantMessageEvent,
@@ -5,12 +6,11 @@ import type {
 	Model,
 	SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { debug } from "./debug.js";
 import { digestMessage } from "./message-digests.js";
 import type { AssistantStep, QueryContext } from "./query-state.js";
 import { sessionTag } from "./sessions.js";
-import { updateUsage, type SdkUsage } from "./usage.js";
+import { type SdkUsage, updateUsage } from "./usage.js";
 
 function piToolNameFor(name: string, customToolNameToPi: Map<string, string>): string | undefined {
 	return customToolNameToPi.get(name) ?? customToolNameToPi.get(name.toLowerCase());
@@ -63,7 +63,6 @@ function mapStopReason(reason: string | undefined): "stop" | "length" | "toolUse
 			return "toolUse";
 		case "max_tokens":
 			return "length";
-		case "end_turn":
 		default:
 			return "stop";
 	}
@@ -139,7 +138,10 @@ export function recordAssistantEmission(c: QueryContext): void {
 		return;
 	}
 	let step = c.assistantSteps.get(id);
-	if (!step) c.assistantSteps.set(id, (step = { content: [], seen: new Set() }));
+	if (!step) {
+		step = { content: [], seen: new Set() };
+		c.assistantSteps.set(id, step);
+	}
 	if (!step.emitted) {
 		const digest = digestMessage(output);
 		const toolCalls = output.content.filter((b) => b.type === "toolCall").map((b) => b.id);
@@ -211,7 +213,10 @@ export function tapRecording(message: SDKMessage, names: Map<string, string>, c:
 		return;
 	const id = message.message.id;
 	let step = c.assistantSteps.get(id);
-	if (!step) c.assistantSteps.set(id, (step = { content: [], seen: new Set() }));
+	if (!step) {
+		step = { content: [], seen: new Set() };
+		c.assistantSteps.set(id, step);
+	}
 	if (step.seen.has(message.uuid)) return;
 	step.seen.add(message.uuid);
 	if (!step.emitted) c.lastAssistantMessageId = id;

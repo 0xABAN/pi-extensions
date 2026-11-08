@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createStore, type Credentials } from "../src/state.ts";
 import { createSpotify } from "../src/spotify.ts";
+import { type Credentials, createStore } from "../src/state.ts";
 
 const root = mkdtempSync(join(tmpdir(), "dj-spotify-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -87,12 +87,16 @@ test("simultaneous polling never duplicates a request and lock losers return cac
 		calls = 0,
 		finish!: (response: Response) => void,
 		started!: () => void;
-	const begun = new Promise<void>((resolve) => (started = resolve));
+	const begun = new Promise<void>((resolve) => {
+		started = resolve;
+	});
 	const fetch = mockFetch(() => {
 		calls++;
 		if (calls === 1) return json(track);
 		started();
-		return new Promise((resolve) => (finish = resolve));
+		return new Promise((resolve) => {
+			finish = resolve;
+		});
 	});
 	const first = createSpotify(store, { fetch, now: () => now }),
 		second = createSpotify(createStore(directory), { fetch, now: () => now });
@@ -383,12 +387,16 @@ test("explicit successful authorization can recover unreadable credentials and c
 test("reauthorization waits for old polling then invalidates the old account cache", async () => {
 	const { store } = await setup();
 	let finish!: (value: Response) => void, started!: () => void;
-	const begun = new Promise<void>((resolve) => (started = resolve));
+	const begun = new Promise<void>((resolve) => {
+		started = resolve;
+	});
 	const polling = createSpotify(store, {
 		now: () => epoch,
 		fetch: mockFetch(() => {
 			started();
-			return new Promise((resolve) => (finish = resolve));
+			return new Promise((resolve) => {
+				finish = resolve;
+			});
 		}),
 	}).poll(signal());
 	await begun;

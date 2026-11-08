@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { collectCandidates, formatQuote, QuotePicker, type QuoteCandidate, reply } from "../index.ts";
+import { collectCandidates, formatQuote, type QuoteCandidate, QuotePicker, reply } from "../index.ts";
 
 const timestamp = "2026-11-07T12:00:00.000Z";
 

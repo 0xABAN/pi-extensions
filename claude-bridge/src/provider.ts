@@ -1,19 +1,19 @@
+import { createHash, randomUUID } from "node:crypto";
+import { query, type SettingSource } from "@anthropic-ai/claude-agent-sdk";
+import type { ContentBlockParam } from "@anthropic-ai/sdk/resources";
 import {
-	createAssistantMessageEventStream,
-	getCurrentSystemMessage,
 	type AssistantMessageEventStream,
 	type Context,
+	createAssistantMessageEventStream,
+	getCurrentSystemMessage,
 	type Model,
 	type SimpleStreamOptions,
 	type Tool,
 } from "@earendil-works/pi-ai";
-import { query, type SettingSource } from "@anthropic-ai/claude-agent-sdk";
-import type { ContentBlockParam } from "@anthropic-ai/sdk/resources";
 import { deleteSession } from "cc-session-io";
-import { createHash, randomUUID } from "node:crypto";
 import {
-	ccChildEnv,
 	CLAUDE_MD_EXCLUDES,
+	ccChildEnv,
 	effortForReasoning,
 	errorMessage,
 	logServedContextWindow,
@@ -26,10 +26,12 @@ import { createToolServer, MCP_SERVER_NAME, MCP_TOOL_PREFIX } from "./mcp-server
 import { claudeCodeModelId } from "./models.js";
 import { notify } from "./notify.js";
 import { claudeCodeAppend } from "./prompt.js";
-import { makePromptStream, userMessage, type PromptStream } from "./prompt-stream.js";
+import { makePromptStream, type PromptStream, userMessage } from "./prompt-stream.js";
 import { QueryProcess } from "./query-process.js";
 import { activeQueryContexts, newAssistantOutput, QueryContext } from "./query-state.js";
 import { rateLimitResponse } from "./rate-limit.js";
+import { saveSessionState } from "./session-store.js";
+import { copyRecording, LiveRecording, type SessionState } from "./session-sync.js";
 import {
 	currentCwd,
 	historyRewrittenBySession,
@@ -41,8 +43,6 @@ import {
 	syncSharedSession,
 	waitForSessionWriter,
 } from "./sessions.js";
-import { saveSessionState } from "./session-store.js";
-import { copyRecording, LiveRecording, type SessionState } from "./session-sync.js";
 import {
 	claimCurrentPiStream,
 	completedStreams,
@@ -507,10 +507,8 @@ export function streamClaudeAgentSdk(
 		if (syncResult.created) createdBeforeLaunch = { id: syncResult.targetSessionId, cwd };
 		if (piSessionId) historyRewrittenBySession.delete(piSessionId);
 		const { sessionId: resumeSessionId } = syncResult;
-		const recording = (queryCtx.recording = new LiveRecording(
-			syncResult.recorded,
-			nonSystemMessages(context.messages),
-		));
+		const recording = new LiveRecording(syncResult.recorded, nonSystemMessages(context.messages));
+		queryCtx.recording = recording;
 		const promptBlocks = extractUserPromptBlocks(context.messages);
 		let promptText = extractUserPrompt(context.messages) ?? "";
 

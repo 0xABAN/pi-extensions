@@ -4,8 +4,8 @@ import type { Message } from "@earendil-works/pi-ai";
 import {
 	buildSessionContext,
 	convertToLlm,
-	serializeConversation,
 	type ExtensionContext,
+	serializeConversation,
 } from "@earendil-works/pi-coding-agent";
 
 const HANDOVER_MAX_OUTPUT_TOKENS = 4096;

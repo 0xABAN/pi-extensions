@@ -71,5 +71,5 @@ export function renderLine(playback: Playback, settings: Settings, width: number
 	// Derive the frame from time, not repaint count, so refreshes don't reset the rainbow.
 	const colors = settings.theme.colors.length ? settings.theme.colors : PASTELS;
 	const index = settings.theme.mode === "solid" ? 0 : Math.floor(now / 90) % colors.length;
-	return " " + colorize(truncateToWidth(text, available, "…"), colors[index]);
+	return ` ${colorize(truncateToWidth(text, available, "…"), colors[index])}`;
 }

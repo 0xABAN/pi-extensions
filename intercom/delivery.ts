@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import type { IntercomClient, SendResult } from "./broker/client.ts";
 import { errorMessage, formatAttachments, sessionIdPrefixes } from "./format.ts";
 import type { Inbound } from "./inbound.ts";
-import { openProjectPane, resolveTargetInCwd, waitForProjectSession, type ProjectPaneLaunch } from "./project-agent.ts";
+import { openProjectPane, type ProjectPaneLaunch, resolveTargetInCwd, waitForProjectSession } from "./project-agent.ts";
 import type { Attachment, Message, SessionInfo } from "./types.ts";
 
 const BLOCKING_ASK_GUIDANCE =

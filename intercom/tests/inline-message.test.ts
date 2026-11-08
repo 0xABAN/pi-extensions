@@ -1,6 +1,6 @@
 import { beforeAll, expect, test } from "bun:test";
-import { initTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { stripVTControlCharacters } from "node:util";
+import { initTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { InlineMessageComponent } from "../ui/inline-message.ts";
 
 const theme = { fg: (_color: string, text: string) => text } as unknown as Theme;

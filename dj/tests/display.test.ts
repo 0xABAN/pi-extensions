@@ -28,7 +28,7 @@ test("three layouts preserve the original pastel cycle while only full includes 
 	expect(plain(renderLine(playback, { ...DEFAULTS, layout: "minimal" }, 80, 1000))).toBe(" ♪ Midnight City");
 	PASTELS.forEach((color, i) => {
 		const line = renderLine(playback, DEFAULTS, 80, i * 90);
-		expect(line).toBe(" " + colorize(plain(line).slice(1), color));
+		expect(line).toBe(` ${colorize(plain(line).slice(1), color)}`);
 	});
 	expect(renderLine(playback, { ...solid, layout: "minimal" }, 80, 0)).toBe(
 		renderLine(playback, { ...solid, layout: "minimal" }, 80, 10000),

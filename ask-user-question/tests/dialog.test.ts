@@ -3,6 +3,8 @@ import { initTheme } from "@earendil-works/pi-coding-agent";
 import { KeybindingsManager, stripTerminalSequences, TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
 import askUserQuestion from "../index.ts";
 
+type Callback = (...args: any[]) => any;
+
 const KEY = {
 	enter: "\r",
 	escape: "\x1b",
@@ -45,16 +47,20 @@ beforeAll(() => initTheme("dark"));
 type Component = { render(width: number): string[]; handleInput(data: string): void };
 
 function open(questions: unknown[], hasUI = true) {
-	let execute!: Function;
+	let execute!: Callback;
 	let component!: Component;
 	const blocked: unknown[] = [];
-	const pi = { registerTool: (tool: { execute: Function }) => (execute = tool.execute) };
+	const pi = {
+		registerTool: (tool: { execute: Callback }) => {
+			execute = tool.execute;
+		},
+	};
 	askUserQuestion(pi as never);
 
 	const ctx = {
 		hasUI,
 		ui: {
-			custom: (factory: Function, options: { blocked: unknown }) =>
+			custom: (factory: Callback, options: { blocked: unknown }) =>
 				new Promise((resolve) => {
 					blocked.push(options.blocked);
 					component = factory(

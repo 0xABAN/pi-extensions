@@ -1,9 +1,9 @@
 import { afterAll, expect, test } from "bun:test";
 import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, utimesSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { createStore } from "../src/state.ts";
 import { DEFAULTS } from "../src/types.ts";
 

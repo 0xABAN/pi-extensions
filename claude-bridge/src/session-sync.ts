@@ -1,14 +1,14 @@
 import type { Message as PiMessage } from "@earendil-works/pi-ai";
 import {
+	type ContentBlock,
 	repairWithOrigin,
 	type Session,
-	type ContentBlock,
 	type ToolResultBlock,
 	type UserContentBlock,
 } from "cc-session-io";
+import { type CarriedAttachment, placeCarriedAttachments } from "./attachments.js";
 import { convertPiMessages } from "./convert.js";
 import { digestMessage, digestMessages } from "./message-digests.js";
-import { placeCarriedAttachments, type CarriedAttachment } from "./attachments.js";
 
 export interface Recording {
 	digests: string[];
@@ -104,7 +104,7 @@ export function importHistory(
 								))
 						);
 					});
-		if (origin !== null) sources.forEach((index) => direct.add(index));
+		if (origin !== null) for (const index of sources) direct.add(index);
 		if (message.role === "assistant") {
 			const blocks: ContentBlock[] =
 				typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content;

@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
-import { milliseconds, object, text, type Store, type Tokens } from "./state.ts";
+import { milliseconds, object, type Store, type Tokens, text } from "./state.ts";
 import type { Playback } from "./types.ts";
 
 const SCOPE = "user-read-playback-state",

@@ -1,4 +1,4 @@
-import { statSync, readFileSync } from "fs";
+import { readFileSync, type Stats, statSync } from "fs";
 
 export function verifyWrittenSession(
 	jsonlPath: string,
@@ -6,14 +6,14 @@ export function verifyWrittenSession(
 	expectedRecordCount: number,
 ): string[] {
 	const warnings = [];
-	let st;
+	let st: Stats;
 	try {
 		st = statSync(jsonlPath);
 	} catch (e) {
 		warnings.push(`file missing after save — path=${jsonlPath} err=${(e as Error).message}`);
 		return warnings;
 	}
-	let content;
+	let content: string;
 	try {
 		content = readFileSync(jsonlPath, "utf8");
 	} catch (e) {

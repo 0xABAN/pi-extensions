@@ -6,7 +6,7 @@ import { Type } from "typebox";
 import type { IntercomClient } from "./broker/client.ts";
 import type { Connection } from "./connection.ts";
 import { sameCwd } from "./cwd.ts";
-import { askSession, errorResult, replyToAsk, sendMessage, textResult, type ToolResult } from "./delivery.ts";
+import { askSession, errorResult, replyToAsk, sendMessage, type ToolResult, textResult } from "./delivery.ts";
 import { errorMessage, firstTextContent, formatSessionListRow, previewText, sessionIdPrefixes } from "./format.ts";
 import { buildHandoverText } from "./handover.ts";
 import type { Inbound } from "./inbound.ts";
@@ -304,13 +304,13 @@ export function registerIntercomTool(pi: ExtensionAPI, connection: Connection, i
 				let text = theme.fg("toolTitle", theme.bold("intercom "));
 				text += theme.fg(action === "ask" ? "warning" : action === "reply" ? "success" : "accent", action);
 				if (target) {
-					text += " " + theme.fg("muted", "→") + " " + theme.fg("accent", target);
+					text += ` ${theme.fg("muted", "→")} ${theme.fg("accent", target)}`;
 				}
 				if (attachmentCount > 0) {
-					text += " " + theme.fg("dim", `(${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"})`);
+					text += ` ${theme.fg("dim", `(${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"})`)}`;
 				}
 				if (messageText) {
-					text += "\n  " + theme.fg("dim", messageText);
+					text += `\n  ${theme.fg("dim", messageText)}`;
 				}
 				return new Text(text, 0, 0);
 			},
@@ -347,7 +347,7 @@ export function registerIntercomTool(pi: ExtensionAPI, connection: Connection, i
 					text += theme.fg("dim", ` (${details.messageId.slice(0, 8)})`);
 				}
 				if (details?.reason && context.expanded) {
-					text += "\n" + theme.fg("dim", `Reason: ${details.reason}`);
+					text += `\n${theme.fg("dim", `Reason: ${details.reason}`)}`;
 				}
 				return new Text(text, 0, 0);
 			},

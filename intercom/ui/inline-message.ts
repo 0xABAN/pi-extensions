@@ -1,7 +1,7 @@
+import { keyHint, renderToolRow, type Theme, transcriptBodyPadding } from "@earendil-works/pi-coding-agent";
 import type { Component, TuiMouseEvent, TuiMouseEventResult } from "@earendil-works/pi-tui";
 import { truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { keyHint, renderToolRow, type Theme, transcriptBodyPadding } from "@earendil-works/pi-coding-agent";
-import type { SessionInfo, Message } from "../types.ts";
+import type { Message, SessionInfo } from "../types.ts";
 
 export class InlineMessageComponent implements Component {
 	private from: SessionInfo;
@@ -53,7 +53,7 @@ export class InlineMessageComponent implements Component {
 	render(width: number): string[] {
 		const padding = transcriptBodyPadding(this.outputPad, width);
 		const indent = " ".repeat(padding);
-		const bodyIndent = indent + "  ";
+		const bodyIndent = `${indent}  `;
 		const bodyWidth = width - bodyIndent.length;
 
 		const senderName = this.from.name || this.from.id.slice(0, 8);

@@ -1,5 +1,5 @@
 import { getModels } from "@earendil-works/pi-ai/compat";
-import { isToolCallEventType, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { type ExtensionAPI, isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { PROVIDER_ID } from "./src/convert.js";
 import { buildModels } from "./src/models.js";
 import { setNotifier } from "./src/notify.js";

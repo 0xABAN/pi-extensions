@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { InboundEntry } from "../inbound.ts";
 
+type Callback = (...args: any[]) => any;
+
 const agentDir = mkdtempSync("/tmp/pi-ic-ext-");
 process.env.PI_CODING_AGENT_DIR = agentDir;
 
@@ -17,8 +19,8 @@ interface Delivered {
 type ToolResult = { content: Array<{ text: string }>; details: Record<string, unknown> };
 
 function fakeSession(name: string, sessionId: string) {
-	const handlers = new Map<string, Function>();
-	const tools = new Map<string, { execute: Function }>();
+	const handlers = new Map<string, Callback>();
+	const tools = new Map<string, { execute: Callback }>();
 	const delivered: Delivered[] = [];
 	let idle = true;
 
@@ -33,8 +35,8 @@ function fakeSession(name: string, sessionId: string) {
 		getContextUsage: () => undefined,
 	};
 	const pi = {
-		on: (event: string, handler: Function) => handlers.set(event, handler),
-		registerTool: (tool: { name: string; execute: Function }) => tools.set(tool.name, tool),
+		on: (event: string, handler: Callback) => handlers.set(event, handler),
+		registerTool: (tool: { name: string; execute: Callback }) => tools.set(tool.name, tool),
 		registerCommand: () => {},
 		registerShortcut: () => {},
 		registerMessageRenderer: () => {},

@@ -1,4 +1,4 @@
-import type { JsonlRecord, ImportAttachment } from "cc-session-io";
+import type { ImportAttachment, JsonlRecord } from "cc-session-io";
 import { messageContentToText } from "./convert.js";
 
 const CONTENT_BEARING = new Set(["file"]);

@@ -7,6 +7,8 @@ import { DefaultResourceLoader, SettingsManager } from "@earendil-works/pi-codin
 import dj from "../index.ts";
 import { DEFAULTS, type Playback, type Settings } from "../src/types.ts";
 
+type Callback = (...args: any[]) => any;
+
 const cleanups: (() => void)[] = [];
 afterEach(() => {
 	for (const cleanup of cleanups.splice(0)) cleanup();
@@ -18,7 +20,7 @@ const playing: Playback = {
 };
 
 function harness(poll: (signal: AbortSignal) => Promise<Playback> = async () => playing) {
-	const events = new Map<string, Function>();
+	const events = new Map<string, Callback>();
 	const widgets = new Map<string, { render(width: number): string[] }>();
 	const placements: string[] = [];
 	const messages: string[] = [];
@@ -49,7 +51,7 @@ function harness(poll: (signal: AbortSignal) => Promise<Playback> = async () => 
 	};
 	dj(
 		{
-			on(name: string, handler: Function) {
+			on(name: string, handler: Callback) {
 				events.set(name, handler);
 			},
 			registerCommand(name: string, command: unknown) {
@@ -62,7 +64,10 @@ function harness(poll: (signal: AbortSignal) => Promise<Playback> = async () => 
 				initialized++;
 			},
 			readSettings: () => prefs,
-			updateSettings: async (patch: Partial<Settings>) => (prefs = { ...prefs, ...patch }),
+			updateSettings: async (patch: Partial<Settings>) => {
+				prefs = { ...prefs, ...patch };
+				return prefs;
+			},
 			getClientId: () => undefined,
 		} as never,
 		{

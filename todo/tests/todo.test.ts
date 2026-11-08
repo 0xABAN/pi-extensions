@@ -4,6 +4,8 @@ import { applyTaskAction, emptyState, lastReminder, replay, type TaskState } fro
 import { summarizeTodo } from "../tool.ts";
 import { formatTodoList, renderTodoPanel } from "../widget.ts";
 
+type Callback = (...args: any[]) => any;
+
 const theme = {
 	fg: (_color: string, text: string) => text,
 	strikethrough: (text: string) => `~${text}~`,
@@ -15,9 +17,9 @@ function run(state: TaskState, ...actions: Record<string, unknown>[]): TaskState
 }
 
 function fakePi() {
-	const tools = new Map<string, { execute: Function; summarize: Function }>();
-	const handlers = new Map<string, Function>();
-	const commands = new Map<string, { handler: Function }>();
+	const tools = new Map<string, { execute: Callback; summarize: Callback }>();
+	const handlers = new Map<string, Callback>();
+	const commands = new Map<string, { handler: Callback }>();
 	const branch: Record<string, unknown>[] = [];
 	const notices: string[] = [];
 	const widgets = new Map<string, unknown>();
@@ -31,10 +33,10 @@ function fakePi() {
 		},
 	};
 	const pi = {
-		registerTool: (tool: { name: string; execute: Function; summarize: Function }) => tools.set(tool.name, tool),
-		registerCommand: (name: string, command: { handler: Function }) => commands.set(name, command),
+		registerTool: (tool: { name: string; execute: Callback; summarize: Callback }) => tools.set(tool.name, tool),
+		registerCommand: (name: string, command: { handler: Callback }) => commands.set(name, command),
 		appendEntry: (customType: string, data: unknown) => branch.push({ type: "custom", customType, data }),
-		on: (event: string, handler: Function) => handlers.set(event, handler),
+		on: (event: string, handler: Callback) => handlers.set(event, handler),
 	};
 	todoExtension(pi as never);
 

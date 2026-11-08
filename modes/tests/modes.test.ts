@@ -5,6 +5,8 @@ import { PLAN_MODE_PROMPT } from "../plan.ts";
 import { formatModeStatus } from "../status.ts";
 import { isSafeCommand, READ_ONLY_TOOLS } from "../utils.ts";
 
+type Callback = (...args: any[]) => any;
+
 const BUILD_TOOLS = ["read", "bash", "edit", "write", "codemode", "todo", "Agent", "intercom", "custom_tool"];
 const LEARN_LABEL = "\uF19D  learn mode";
 
@@ -39,15 +41,14 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 	let idle = true;
 	let keys: string[] = [];
 
-	const handlers = new Map<string, Function>();
+	const handlers = new Map<string, Callback>();
 	const registeredTools = new Map<string, any>();
 	const pickers: string[][] = [];
 	const commands = new Map<string, unknown>();
-	const shortcuts = new Map<string, { handler: Function }>();
+	const shortcuts = new Map<string, { handler: Callback }>();
 	const statuses = new Map<string, string>();
 	const flagValues = new Map<string, unknown>();
 	const notices: { text: string; level: string }[] = [];
-	const sent: any[] = [];
 
 	const ctx = {
 		hasUI: true,
@@ -58,7 +59,7 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 			theme: { name: "everforest-dark-hard" },
 			setStatus: (key: string, text: string) => statuses.set(key, text),
 			notify: (text: string, level: string) => notices.push({ text, level }),
-			custom: (factory: Function) =>
+			custom: (factory: Callback) =>
 				new Promise((resolve) => {
 					const picker = factory({}, PLAIN_THEME, KEYBINDINGS, resolve);
 					pickers.push(picker.render(40));
@@ -71,10 +72,10 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 	};
 
 	modesExtension({
-		on: (name: string, handler: Function) => handlers.set(name, handler),
+		on: (name: string, handler: Callback) => handlers.set(name, handler),
 		registerTool: (tool: { name: string }) => registeredTools.set(tool.name, tool),
 		registerCommand: (name: string, command: unknown) => commands.set(name, command),
-		registerShortcut: (key: string, shortcut: { handler: Function }) => shortcuts.set(key, shortcut),
+		registerShortcut: (key: string, shortcut: { handler: Callback }) => shortcuts.set(key, shortcut),
 		registerFlag: (name: string, flag: { default: unknown }) => flagValues.set(name, flags[name] ?? flag.default),
 		getFlag: (name: string) => flagValues.get(name),
 		getActiveTools: () => [...activeTools],

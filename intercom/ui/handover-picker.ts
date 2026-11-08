@@ -1,8 +1,8 @@
+import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { Input, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
-import type { SessionInfo } from "../types.ts";
 import { sessionIdPrefixes } from "../format.ts";
+import type { SessionInfo } from "../types.ts";
 import { herdrLocationText, middleTruncate } from "./session-list.ts";
 
 const PICKER_WIDTH = 88;
