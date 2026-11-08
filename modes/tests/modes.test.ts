@@ -382,9 +382,10 @@ test("the plan picker asks to proceed with numbered options and hides the workin
 		" ❯ 1. Approve",
 		"   2. Revise",
 		"",
+		" esc to revise the plan",
 	]);
-	expect(h.pickers[1]!.slice(-3, -1)).toEqual(["   1. Approve", " ❯ 2. Revise"]);
-	expect(h.pickers[2]!.slice(-3, -1)).toEqual([" ❯ 1. Approve", "   2. Revise"]);
+	expect(h.pickers[1]!.slice(-4, -2)).toEqual(["   1. Approve", " ❯ 2. Revise"]);
+	expect(h.pickers[2]!.slice(-4, -2)).toEqual([" ❯ 1. Approve", "   2. Revise"]);
 	expect(h.workingVisible).toEqual([false, true]);
 });
 

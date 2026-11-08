@@ -42,7 +42,9 @@ function approvalPicker(theme: Theme, keybindings: KeybindingsManager, done: (ch
 				return truncateToWidth(` ${index === selected ? theme.fg("accent", line) : line}`, width);
 			});
 
-			return [theme.fg("borderAccent", "─".repeat(width)), ...question, "", ...options, ""];
+			const hint = theme.fg("dim", " esc to revise the plan");
+
+			return [theme.fg("borderAccent", "─".repeat(width)), ...question, "", ...options, "", hint];
 		},
 
 		handleInput(data: string): void {
