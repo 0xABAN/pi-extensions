@@ -8,25 +8,32 @@
   ],
   "pi": {
     "extensions": [
+      "ask-user-question/index.ts",
       "cd/index.ts",
+      "claude-bridge/index.ts",
       "dj/index.ts",
+      "intercom/index.ts",
       "modes/index.ts",
       "reply/index.ts",
       "stash/index.ts",
+      "todo/index.ts",
       "whimsical/index.ts"
+    ],
+    "skills": [
+      "intercom/skills"
     ]
   },
   "workspaces": [
+    "ask-user-question",
     "cd",
+    "claude-bridge",
     "dj",
+    "intercom",
     "modes",
     "reply",
     "stash",
-    "whimsical",
     "todo",
-    "ask-user-question",
-    "intercom",
-    "claude-bridge"
+    "whimsical"
   ],
   "scripts": {
     "test": "bun test",
