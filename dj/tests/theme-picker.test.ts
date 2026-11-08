@@ -8,6 +8,7 @@ import type {
 import {
   CURSOR_MARKER,
   getKeybindings,
+  stripTerminalSequences,
   visibleWidth,
   type Component,
   type Focusable,
@@ -22,8 +23,7 @@ const down = "\x1b[B",
   escape = "\x1b";
 type Dialog = Component & Partial<Focusable> & { dispose?(): void };
 type Step = (dialog: Dialog) => void;
-const text = (dialog: Dialog) =>
-  stripVTControlCharacters(dialog.render(64).join("\n").replaceAll(CURSOR_MARKER, ""));
+const text = (dialog: Dialog) => stripTerminalSequences(dialog.render(64).join("\n"));
 const keys =
   (...values: string[]): Step =>
   (dialog) =>

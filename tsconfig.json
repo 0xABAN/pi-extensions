@@ -1,17 +1,163 @@
 {
+  "extends": "../pi/tsconfig.json",
   "compilerOptions": {
-    "target": "ES2023",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "strict": true,
-    "noEmit": true,
-    "allowImportingTsExtensions": true,
-    "skipLibCheck": true,
-    "types": ["bun"]
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "../pi/node_modules/@types"
+    ],
+    "paths": {
+      "@earendil-works/chord": [
+        "../pi/packages/chord/src/index.ts"
+      ],
+      "@earendil-works/chord/context": [
+        "../pi/packages/chord/src/context/index.ts"
+      ],
+      "@earendil-works/chord/delta": [
+        "../pi/packages/chord/src/delta/index.ts"
+      ],
+      "@earendil-works/chord/next": [
+        "../pi/packages/chord/src/next/index.ts"
+      ],
+      "@earendil-works/chord/next/plugins": [
+        "../pi/packages/chord/src/next-node/plugins/index.ts"
+      ],
+      "@earendil-works/chord/next/plugins/runtime": [
+        "../pi/packages/chord/src/next-node/plugins/runtime.ts"
+      ],
+      "@earendil-works/chord/next/http": [
+        "../pi/packages/chord/src/next-node/http/index.ts"
+      ],
+      "@earendil-works/chord/next/workers": [
+        "../pi/packages/chord/src/next-node/workers/index.ts"
+      ],
+      "@earendil-works/chord/node": [
+        "../pi/packages/chord/src/node.ts"
+      ],
+      "@earendil-works/chord/output": [
+        "../pi/packages/chord/src/output.ts"
+      ],
+      "@earendil-works/chord/telemetry-sqlite": [
+        "../pi/packages/chord/src/telemetry-sqlite/index.ts"
+      ],
+      "@earendil-works/chord/sqlite": [
+        "../pi/packages/chord/src/sqlite/index.ts"
+      ],
+      "@earendil-works/chord/sqlite/node": [
+        "../pi/packages/chord/src/sqlite/node.ts"
+      ],
+      "@earendil-works/chord/sqlite/cloudflare": [
+        "../pi/packages/chord/src/sqlite/cloudflare.ts"
+      ],
+      "@earendil-works/pi-telemetry": [
+        "../pi/packages/telemetry/src/index.ts"
+      ],
+      "@earendil-works/pi-telemetry/testing": [
+        "../pi/packages/telemetry/src/testing/index.ts"
+      ],
+      "@earendil-works/pi-telemetry/render": [
+        "../pi/packages/telemetry/src/render.ts"
+      ],
+      "@earendil-works/pi-codemode": [
+        "../pi/packages/codemode/src/index.ts"
+      ],
+      "@earendil-works/pi-codemode/cloudflare": [
+        "../pi/packages/codemode/src/cloudflare.ts"
+      ],
+      "@earendil-works/pi-codemode/declarations": [
+        "../pi/packages/codemode/src/declarations.ts"
+      ],
+      "@earendil-works/pi-codemode/portable": [
+        "../pi/packages/codemode/src/portable.ts"
+      ],
+      "@earendil-works/pi-codemode/source": [
+        "../pi/packages/codemode/src/source.ts"
+      ],
+      "@earendil-works/pi-codemode/worker": [
+        "../pi/packages/codemode/src/runtime/worker.ts"
+      ],
+      "@earendil-works/pi-schema": [
+        "../pi/packages/schema/src/index.ts"
+      ],
+      "@earendil-works/pi-schema/formats": [
+        "../pi/packages/schema/src/formats/index.ts"
+      ],
+      "@earendil-works/pi-mcp": [
+        "../pi/packages/mcp/src/index.ts"
+      ],
+      "@earendil-works/pi-mcp/oauth": [
+        "../pi/packages/mcp/src/oauth/index.ts"
+      ],
+      "@earendil-works/pi-mcp/testing": [
+        "../pi/packages/mcp/src/testing/index.ts"
+      ],
+      "@earendil-works/pi-ai": [
+        "../pi/packages/coding-agent/src/core/extensions/pi-ai-extension-view.ts"
+      ],
+      "@earendil-works/pi-ai/oauth": [
+        "../pi/packages/ai/src/oauth.ts"
+      ],
+      "@earendil-works/pi-ai/*": [
+        "../pi/packages/ai/src/*.ts",
+        "../pi/packages/ai/src/providers/*.ts"
+      ],
+      "@earendil-works/pi-ai/dist/*": [
+        "../pi/packages/ai/src/*"
+      ],
+      "@earendil-works/pi-durable": [
+        "../pi/packages/durable/src/index.ts"
+      ],
+      "@earendil-works/pi-durable/testing": [
+        "../pi/packages/durable/src/testing/index.ts"
+      ],
+      "@earendil-works/pi-durable/*": [
+        "../pi/packages/durable/src/*.ts",
+        "../pi/packages/durable/src/*/index.ts",
+        "../pi/packages/durable/src/*"
+      ],
+      "@earendil-works/pi-env": [
+        "../pi/packages/env/src/index.ts"
+      ],
+      "@earendil-works/pi-agent-core": [
+        "../pi/packages/agent/src/index.ts"
+      ],
+      "@earendil-works/pi-coding-agent": [
+        "../pi/packages/coding-agent/src/index.ts"
+      ],
+      "@earendil-works/pi-coding-agent/hooks": [
+        "../pi/packages/coding-agent/src/core/hooks/index.ts"
+      ],
+      "@earendil-works/pi-coding-agent/*": [
+        "../pi/packages/coding-agent/src/*"
+      ],
+      "typebox": [
+        "../pi/node_modules/typebox/build/index.d.mts",
+        "../pi/node_modules/typebox/build/index.mjs"
+      ],
+      "@earendil-works/pi-tui": [
+        "../pi/packages/tui/src/index.ts"
+      ],
+      "@earendil-works/pi-tui/*": [
+        "../pi/packages/tui/src/*"
+      ],
+      "@earendil-works/pi-agent-old": [
+        "../pi/packages/agent-old/src/index.ts"
+      ],
+      "@earendil-works/pi-agent-old/*": [
+        "../pi/packages/agent-old/src/*"
+      ]
+    }
   },
   "include": [
-    "dj/**/*.ts",
-    "modes/**/*.ts",
-    "tests/**/*.ts"
+    "*/**/*.ts",
+    "../pi/packages/*/src/**/*.d.ts"
+  ],
+  "files": [
+    "node_modules/bun-types/test.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/node_modules"
   ]
 }
