@@ -18,7 +18,7 @@ const KEY_IDS: Record<string, string> = {
 	"tui.select.cancel": KEY.escape,
 };
 const KEYBINDINGS = { matches: (data: string, id: string) => KEY_IDS[id] === data };
-const PLAIN_THEME = { fg: (_color: string, text: string) => text };
+const PLAIN_THEME = { fg: (_color: string, text: string) => text, bg: (_color: string, text: string) => text, bold: (text: string) => text };
 
 type Entry = { type: string; customType: string; data: any };
 
@@ -38,7 +38,6 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 	const handlers = new Map<string, Function>();
 	const registeredTools = new Map<string, any>();
 	const pickers: string[][] = [];
-	const workingVisible: boolean[] = [];
 	const commands = new Map<string, unknown>();
 	const shortcuts = new Map<string, { handler: Function }>();
 	const statuses = new Map<string, string>();
@@ -55,7 +54,6 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 			theme: { name: "everforest-dark-hard" },
 			setStatus: (key: string, text: string) => statuses.set(key, text),
 			notify: (text: string, level: string) => notices.push({ text, level }),
-			setWorkingVisible: (visible: boolean) => workingVisible.push(visible),
 			custom: (factory: Function) =>
 				new Promise((resolve) => {
 					const picker = factory({}, PLAIN_THEME, KEYBINDINGS, resolve);
@@ -93,11 +91,10 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 		statuses,
 		notices,
 		pickers,
-		workingVisible,
 		commands,
 		shortcuts,
 		planTool: registeredTools.get("plan"),
-		callPlan: () => registeredTools.get("plan").execute("call-1", {}, undefined, undefined, ctx),
+		callPlan: () => registeredTools.get("plan").execute("call-1", { topic: "Greeting file" }, undefined, undefined, ctx),
 		shiftTab: () => shortcuts.get("shift+tab")!.handler(ctx),
 		tools: () => activeTools,
 		entries: () => branch,
@@ -368,7 +365,7 @@ test("startup flags override saved state, and learn wins over plan", async () =>
 	expect((await harness({ flags: { plan: true } })).mode()).toMatch(/plan mode$/);
 });
 
-test("the plan picker asks to proceed with numbered options and hides the working line", async () => {
+test("the plan picker shows the topic, the question and numbered options between two rules", async () => {
 	const h = await harness({ flags: { plan: true } });
 	h.press(KEY.down, KEY.up, KEY.enter);
 
@@ -376,17 +373,22 @@ test("the plan picker asks to proceed with numbered options and hides the workin
 
 	expect(h.pickers[0]).toEqual([
 		"─".repeat(40),
+		"",
+		"  Greeting file ",
+		"",
 		" The plan is ready. Would you like to",
 		" proceed?",
 		"",
-		" ❯ 1. Approve",
-		"   2. Revise",
+		"❯ 1. Approve",
+		"  2. Revise",
 		"",
-		" esc to revise the plan",
+		"─".repeat(40),
+		"",
+		" press esc to revise the plan",
 	]);
-	expect(h.pickers[1]!.slice(-4, -2)).toEqual(["   1. Approve", " ❯ 2. Revise"]);
-	expect(h.pickers[2]!.slice(-4, -2)).toEqual([" ❯ 1. Approve", "   2. Revise"]);
-	expect(h.workingVisible).toEqual([false, true]);
+	expect(h.pickers[1]!.slice(7, 9)).toEqual(["  1. Approve", "❯ 2. Revise"]);
+	expect(h.pickers[2]!.slice(7, 9)).toEqual(["❯ 1. Approve", "  2. Revise"]);
+	expect(h.planTool.parameters.properties.topic.maxLength).toBe(16);
 });
 
 for (const keys of [[KEY.enter], ["1"], [KEY.down, KEY.up, KEY.enter]]) {

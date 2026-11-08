@@ -89,9 +89,10 @@ and functions they change, and a Verification section, and recommends one
 approach. A short hidden note after each of your messages points back to those
 rules.
 
-The `plan` tool replaces the prompt with a short question and two numbered
-choices, styled after Claude Code's plan approval. Pick one with the arrow keys
-and Enter, or press its number. The working line is hidden while you choose.
+The `plan` tool takes a short topic from the model and replaces the prompt with
+an approval picker laid out like `ask_user_question`: the topic, the question,
+and two numbered choices. Pick one with the arrow keys and Enter, or press its
+number.
 
 - Approve switches to Build. The agent starts implementing in the same turn,
   creating one todo per step first.
