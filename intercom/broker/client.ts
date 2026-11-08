@@ -48,9 +48,12 @@ function getLivenessTimeoutMs(): number {
 
 export class IntercomSessionHeldError extends Error {
   readonly code = SESSION_HELD_ERROR_CODE;
-  constructor(message: string, readonly holder: SessionHolder) {
+  readonly holder: SessionHolder;
+
+  constructor(message: string, holder: SessionHolder) {
     super(message);
     this.name = "IntercomSessionHeldError";
+    this.holder = holder;
   }
 }
 
