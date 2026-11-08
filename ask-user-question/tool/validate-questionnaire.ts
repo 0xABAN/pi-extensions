@@ -11,11 +11,6 @@ const RESERVED_LABEL_SET: ReadonlySet<string> = new Set(RESERVED_LABELS);
 
 export type ValidationResult = { ok: true } | { ok: false; error: QuestionnaireError; message: string };
 
-/**
- * Pure runtime validator for `QuestionParams`. Covers every guard except
- * `no_ui` (which depends on `ctx.hasUI` and stays inline at the call site).
- * `reserved_label` MUST short-circuit before `duplicate_option_label`.
- */
 export function validateQuestionnaire(typed: QuestionParams): ValidationResult {
 	if (typed.questions.length === 0) {
 		return { ok: false, error: "no_questions", message: ERROR_NO_QUESTIONS };

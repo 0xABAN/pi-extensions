@@ -8,20 +8,12 @@ import {
 import { resolveExternalAnswer } from "./tool/external-answer.ts";
 import type { QuestionData, QuestionnaireResult } from "./tool/types.ts";
 
-/** "rpc" while the RPC dialog walker owns the prompts — those cannot be answered from outside. */
 export type AnswerHost = "tui" | "rpc";
 
-/**
- * One questionnaire an inbound `rpiv:ask-user:answer` may resolve, opened by `execute()`
- * before its prompt event goes out and closed in its `finally`. Both answer sources —
- * the dialog's own `done` and the inbound event — go through `settle`, so the first
- * wins and a later one is refused instead of reported as applied.
- */
 export class OpenQuestionnaire {
 	private result: QuestionnaireResult | undefined;
 	private deliver: ((result: QuestionnaireResult) => void) | undefined;
 	private resolveEarly!: (result: QuestionnaireResult) => void;
-	/** Resolves with an answer accepted while no dialog was mounted to take it. */
 	readonly answeredEarly = new Promise<QuestionnaireResult>((resolve) => {
 		this.resolveEarly = resolve;
 	});
@@ -32,17 +24,14 @@ export class OpenQuestionnaire {
 		public host: AnswerHost,
 	) {}
 
-	/** The accepted result, once settled. */
 	get settled(): QuestionnaireResult | undefined {
 		return this.result;
 	}
 
-	/** Hand over the mounted dialog's `done`; answers from now on close the dialog through it. */
 	attach(done: (result: QuestionnaireResult) => void): void {
 		this.deliver = done;
 	}
 
-	/** First answer wins. False when this questionnaire is already settled. */
 	settle(result: QuestionnaireResult): boolean {
 		if (this.result) return false;
 		this.result = result;
@@ -59,11 +48,6 @@ export interface AnswerChannel {
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-/**
- * Listen for `rpiv:ask-user:answer` and answer every attempt on `rpiv:ask-user:answer-result`.
- * Open questionnaires are keyed by tool-call id: Pi runs tool calls in parallel, so several
- * can be open at once and the emitter must name the one it answers.
- */
 export function registerAnswerChannel(pi: ExtensionAPI): AnswerChannel {
 	const open = new Map<string, OpenQuestionnaire>();
 

@@ -16,7 +16,6 @@ const RECOMMENDED_SUFFIX = /\s*\(Recommended\)$/;
 
 type ToolResultView = { content: ReadonlyArray<{ type: string; text?: string }>; details?: unknown };
 
-/** Lines laid out at render time, so wrapping and truncation follow the terminal width. */
 class WidthLines implements Component {
 	constructor(private readonly layout: (width: number) => string[]) {}
 	render(width: number): string[] {
@@ -36,7 +35,6 @@ export function summarizeAsk(args: QuestionParams | undefined): ToolSummary {
 	return { label: "Ask", icon: "◇", target: questionHeaders(args) };
 }
 
-/** `Ask Format · Migration`: the headers name the questions. */
 export function renderAskCall(args: QuestionParams | undefined, theme: Theme): Component {
 	const headers = questionHeaders(args);
 	const title = theme.fg("toolTitle", theme.bold("Ask"));
@@ -44,11 +42,6 @@ export function renderAskCall(args: QuestionParams | undefined, theme: Theme): C
 	return new WidthLines((width) => [truncateToWidth(text, width, "…")]);
 }
 
-/**
- * The transcript receipt: one `✓ answer` line for a single question, an aligned
- * header/answer table for several. A failure shows `✗` with the first line of the
- * model-facing message; a declined questionnaire shows a dimmed `✗ no answer`.
- */
 export function renderAskResult(
 	result: ToolResultView,
 	args: QuestionParams | undefined,
@@ -102,7 +95,6 @@ function tableLines(
 	return [...lines, ...globalNoteLines(details, theme, width)];
 }
 
-/** Under an answer: the question text and chosen preview when expanded, then the answer's note. */
 function detailLines(
 	answer: QuestionAnswer | undefined,
 	questionText: string | undefined,
@@ -141,7 +133,6 @@ function label(text: string): string {
 	return text.replace(RECOMMENDED_SUFFIX, "");
 }
 
-/** `prefix` then `text` wrapped to the width left after it; continuation lines align under the text. */
 function hanging(prefix: string, text: string, width: number): string[] {
 	const indent = visibleWidth(prefix);
 	return wrapTextWithAnsi(text, Math.max(1, width - indent)).map(

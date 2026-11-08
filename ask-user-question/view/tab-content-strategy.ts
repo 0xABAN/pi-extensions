@@ -27,18 +27,8 @@ const NOTES_HEADER = "Notes:";
 const GLOBAL_NOTES_HEADER = "Global note:";
 const REVIEW_GLOBAL_HINT_TEMPLATE = `${KEY_PLACEHOLDER} to add a note`;
 const REVIEW_NOTE_LABEL = "Note";
-/** Label for a question's saved note — the question tab's resting row and the review entry (#197). */
 const SAVED_NOTE_LABEL = "Note for this answer:";
 
-/**
- * Single-row, width-clipped chrome cell. The footer row count is invariant
- * (`QuestionTabStrategy.footerRowCount = 2`) — pi-tui's `Text` word-wraps when
- * the styled hint exceeds `width`, inflating that row count and desyncing the
- * `bodyHeight + footerRowCount` math in `DialogView.render`. Clipping with
- * `truncateToWidth` (ANSI-aware, matches `multi-select-view.ts` usage) keeps
- * the hint on one line; the collapse affordance falls off the right edge with
- * `…` on terminals too narrow to advertise it.
- */
 class OneLineClippedText implements Component {
 	constructor(
 		private readonly text: string,
@@ -56,31 +46,19 @@ class OneLineClippedText implements Component {
 	handleInput(_data: string): void {}
 }
 
-/**
- * Per-tab content provider. Pure functional — closes over construction-time
- * config; per-tick state threads through method args. The chrome wrapper
- * enforces height equality across tabs via `bodyHeight + footerRowCount`.
- */
 export interface TabContentStrategy {
-	/** Total RENDERED footer rows — MUST equal what `footerRows()` actually emits. Drives residual math. */
 	readonly footerRowCount: number;
 
-	/** Variable rows above the body, after top chrome (border + tabBar + Spacer). */
 	headingRows(state: DialogState): Component[];
 
-	/** Body Component placed at the body slot. */
 	bodyComponent(state: DialogState): Component;
 
-	/** Natural rendered height of `bodyComponent(state)` at given width. */
 	bodyHeight(width: number, state: DialogState): number;
 
-	/** Optional rows between body's trailing Spacer and the bottom border. */
 	midRows(state: DialogState): Component[];
 
-	/** Footer rows below the bottom border. Rendered row count MUST equal `footerRowCount`. */
 	footerRows(state: DialogState): Component[];
 
-	/** Row range of the focused item within the body's rendered output, or undefined if no interactive focus. */
 	focusedItemRowRange(width: number, state: DialogState): [number, number] | undefined;
 }
 
@@ -92,14 +70,11 @@ export interface QuestionTabStrategyConfig {
 	notesInput: Editor;
 	isMulti: boolean;
 	getCurrentBodyHeight: (width: number) => number;
-	/** Resolved collapse key spec (`"ctrl+]"`, `"alt+o"`, or `"off"`). Drives the footer's collapse hint. */
 	collapseKey: string;
-	/** Resolved notes key (`resolveNotesKey` output). Named by the footer's notes hint. */
 	notesKey: string;
 }
 
 export class QuestionTabStrategy implements TabContentStrategy {
-	/** Spacer(1) + OneLineClippedText(hint, 1) = 2 rendered rows. */
 	readonly footerRowCount = 2;
 
 	constructor(private readonly config: QuestionTabStrategyConfig) {}
@@ -107,7 +82,6 @@ export class QuestionTabStrategy implements TabContentStrategy {
 	headingRows(state: DialogState): Component[] {
 		const out: Component[] = [];
 		const question = this.config.questions[state.currentTab];
-		// In multi-question mode the tab bar already shows the header; suppress the inline badge.
 		if (!this.config.isMulti && question?.header && question.header.length > 0) {
 			out.push(new Text(this.config.theme.bg("selectedBg", ` ${question.header} `), 1, 0));
 			out.push(new Spacer(1));
@@ -138,10 +112,6 @@ export class QuestionTabStrategy implements TabContentStrategy {
 				new Spacer(1),
 			];
 		}
-		// A saved note stays visible once its editor closes (#197): one clipped row, so a long
-		// or multi-line note cannot crowd the options — `n` reopens it in full. Mid rows are
-		// subtracted from the body allowance (`DialogView.rowsAroundBody`), so the row is
-		// height-safe.
 		const note = selectSavedNote(state.notesByTab, state.answers, state.currentTab);
 		if (note === undefined) return [];
 		const [firstLine = "", ...rest] = note.split("\n");
@@ -151,10 +121,6 @@ export class QuestionTabStrategy implements TabContentStrategy {
 
 	footerRows(state: DialogState): Component[] {
 		const question = this.config.questions[state.currentTab];
-		// OneLineClippedText (not pi-tui `Text`) — `buildHintText` includes the collapse
-		// affordance, pushing the rendered string past 80 columns; `Text` would wrap and
-		// break the strategy's `footerRowCount = 2` invariant. Clipping on narrow terminals
-		// drops the trailing parts (collapse hint first, then cancel) with `…`.
 		return [
 			new Spacer(1),
 			new OneLineClippedText(
@@ -179,14 +145,11 @@ export interface SubmitTabStrategyConfig {
 	theme: Theme;
 	questions: readonly QuestionData[];
 	submitPicker: Component | undefined;
-	/** Shared notes Editor — mounted into midRows while the global-note editor is open on this tab. */
 	notesInput: Editor;
-	/** Resolved notes key (`resolveNotesKey` output). Named by the global-note hint. */
 	notesKey: string;
 }
 
 export class SubmitTabStrategy implements TabContentStrategy {
-	/** Spacer(1) + Text(prompt, 1) + submitPicker(2) + OneLineClippedText(hint, 1) = 5 rendered rows. Fallback path lands at 5 via 2 Spacer(1)s in the picker slot. */
 	readonly footerRowCount = 5;
 
 	constructor(private readonly config: SubmitTabStrategyConfig) {}
@@ -220,11 +183,6 @@ export class SubmitTabStrategy implements TabContentStrategy {
 				);
 			}
 		}
-		// Committed global note (#182) as a review entry — pressing `n` gets visible
-		// feedback and the note is reviewable before submit. Same presence predicate as
-		// the reducer's doneFor lift. Hidden while the editor is open: the midRows editor
-		// (seeded with this text) is the live surface then, and a stale copy above it
-		// would read as a second note.
 		const globalNote = state.notesByTab.get(this.config.questions.length);
 		if (!state.notesVisible && globalNote && globalNote.length > 0) {
 			c.addChild(new Text(this.config.theme.fg("muted", ` ● ${t("review.note_label", REVIEW_NOTE_LABEL)}`), 1, 0));
@@ -240,10 +198,6 @@ export class SubmitTabStrategy implements TabContentStrategy {
 	}
 
 	midRows(state: DialogState): Component[] {
-		// notesVisible-gated mirror of QuestionTabStrategy.midRows: while the global-note
-		// editor is open, the shared notesInput mounts below the answer summary under its
-		// own header. The pseudo-index draft (notesByTab[questions.length]) is reducer-owned
-		// state; the strategy only renders.
 		if (!state.notesVisible) return [];
 		return [
 			new Text(this.config.theme.fg("muted", t("notes.global_header", GLOBAL_NOTES_HEADER)), 1, 0),
@@ -267,21 +221,13 @@ export class SubmitTabStrategy implements TabContentStrategy {
 						"warning",
 						`${t("review.incomplete", INCOMPLETE_WARNING_PREFIX)} ${missing.join(", ")}`,
 					);
-		// One row, never wrapped: `footerRowCount` counts it as one, and a wrapped prompt
-		// (long list of unanswered headers) would desync the chrome's row math (#261).
 		const out: Component[] = [new Spacer(1), new OneLineClippedText(promptText, 1)];
 		if (this.config.submitPicker) {
 			out.push(this.config.submitPicker);
 		} else {
-			// Padding when the picker isn't wired — keeps rendered row count at footerRowCount=5.
 			out.push(new Spacer(1));
 			out.push(new Spacer(1));
 		}
-		// Bottom key-hint row, mirroring QuestionTabStrategy's footer idiom (one dim
-		// `·`-joined line below everything) — the prompt reads straight into its picker
-		// with no hint wedged between them. Always present so footerRowCount stays
-		// exactly 5. OneLineClippedText (not pi-tui Text) — a wrapped hint would inflate
-		// the footer past footerRowCount and desync the chrome's cross-tab height math.
 		out.push(
 			new OneLineClippedText(this.config.theme.fg("dim", buildSubmitHintText(state, this.config.notesKey)), 1),
 		);
@@ -293,21 +239,6 @@ export class SubmitTabStrategy implements TabContentStrategy {
 	}
 }
 
-/**
- * Build the controls hint line. Order:
- *   [Space toggle ·] [n notes ·] [Tab switch ·] Esc [· <key> collapse]
- *   [· Shift+Enter newline] [· Ctrl+U clear]
- *
- * `NOTES` is part of the resting (notes-closed) core — it drops while the notes
- * editor or custom-answer input has the keyboard. Ctrl+G is Pi's global external-
- * editor shortcut and needs no local hint; the context-specific clear shortcut is
- * appended at the far right while input mode is active.
- *
- * The collapse part interpolates the configured `collapseKey` (display-cased)
- * and is omitted entirely when the shortcut is `"off"` — `routeKey` and the raw
- * terminal listener both refuse to collapse in that case, so advertising a key
- * would be a lie.
- */
 export function buildHintText(
 	question: QuestionData | undefined,
 	isMulti: boolean,
@@ -331,12 +262,6 @@ export function buildHintText(
 	return parts.join(" · ");
 }
 
-/**
- * Submit-tab counterpart of `buildHintText` — the same `·`-joined bottom-row idiom.
- * Resting: `n to add a note` · Esc. While the global-note editor is
- * open the note part drops (the editor is the affordance then) and the Shift+Enter
- * newline hint is appended after cancel, mirroring the question tabs' notes-open shape.
- */
 export function buildSubmitHintText(state: DialogState, notesKey: string): string {
 	const parts: string[] = [];
 	if (!state.notesVisible) parts.push(notesHint("review.global_hint", REVIEW_GLOBAL_HINT_TEMPLATE, notesKey));
@@ -345,7 +270,6 @@ export function buildSubmitHintText(state: DialogState, notesKey: string): strin
 	return parts.join(" · ");
 }
 
-/** A notes hint with the configured key in place of `{key}`. */
 function notesHint(key: string, template: string, notesKey: string): string {
 	return t(key, template).replace(KEY_PLACEHOLDER, notesKey);
 }

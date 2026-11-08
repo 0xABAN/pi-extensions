@@ -40,20 +40,8 @@ export interface QuestionnaireBuildConfig {
 	isMulti: boolean;
 	initialState: QuestionnaireState;
 	getCurrentTab: () => number;
-	/**
-	 * Resolved collapse key spec (`"ctrl+]"`, `"alt+o"`, or `"off"`). Threaded to
-	 * `DialogConfig` as construction-time config so the footer hint can name the
-	 * real key — deliberately NOT part of `QuestionnaireState`, which stays free
-	 * of runtime context.
-	 */
 	collapseKey: string;
-	/** Resolved notes key (`resolveNotesKey` output), threaded to the hints that name it. */
 	notesKey: string;
-	/**
-	 * Maps `tui.terminal.rows` to the rows the dialog may render — identity for the
-	 * overlay, a capped share for the inline editor slot (`../presentation.ts`). Applied
-	 * inside `getTerminalRows`, so `DialogView`'s overflow partition is mode-agnostic.
-	 */
 	rowBudget: (terminalRows: number) => number;
 }
 
@@ -100,22 +88,10 @@ function multiSelectBodyHeights(view: MultiSelectView): (width: number) => TabBo
 const isActiveTab: PerTabSelector<boolean> = (s, ctx) =>
 	ctx.i === selectActivePreviewPaneIndex(s.currentTab, ctx.totalQuestions);
 
-/**
- * Pure factory: assembles every TUI component, the props adapter, and a
- * lifecycle handle. Session-state dependencies arrive via `getCurrentTab`; live
- * custom text stays in the headless Editor. Initial paint is delegated to
- * `adapter.apply(initialState)` (called by the session at construction-end);
- * no selector is invoked here.
- */
 export function buildQuestionnaire(config: QuestionnaireBuildConfig): QuestionnaireBuilt {
 	return new QuestionnaireBuilder(config).build();
 }
 
-/**
- * Programming-by-intention assembly: each private method names one
- * construction step from `build()`. Read top-down; the class is build-only and
- * discarded once the handle is returned.
- */
 class QuestionnaireBuilder {
 	private readonly tui: QuestionnaireBuildConfig["tui"];
 	private readonly theme: Theme;
@@ -151,11 +127,6 @@ class QuestionnaireBuilder {
 		const textEditorTheme = editorTheme(this.theme);
 		this.notesInput = new Editor(this.tui, textEditorTheme);
 		this.inlineInput = new Editor(this.tui, textEditorTheme);
-		// The key router owns confirm/submit semantics; keys reaching these headless
-		// editors are text-editing only. Without this, a `tui.input.submit` match inside
-		// Editor.handleInput would run submitValue(), which resets the buffer and
-		// silently destroys the draft — no onSubmit is wired here, so the text is
-		// unrecoverable (#156).
 		this.notesInput.disableSubmit = true;
 		this.inlineInput.disableSubmit = true;
 	}
@@ -217,12 +188,6 @@ class QuestionnaireBuilder {
 		return question.multiSelect ? multiSelectBodyHeights(multiSelect!) : previewBodyHeights(preview);
 	}
 
-	/**
-	 * Compute cross-tab max adaptive left width and inject into each PreviewPane.
-	 * Mirrors buildHeightComputers pattern — iterates all tabs, takes max.
-	 * Called after buildTabComponents, before buildDialog (so setGlobalLeftWidth
-	 * is set before any rendering occurs).
-	 */
 	private injectGlobalLeftWidth(tabs: ReadonlyArray<TabComponents>): void {
 		const questions = this.questions;
 		const itemsByTab = this.itemsByTab;

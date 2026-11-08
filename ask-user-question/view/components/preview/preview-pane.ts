@@ -14,10 +14,8 @@ import {
 	STACKED_GAP_ROWS,
 } from "./preview-layout-decider.ts";
 
-/** Smallest preview box worth showing: top border, one content line, bottom border. */
 const MIN_BOX_ROWS = 3;
 
-// ----- Re-exports for test imports — keep `./preview-pane.js` as the public surface -----
 export {
 	MAX_PREVIEW_HEIGHT_SIDE_BY_SIDE,
 	MAX_PREVIEW_HEIGHT_STACKED,
@@ -40,27 +38,11 @@ export {
 	STACKED_GAP_ROWS,
 } from "./preview-layout-decider.ts";
 
-/**
- * Per-tick projection of PreviewPane state. Replaces the prior
- * `setNotesVisible(boolean)` sliver-setter and the sibling reads of
- * `optionListView.getSelectedIndex()` / `isFocused()`. The pane now reads
- * `selectedIndex` and `focused` from its own props — both derived from
- * canonical state via `selectPreviewPaneProps`. `OptionListView` and
- * `PreviewPane` see the same source of truth without the cross-component
- * live read.
- */
 export interface PreviewPaneProps {
 	notesVisible: boolean;
-	/** The question carries a saved note — the affordance offers to edit it rather than add one (#197). */
 	hasNote: boolean;
 	selectedIndex: number;
 	focused: boolean;
-	/**
-	 * True while the "other" (custom-answer) row is focused and accepting input
-	 * (`state.inputMode`, set by the reducer via `ROW_INTENT_META.other.activatesInputMode`).
-	 * Surfaced by `selectPreviewPaneProps` from canonical state; drives the full-width
-	 * early-returns below so the inline input isn't cramped into the narrow left column.
-	 */
 	inputMode: boolean;
 }
 
@@ -72,18 +54,6 @@ export interface PreviewPaneConfig {
 	previewBlock: PreviewBlockRenderer;
 }
 
-/**
- * Thin layout composer. Receives `selectedIndex` / `focused` / `notesVisible`
- * via `setProps` per tick (computed by `selectPreviewPaneProps` from canonical
- * state). Delegates option-side rendering to `OptionListView` (which still
- * owns its render-time state — input buffer, confirmedIndex) and preview-side
- * rendering to `PreviewBlockRenderer` (which owns the markdown cache and
- * bordered-box composition).
- *
- * `naturalHeight` and `maxNaturalHeight` query both children's heights; `render`
- * combines them via `decideLayout` (mode threaded into both calls — never
- * re-derived).
- */
 export class PreviewPane implements StatefulView<PreviewPaneProps>, Component {
 	private readonly question: QuestionData;
 	private readonly getTerminalWidth: () => number;
@@ -91,18 +61,7 @@ export class PreviewPane implements StatefulView<PreviewPaneProps>, Component {
 	private readonly previewBlock: PreviewBlockRenderer;
 	private readonly theme: Theme;
 	private props: PreviewPaneProps;
-	/**
-	 * Rows the dialog can give this body this frame, set by `DialogView` before each render;
-	 * undefined when unconstrained. A body taller than this fits itself instead of being cut
-	 * by the dialog's scroll window: the options scroll within their column around the focused
-	 * option, and the preview box shrinks but always closes (#210).
-	 */
 	private rowAllowance: number | undefined;
-	/**
-	 * Cross-tab max left-width getter. Set exactly once by `buildQuestionnaire.injectGlobalLeftWidth`
-	 * before any render. Initialized to a throwing sentinel so missing injection is a hard fail
-	 * rather than a silent fallback to a magic constant — render is illegal until injected.
-	 */
 	private globalLeftWidth: (paneWidth: number) => number = () => {
 		throw new Error("PreviewPane.setGlobalLeftWidth must be called before render()");
 	};
@@ -128,8 +87,6 @@ export class PreviewPane implements StatefulView<PreviewPaneProps>, Component {
 		this.props = props;
 	}
 
-	/** Render-time geometry from `DialogView` (not canonical state, so not a prop). */
-	/** The notes affordance under the preview: shown while focused with the notes editor closed. */
 	private notesAffordance(): NotesAffordance {
 		const { focused, notesVisible, hasNote } = this.props;
 		if (!focused || notesVisible) return "none";
@@ -149,33 +106,17 @@ export class PreviewPane implements StatefulView<PreviewPaneProps>, Component {
 
 	render(width: number): string[] {
 		if (this.question.multiSelect === true) return this.optionListView.render(width);
-		// Spec: hide the preview pane entirely when no option carries a `preview`.
 		if (!this.previewBlock.hasAnyPreview()) return this.optionListView.render(width);
-		// `inputMode` (typing on the "other" custom-answer row): the preview is irrelevant —
-		// the row sits at index `options.length`, out of bounds for any option's preview — so
-		// render the option list at the full pane width instead of the cramped left column.
-		// Side-by-side + preview block resume verbatim on nav-away (inputMode clears).
 		if (this.props.inputMode) return this.optionListView.render(width);
 
 		return this.layout(width).lines;
 	}
 
-	/**
-	 * Options + preview for the current layout mode, fitted to `rowAllowance` when set. The
-	 * returned focus range is in the same row coordinates as `lines`, so `render`,
-	 * `focusedItemRowRange` and `naturalHeight` agree by construction.
-	 */
 	private layout(width: number): { lines: string[]; focus: [number, number] | undefined } {
 		const mode = decideLayout(this.getTerminalWidth(), width);
 		return mode === "side-by-side" ? this.layoutSideBySide(width, mode) : this.layoutStacked(width, mode);
 	}
 
-	/**
-	 * Stacked: options, a blank gap, then the preview block. When that exceeds the allowance,
-	 * keep the focused option (plus a row either side for the overflow arrows) and give the
-	 * preview the rest, so the preview of the option being considered stays in view instead
-	 * of falling below the dialog's scroll window.
-	 */
 	private layoutStacked(
 		width: number,
 		mode: PreviewLayoutMode,
@@ -193,8 +134,6 @@ export class PreviewPane implements StatefulView<PreviewPaneProps>, Component {
 				focus,
 			};
 		}
-		// Prefer keeping a row either side of the focused option for the overflow arrows; give
-		// those up only when they are what keeps the preview box (border + 1 line) from fitting.
 		const focusRows = focus ? focus[1] - focus[0] : 1;
 		const previewRowsWith = (optionsFloor: number) =>
 			Math.min(fullBlock, allowance - STACKED_GAP_ROWS - Math.min(options.length, optionsFloor));
@@ -209,11 +148,6 @@ export class PreviewPane implements StatefulView<PreviewPaneProps>, Component {
 		};
 	}
 
-	/**
-	 * Side-by-side: options column left, preview block right. Under an allowance the options
-	 * column scrolls around the focused option and the preview block shrinks, so neither
-	 * column exceeds it and the dialog never slices through the preview box.
-	 */
 	private layoutSideBySide(
 		width: number,
 		mode: PreviewLayoutMode,
@@ -251,8 +185,6 @@ export class PreviewPane implements StatefulView<PreviewPaneProps>, Component {
 	focusedItemRowRange(width: number): [number, number] {
 		if (this.question.multiSelect === true) return this.optionListView.focusedItemRowRange(width);
 		if (!this.previewBlock.hasAnyPreview()) return this.optionListView.focusedItemRowRange(width);
-		// `inputMode`: compute the focused row range against the FULL pane width (not the
-		// side-by-side leftWidth), mirroring `render`'s full-width option list.
 		if (this.props.inputMode) return this.optionListView.focusedItemRowRange(width);
 		return this.layout(width).focus ?? [0, 1];
 	}
@@ -260,8 +192,6 @@ export class PreviewPane implements StatefulView<PreviewPaneProps>, Component {
 	naturalHeight(width: number): number {
 		if (this.question.multiSelect === true) return this.optionListView.render(width).length;
 		if (!this.previewBlock.hasAnyPreview()) return this.optionListView.render(width).length;
-		// `inputMode`: height is the full-width option list only (no preview block) — preserves
-		// the `naturalHeight === render.length` parity invariant.
 		if (this.props.inputMode) return this.optionListView.render(width).length;
 		if (this.rowAllowance !== undefined) return this.layout(width).lines.length;
 		const mode = decideLayout(this.getTerminalWidth(), width);
@@ -276,8 +206,6 @@ export class PreviewPane implements StatefulView<PreviewPaneProps>, Component {
 	maxNaturalHeight(width: number): number {
 		if (this.question.multiSelect === true) return this.optionListView.render(width).length;
 		if (!this.previewBlock.hasAnyPreview()) return this.optionListView.render(width).length;
-		// `inputMode`: like naturalHeight — full-width option list only, so the
-		// `maxNaturalHeight >= naturalHeight` parity invariant holds (both equal the list height).
 		if (this.props.inputMode) return this.optionListView.render(width).length;
 		const mode = decideLayout(this.getTerminalWidth(), width);
 		const adaptiveLeft = this.getAdaptiveLeft(width);
@@ -292,7 +220,6 @@ export class PreviewPane implements StatefulView<PreviewPaneProps>, Component {
 			mode === "side-by-side"
 				? Math.max(optionsHeight, maxPreviewBlock)
 				: optionsHeight + STACKED_GAP_ROWS + maxPreviewBlock;
-		// A fitted body never exceeds the allowance, whichever option is focused.
 		return this.rowAllowance === undefined ? max : Math.min(max, this.rowAllowance);
 	}
 
@@ -309,8 +236,6 @@ export class PreviewPane implements StatefulView<PreviewPaneProps>, Component {
 		const boxAlignedPad = Math.max(PREVIEW_PADDING_LEFT, colWidth - boxWidth);
 		return contentLines.map((line) => {
 			if (line === "") return "";
-			// A line wider than the box (a long-locale notes affordance) slides left to
-			// stay fully visible; truncation engages only when the column itself runs out.
 			const pad = Math.max(PREVIEW_PADDING_LEFT, Math.min(boxAlignedPad, colWidth - visibleWidth(line)));
 			return `${" ".repeat(pad)}${truncateToWidth(line, colWidth - pad, "")}`;
 		});

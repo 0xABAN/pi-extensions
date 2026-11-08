@@ -1,7 +1,6 @@
 import type { GuidanceFields } from "@juicesharp/rpiv-config";
 import { loadJsonConfigWithLegacyFallback, validateGuidanceFields } from "@juicesharp/rpiv-config";
 
-/** Key spec for the overlay collapse/expand shortcut, e.g. `"ctrl+]"` or `"alt+o"`. */
 export type CollapseKeySpec = string;
 
 export const DEFAULT_COLLAPSE_KEY: CollapseKeySpec = "ctrl+]";
@@ -10,24 +9,10 @@ export const DEFAULT_NOTES_KEY = "n";
 
 export interface AskUserQuestionConfig {
 	guidance?: GuidanceFields;
-	/**
-	 * Key spec for the collapse/expand shortcut, in the same format as pi-coding-agent
-	 * keybinding ids (`modifier+key`, e.g. `ctrl+]`, `alt+o`, `ctrl+shift+h`). Defaults
-	 * to `"ctrl+]"`. Set this to a key that is reachable on your keyboard layout — Latin
-	 * American layouts (where `]` is on the shifted layer) often want `"ctrl+}"` instead.
-	 * Pass `"off"` to disable the collapse shortcut entirely.
-	 */
 	collapseKey?: CollapseKeySpec;
-	/**
-	 * Key that opens the notes editor. Defaults to `"n"`. A single character of any
-	 * script (e.g. `"т"` on a Cyrillic layout) matches as typed; anything else is a
-	 * key spec in the `collapseKey` format, e.g. `"ctrl+n"`.
-	 */
 	notesKey?: string;
 }
 
-// Named keys accepted by pi-tui's `matchesKey` (keys.js switch on the parsed base key).
-// parseKeyId lowercases the id before matching, so lowercase spellings are canonical.
 const SPECIAL_KEYS = new Set([
 	"escape",
 	"esc",
@@ -53,11 +38,6 @@ const SPECIAL_KEYS = new Set([
 const MODIFIERS = new Set(["ctrl", "shift", "alt", "super"]);
 
 function isValidCollapseKeySpec(spec: string): boolean {
-	// Mirror pi-tui's KeyId grammar strictly: zero or more distinct modifiers, then a
-	// base key that is a single printable character or a named special key. A loose
-	// check is not enough — pi-tui's `parseKeyId` takes the LAST `+`-part as the key
-	// and ignores unknown parts, so a typo like `ctr+]` would silently match every
-	// bare `]` keypress (and the raw terminal listener would consume them globally).
 	if (!spec) return false;
 	if (spec.startsWith("+") || spec.endsWith("+") || spec.includes("++")) return false;
 	const parts = spec.split("+");
@@ -75,7 +55,6 @@ export function resolveCollapseKey(config: Pick<AskUserQuestionConfig, "collapse
 	return isValidCollapseKeySpec(raw) ? raw : DEFAULT_COLLAPSE_KEY;
 }
 
-// Keys the questionnaire already navigates with — a notes key on one of them would shadow it.
 const NOTES_KEY_RESERVED = new Set(["space", "enter", "return", "tab", "escape", "esc", "up", "down", "left", "right"]);
 
 export function resolveNotesKey(config: Pick<AskUserQuestionConfig, "notesKey">): string {

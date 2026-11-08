@@ -2,20 +2,6 @@ import type { Component } from "@earendil-works/pi-tui";
 import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { renderInlineInputRow } from "./inline-input.ts";
 
-/**
- * Row-intent discriminated union. `kind` is the single discriminator —
- * pre-1.0.3 boolean flags have been removed (see `banned-flags.test.ts`).
- * Modeled after `QuestionnaireAction` (`key-router.ts:13-32`) and `Effect`
- * (`state-reducer.ts:26-32`) — pure literal-tagged variants, no shared base,
- * exhaustive-`switch` enforcement via non-`void` returns.
- *
- * Variant semantics:
- * - `option`: a regular author-defined option row.
- * - `other`: the inline free-text input row appended to every question
- *   (label is "Type something."). Renders the headless multiline editor when active.
- * - `next`: the explicit commit-and-advance row appended to multi-select questions
- *   (label is "Next"). Renders without a number / checkbox.
- */
 export type WrappingSelectItem =
 	| { kind: "option"; label: string; description?: string }
 	| { kind: "other"; label: string; description?: string }
@@ -27,17 +13,8 @@ export interface WrappingSelectTheme {
 	scrollInfo: (text: string) => string;
 }
 
-/**
- * Numbering controls.
- *
- * Use `numberStartOffset` + `totalItemsForNumbering` when a list is logically a slice of a
- * larger numbered sequence — e.g. to start numbering at an offset and pad the column as
- * if the list were part of a longer continuous numbered sequence.
- */
 export interface WrappingSelectOptions {
-	/** Start numbering at this offset + 1 (default 0 → rows labeled 1, 2, 3 …). */
 	numberStartOffset?: number;
-	/** Override the total used to pad the number column (useful when items span multiple lists). */
 	totalItemsForNumbering?: number;
 }
 
@@ -58,18 +35,7 @@ export class WrappingSelect implements Component {
 	private focused = true;
 	private inputBuffer = "";
 	private inputCursorOffset: number | undefined = undefined;
-	/**
-	 * Index of the row that was previously confirmed for this list (e.g. the user's prior
-	 * answer when re-entering a multi-question tab). Renders `<label> ✔` in the active-row
-	 * styling but WITHOUT the `❯` pointer — pointer is reserved for the live cursor. When
-	 * `selectedIndex === confirmedIndex && focused`, the active rendering wins (no double-mark).
-	 */
 	private confirmedIndex: number | undefined = undefined;
-	/**
-	 * When set together with `confirmedIndex`, replaces the row's static label at render time.
-	 * Used for the `kind: "other"` sentinel — its label is "Type something." but if the user's
-	 * prior answer was custom text, we render that text instead (e.g. `4. Hello ✔`).
-	 */
 	private confirmedLabelOverride: string | undefined = undefined;
 
 	constructor(
@@ -85,10 +51,6 @@ export class WrappingSelect implements Component {
 		this.totalItemsForNumbering = options.totalItemsForNumbering ?? items.length;
 	}
 
-	/**
-	 * Update the numbering offset + total padding width without rebuilding the component.
-	 * Lets the host realign the number column when the underlying item set changes.
-	 */
 	setNumbering(numberStartOffset: number, totalItemsForNumbering: number): void {
 		this.numberStartOffset = numberStartOffset;
 		this.totalItemsForNumbering = Math.max(1, totalItemsForNumbering);
@@ -102,12 +64,6 @@ export class WrappingSelect implements Component {
 		this.focused = focused;
 	}
 
-	/**
-	 * Mark a previously-confirmed row. Pass `undefined` to clear. `labelOverride` replaces
-	 * the row's static `item.label` at render time — used for the `kind: "other"` sentinel so
-	 * the row reads `Hello ✔` instead of `Type something. ✔` when the prior answer was custom
-	 * text.
-	 */
 	setConfirmedIndex(index: number | undefined, labelOverride?: string): void {
 		if (index === undefined) {
 			this.confirmedIndex = undefined;
@@ -122,12 +78,10 @@ export class WrappingSelect implements Component {
 		this.inputBuffer = text;
 	}
 
-	/** Set the cursor offset for the inline input row. `undefined` → end-of-buffer fallback. */
 	setInputCursorOffset(offset: number | undefined): void {
 		this.inputCursorOffset = offset;
 	}
 
-	/** Intentionally empty — input is routed at the container level. */
 	handleInput(_data: string): void {}
 
 	invalidate(): void {}
@@ -152,11 +106,6 @@ export class WrappingSelect implements Component {
 		return lines;
 	}
 
-	/**
-	 * Returns the [startRow, endRow) range of the focused (selected) item within
-	 * the output of `render(width)`. Computed by iterating the visible window and
-	 * summing per-item row counts — O(maxVisible) per call.
-	 */
 	focusedItemRowRange(width: number): [number, number] {
 		if (this.items.length === 0) return [0, 0];
 		const { startIndex, endIndex } = this.computeVisibleWindow();
@@ -175,11 +124,6 @@ export class WrappingSelect implements Component {
 		return [0, 1];
 	}
 
-	/**
-	 * Per-item row count. Delegates to `renderItem().length` so `renderItem` remains
-	 * the single source of truth for per-item row math — eliminates the prior shadow-copy
-	 * that risked silent miscounts when new `kind` values branch in `renderItem` but not here.
-	 */
 	private computeItemRowCount(
 		item: WrappingSelectItem,
 		index: number,
@@ -225,14 +169,7 @@ export class WrappingSelect implements Component {
 		];
 	}
 
-	/**
-	 * Derive the confirmed-rendering facts for one row: the final label (custom draft
-	 * or confirmed-override aware) and whether the ✔ mark applies.
-	 */
 	private deriveConfirmedState(item: WrappingSelectItem, index: number): { label: string; isConfirmed: boolean } {
-		// Keep an in-flight custom draft visible even while the cursor browses another row.
-		// If it differs from a previously confirmed custom answer, omit the confirmation
-		// mark so the pending draft is not presented as committed.
 		const customDraft = item.kind === "other" ? this.inputBuffer : undefined;
 		const customDraftDiffersFromConfirmed =
 			item.kind === "other" &&
@@ -258,7 +195,6 @@ export class WrappingSelect implements Component {
 		return item.kind === "other" && isActive;
 	}
 
-	/** Render the inline editor across logical and visually wrapped lines. */
 	private renderInlineInputRow(rowPrefix: string, continuationPrefix: string, contentWidth: number): string[] {
 		return renderInlineInputRow({
 			buffer: this.inputBuffer,

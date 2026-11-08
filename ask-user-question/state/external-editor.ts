@@ -10,8 +10,6 @@ export interface ExternalEditorTui {
 }
 
 function runEditor(command: string, file: string): Promise<void> {
-	// Keep the command grammar identical to Pi's built-in external-editor flow. A
-	// separate shell or argv parser here would make Ctrl+G behave differently.
 	const [editor, ...args] = command.split(" ");
 	if (!editor) return Promise.reject(new Error("External editor command is empty"));
 
@@ -32,10 +30,6 @@ function runEditor(command: string, file: string): Promise<void> {
 	});
 }
 
-/**
- * Edit a custom answer with Pi's configured external-editor command. The TUI lifecycle
- * and one-trailing-newline normalization intentionally match Pi's main editor flow.
- */
 export async function editWithExternalEditor(tui: ExternalEditorTui, command: string, value: string): Promise<string> {
 	const tempDir = mkdtempSync(join(tmpdir(), "rpiv-ask-user-question-"));
 	const tempFile = join(tempDir, "answer.md");
@@ -52,7 +46,6 @@ export async function editWithExternalEditor(tui: ExternalEditorTui, command: st
 		try {
 			rmSync(tempDir, { recursive: true, force: true });
 		} catch {
-			// Temp cleanup is best effort; never leave the TUI stopped because it failed.
 		}
 		if (tuiStopped) {
 			tui.start();

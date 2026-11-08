@@ -4,18 +4,11 @@ import type { QuestionnaireAction } from "./key-router.ts";
 import { ROW_INTENT_META } from "./row-intent.ts";
 import type { QuestionnaireState } from "./state.ts";
 
-/** Session-lifetime constants. No live-component reads — peripheral values live on canonical state. */
 export interface ApplyContext {
 	questions: readonly QuestionData[];
 	itemsByTab: ReadonlyArray<readonly WrappingSelectItem[]>;
 }
 
-/**
- * Declarative side-effects emitted by `reduce`. The runtime executes them after
- * committing the new state, then asks the props-adapter to re-project. Closed set —
- * adding an effect requires updating both the union AND the runtime's `runEffect` switch
- * (compiler-enforced exhaustive). No string-keyed escape hatch.
- */
 export type Effect =
 	| { kind: "set_input_buffer"; value: string }
 	| { kind: "clear_input_buffer" }
@@ -23,13 +16,6 @@ export type Effect =
 	| { kind: "set_notes_value"; value: string }
 	| { kind: "set_notes_focused"; focused: boolean }
 	| { kind: "forward_notes_keystroke"; data: string }
-	/**
-	 * Tell the session to hide or show its underlying overlay. Emitted by the
-	 * `toggle_collapsed` action so the runtime can call `OverlayHandle.setHidden(...)`,
-	 * which lets other overlay-aware consumers (e.g. `pi-station`) see the questionnaire
-	 * as truly hidden and resume normal chat scroll while the user reads the transcript
-	 * behind the modal.
-	 */
 	| { kind: "set_overlay_hidden"; hidden: boolean }
 	| { kind: "done"; result: QuestionnaireResult };
 
@@ -94,11 +80,6 @@ function persistMultiSelectAnswer(state: QuestionnaireState, ctx: ApplyContext):
 	return out;
 }
 
-/**
- * Note text to seed the editor/draft with for a tab. The in-flight side-band store
- * (`notesByTab`) is authoritative — before an option is confirmed the note lives ONLY
- * there; `answer.notes` is a mirror written on exit/confirm.
- */
 function notesValueFor(state: QuestionnaireState, tab: number): string {
 	return state.notesByTab.get(tab) ?? state.answers.get(tab)?.notes ?? "";
 }
@@ -124,11 +105,6 @@ function withoutCustomDraft(state: QuestionnaireState, tab: number): ReadonlyMap
 	return drafts;
 }
 
-/**
- * Row focused on entering a tab: the chosen option, or Next for a multi-select answer, so a
- * stray Enter re-confirms the answer instead of replacing it with row 0. A custom answer
- * starts at row 0, since focusing its row would enter input mode.
- */
 function answeredRowIndex(answer: QuestionAnswer | undefined, items: readonly WrappingSelectItem[]): number {
 	let index = -1;
 	if (answer?.kind === "option") index = items.findIndex((i) => i.kind === "option" && i.label === answer.answer);
@@ -159,11 +135,6 @@ function switchTabResult(state: QuestionnaireState, nextTab: number, ctx: ApplyC
 }
 
 function doneFor(state: QuestionnaireState, ctx: ApplyContext, cancelled: boolean): ApplyResult {
-	// Global note lift: the Submit-tab note lives at the `questions.length` pseudo-index
-	// in `notesByTab` — question tabs only occupy 0..questions.length-1, so this can never
-	// cross-contaminate a per-question note. Attached regardless of `cancelled` (the
-	// reducer is truth; the envelope owns decline presentation), with cancel/submit/confirm
-	// sharing this single lift. Conditional spread keeps note-free results byte-identical.
 	const globalNote = state.notesByTab.get(ctx.questions.length);
 	const result: QuestionnaireResult = {
 		answers: orderedAnswers(state, ctx.questions),
@@ -173,10 +144,6 @@ function doneFor(state: QuestionnaireState, ctx: ApplyContext, cancelled: boolea
 	return { state, effects: [{ kind: "done", result }] };
 }
 
-/**
- * Per-kind handler signature: action payload narrows to the matching union member
- * via `Extract`, so handlers consume fully-typed actions without `as` casts.
- */
 type Handler<K extends QuestionnaireAction["kind"]> = (
 	state: QuestionnaireState,
 	action: Extract<QuestionnaireAction, { kind: K }>,
@@ -328,12 +295,6 @@ const toggleCollapsedHandler: Handler<"toggle_collapsed"> = (s, _a, _c) => ({
 });
 const ignoreHandler: Handler<"ignore"> = (s, _a, _c) => ({ state: s, effects: [] });
 
-/**
- * Compile-time-exhaustive dispatch table. `{ [K in Kind]: Handler<K> }` requires
- * an entry per union member — adding a new `QuestionnaireAction` variant fails to
- * compile here until a handler is registered, mirroring the `Record<RowKind, …>`
- * pattern used by `ROW_INTENT_META`.
- */
 const HANDLERS: { [K in QuestionnaireAction["kind"]]: Handler<K> } = {
 	nav: navHandler,
 	input_clear: inputClearHandler,
@@ -353,11 +314,6 @@ const HANDLERS: { [K in QuestionnaireAction["kind"]]: Handler<K> } = {
 	ignore: ignoreHandler,
 };
 
-/**
- * Pure reducer: (state, action, ctx) → (state, Effect[]). Mirrors `rpiv-todo`'s `applyTaskMutation`.
- * Delegates to `HANDLERS` — per-kind handlers above are pure, named, and individually testable.
- * `ignore` is also handled outside the reducer by `handleIgnoreInline` in the runtime fast path.
- */
 export function reduce(state: QuestionnaireState, action: QuestionnaireAction, ctx: ApplyContext): ApplyResult {
 	const handler = HANDLERS[action.kind] as Handler<typeof action.kind>;
 	return handler(state, action as never, ctx);

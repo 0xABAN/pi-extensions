@@ -9,24 +9,11 @@ const reject = (code: AskUserAnswerRejectCode, reason: string): ExternalAnswerOu
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-/** A note as the TUI stores it: trimmed, and absent when blank (`notesExitHandler`). */
 function noteOf(v: string | undefined): string | undefined {
 	const trimmed = v?.trim();
 	return trimmed ? trimmed : undefined;
 }
 
-/**
- * Turn an inbound `rpiv:ask-user:answer` payload (`AskUserAnswerEventPayload`, still
- * untrusted) into the `QuestionnaireResult` the dialog would have produced. Pure of
- * `(questions, payload)`. Answers are shaped as the reducer shapes them — preview
- * attached to a picked single-select option, multi-select labels in authored order
- * with custom text in `answer`, notes trimmed — so the envelope and `details` are the
- * same whether the user typed or a program answered.
- *
- * Strict by design: the contract can be relaxed later without breaking emitters,
- * never tightened. `invalid_payload` is a wrong shape or type, `invalid_answer` a
- * well-formed answer that does not fit these questions.
- */
 export function resolveExternalAnswer(
 	questions: readonly QuestionData[],
 	payload: Record<string, unknown>,

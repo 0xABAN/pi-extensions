@@ -4,21 +4,11 @@ const ANSI_SGR_RE = /\x1b\[[0-9;]*m/g;
 const ANSI_OSC8_RE = /\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\)/g;
 const FENCE_MARKER_RE = /^`{3}/;
 
-/** Top + bottom border rows consumed by `renderBorderedBox`. */
 export const BORDER_VERTICAL_OVERHEAD = 2;
-/** Left + right vertical bar columns (`│ ... │`) consumed by `renderBorderedBox`. */
 export const BORDER_HORIZONTAL_OVERHEAD = 2;
-/** Inner horizontal padding (1 col) between each border bar and content area. */
 export const BORDER_INNER_PADDING_HORIZONTAL = 1;
-/** Floor for the preview box's inner content width — CC parity (`PreviewBox.minWidth`). */
 export const BOX_MIN_CONTENT_WIDTH = 40;
 
-/**
- * Drops fenced-code-block marker lines (` ``` ` opener/closer) from rendered markdown.
- * pi-tui's Markdown emits literal opening ` ```lang ` and closing ` ``` ` lines around
- * code blocks; this strip leaves only the highlighted code body. Inline code
- * (`codespan`) is unaffected — pi-tui already renders it without backticks.
- */
 export function stripFenceMarkers(lines: readonly string[]): string[] {
 	return lines.filter((line) => {
 		const clean = line.replace(ANSI_SGR_RE, "").replace(ANSI_OSC8_RE, "");
@@ -26,13 +16,6 @@ export function stripFenceMarkers(lines: readonly string[]): string[] {
 	});
 }
 
-/**
- * Wraps `lines` in a 4-sided ASCII border with 1 col of inner horizontal padding.
- * Layout per content row: `│` + ` ` + content padded to `contentInner` + ` ` + `│`,
- * where `contentInner = width - BORDER_HORIZONTAL_OVERHEAD - 2 * BORDER_INNER_PADDING_HORIZONTAL`.
- * Top/bottom dash runs span corner-to-corner (`width - BORDER_HORIZONTAL_OVERHEAD`). When
- * `hidden > 0`, the bottom-row dash run is replaced with ` ✂ ── N lines hidden ── ` (corners stay).
- */
 export function renderBorderedBox(
 	lines: readonly string[],
 	width: number,
@@ -60,17 +43,6 @@ export function renderBorderedBox(
 	return out;
 }
 
-/**
- * Compute box dimensions from content lines. Pure of args.
- *
- * CC parity:
- *   contentWidth = max(minWidth, widestRenderedLine)
- *   boxWidth     = min(contentWidth + 4, effectiveMaxWidth)
- *
- * Trailing whitespace is stripped before measuring because pi-tui's
- * `Markdown.render(width)` pads every line to `width`, which would otherwise force
- * the box to fill the whole column allocation.
- */
 export function computeBoxDimensions(
 	contentLines: readonly string[],
 	maxInnerWidth: number,

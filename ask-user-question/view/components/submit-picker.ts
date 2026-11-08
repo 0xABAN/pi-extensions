@@ -10,27 +10,10 @@ const NUMBER_SEPARATOR = ". ";
 export const SUBMIT_LABEL = "Submit answers";
 export const CANCEL_LABEL = "Cancel";
 
-/**
- * Per-tick projection of SubmitPicker state. The picker is a fixed 2-row
- * structure (Submit / Cancel) — labels are static, only the active marker
- * varies per tick. `selectSubmitPickerProps` precomputes `active` per row.
- */
 export interface SubmitPickerProps {
-	/** Per-row active flag. Length always 2: row 0 = Submit, row 1 = Cancel. */
 	rows: ReadonlyArray<{ active: boolean }>;
 }
 
-/**
- * Static 2-row picker rendered on the Submit Tab. Row 0 = "Submit answers", Row 1 = "Cancel".
- *
- * - Active pointer (❯) follows `props.rows[i].active` per tick.
- * - Both rows render in normal style at all times — D1 (revised) allows partial submission,
- *   so Submit is never dimmed or visually marked as unselectable. The warning header in
- *   `buildSubmitContainer` is the sole signal of incompleteness.
- * - `naturalHeight(width)` is state-INDEPENDENT and returns a constant 2, so the
- *   chrome-mirror layout in `buildSubmitContainer` can subtract a fixed 2 lines without
- *   re-rendering.
- */
 export class SubmitPicker implements StatefulView<SubmitPickerProps> {
 	private props: SubmitPickerProps;
 

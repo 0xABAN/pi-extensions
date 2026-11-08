@@ -2,16 +2,8 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { StatefulView } from "../stateful-view.ts";
 
-/**
- * Per-tick projection of TabBar state. The selector
- * (`selectTabBarProps`) hoists every render-time derivation
- * (`allAnswered`, `answered`, `isActive`, `submitActive`) into props so
- * `render()` is pure styling.
- */
 export interface TabBarProps {
-	/** One per author-defined question, in order. */
 	tabs: ReadonlyArray<{ label: string; answered: boolean; active: boolean }>;
-	/** Submit-tab state. `allAnswered` drives the success/dim color picker. */
 	submit: { active: boolean; allAnswered: boolean };
 }
 

@@ -4,23 +4,11 @@ import { t } from "../../../state/i18n-bridge.ts";
 import type { QuestionData } from "../../../tool/types.ts";
 import { stripFenceMarkers } from "./preview-box-renderer.ts";
 
-/** CC parity in side-by-side layout. */
 export const MAX_PREVIEW_HEIGHT_SIDE_BY_SIDE = 20;
-/** Preserves narrow-terminal protection in stacked layout. */
 export const MAX_PREVIEW_HEIGHT_STACKED = 15;
 export const NO_PREVIEW_TEXT = "No preview available";
-/** 1 blank separator + 1 affordance text row reserved when `hasAnyPreview` (height stability of the affordance row's offset relative to the box). */
 export const NOTES_AFFORDANCE_OVERHEAD = 2;
 
-/**
- * Per-question cache for rendered markdown previews. Width-keyed: switching the
- * inner width invalidates every cached `Markdown`'s render output (pi-tui's
- * `Markdown.render(width)` re-wraps when width changes).
- *
- * Replaces the inline `previewTexts`, `markdownCache`, `cachedWidth` triple from
- * the previous monolithic `preview-pane.ts`. One Markdown per option, lazy on
- * first request, never re-constructed — count semantics frozen by tests.
- */
 export class MarkdownContentCache {
 	private readonly previewTexts: Map<number, string>;
 	private readonly markdownCache: Map<number, Markdown>;
@@ -47,10 +35,6 @@ export class MarkdownContentCache {
 		return this.previewTexts.has(optionIndex);
 	}
 
-	/**
-	 * Compute the body lines for a given option at a given inner width. Width changes
-	 * invalidate the per-Markdown render cache.
-	 */
 	bodyFor(optionIndex: number, innerWidth: number): string[] {
 		if (this.cachedWidth !== innerWidth) {
 			for (const md of this.markdownCache.values()) md.invalidate();
