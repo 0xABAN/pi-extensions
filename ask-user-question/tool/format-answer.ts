@@ -2,9 +2,7 @@ import type { QuestionAnswer } from "./types.ts";
 
 export const NO_INPUT_PLACEHOLDER = "(no input)";
 
-export type FormatAnswerVariant = "summary" | "envelope";
-
-export function formatAnswerScalar(a: QuestionAnswer, _variant: FormatAnswerVariant): string {
+export function formatAnswerScalar(a: QuestionAnswer): string {
 	switch (a.kind) {
 		case "multi": {
 			const values = [...(a.selected ?? [])];

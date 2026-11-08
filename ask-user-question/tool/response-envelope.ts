@@ -35,7 +35,7 @@ export function buildUnansweredSegment(indexes: readonly number[], params: Quest
 }
 
 export function buildAnswerSegment(a: QuestionAnswer): string {
-	const parts: string[] = [`"${a.question}"="${formatAnswerScalar(a, "envelope")}"`];
+	const parts: string[] = [`"${a.question}"="${formatAnswerScalar(a)}"`];
 	if (a.preview && a.preview.length > 0) parts.push(`selected preview: ${a.preview}`);
 	if (a.notes && a.notes.length > 0) parts.push(`user notes: ${a.notes}`);
 	return `${parts.join(". ")}.`;

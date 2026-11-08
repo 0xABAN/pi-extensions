@@ -4,7 +4,7 @@ import type { PreviewPaneProps } from "../../view/components/preview/preview-pan
 import type { SubmitPickerProps } from "../../view/components/submit-picker.ts";
 import type { TabBarProps } from "../../view/components/tab-bar.ts";
 import type { DialogProps } from "../../view/dialog-builder.ts";
-import { displayLabel } from "../i18n-bridge.ts";
+import { ROW_INTENT_META } from "../row-intent.ts";
 import type { GlobalSelector, PerTabBindingContext, PerTabSelector } from "./contract.ts";
 import { selectConfirmedIndicator, selectSavedNote } from "./derivations.ts";
 
@@ -19,13 +19,13 @@ function emptyMultiSelectProps(ctx: PerTabBindingContext): MultiSelectViewProps 
 			inputCursorOffset: ctx.inputCursorOffset,
 		},
 		nextActive: false,
-		nextLabel: displayLabel("next"),
+		nextLabel: ROW_INTENT_META.next.label,
 	};
 }
 
 function nextLabelFor(ctx: PerTabBindingContext): string {
 	const isLastQuestion = ctx.i === ctx.questions.length - 1;
-	return isLastQuestion ? MULTI_SUBMIT_LABEL : displayLabel("next");
+	return isLastQuestion ? MULTI_SUBMIT_LABEL : ROW_INTENT_META.next.label;
 }
 
 export const selectMultiSelectProps: PerTabSelector<MultiSelectViewProps> = (state, ctx) => {

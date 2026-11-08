@@ -1,9 +1,7 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { MarkdownTheme } from "@earendil-works/pi-tui";
-import { DEFAULT_NOTES_KEY } from "../../../config.ts";
-import { t } from "../../../state/i18n-bridge.ts";
+import { NOTES_KEY } from "../../../state/key-router.ts";
 import type { QuestionData } from "../../../tool/types.ts";
-import { KEY_PLACEHOLDER } from "../../dialog-copy.ts";
 import {
 	MAX_PREVIEW_HEIGHT_SIDE_BY_SIDE,
 	MAX_PREVIEW_HEIGHT_STACKED,
@@ -19,20 +17,11 @@ import {
 } from "./preview-box-renderer.ts";
 import type { PreviewLayoutMode } from "./preview-layout-decider.ts";
 
-export const NOTES_AFFORDANCE_TEMPLATE = `Notes: press ${KEY_PLACEHOLDER} to add notes`;
-export const NOTES_EDIT_AFFORDANCE_TEMPLATE = `Note saved: press ${KEY_PLACEHOLDER} to edit`;
-export const NOTES_AFFORDANCE_TEXT = NOTES_AFFORDANCE_TEMPLATE.replace(KEY_PLACEHOLDER, DEFAULT_NOTES_KEY);
-export const NOTES_EDIT_AFFORDANCE_TEXT = NOTES_EDIT_AFFORDANCE_TEMPLATE.replace(KEY_PLACEHOLDER, DEFAULT_NOTES_KEY);
+export const NOTES_AFFORDANCE_TEXT = `Notes: press ${NOTES_KEY} to add notes`;
+export const NOTES_EDIT_AFFORDANCE_TEXT = `Note saved: press ${NOTES_KEY} to edit`;
 
 export type NotesAffordance = "add" | "edit" | "none";
 
-function affordanceText(affordance: Exclude<NotesAffordance, "none">, notesKey: string): string {
-	const text =
-		affordance === "edit"
-			? t("preview.notes_edit_affordance", NOTES_EDIT_AFFORDANCE_TEMPLATE)
-			: t("preview.notes_affordance", NOTES_AFFORDANCE_TEMPLATE);
-	return text.replace(KEY_PLACEHOLDER, notesKey);
-}
 
 function contentBudgetFor(mode: PreviewLayoutMode): number {
 	const cap = mode === "side-by-side" ? MAX_PREVIEW_HEIGHT_SIDE_BY_SIDE : MAX_PREVIEW_HEIGHT_STACKED;
@@ -60,17 +49,14 @@ export interface PreviewBlockRendererConfig {
 	question: QuestionData;
 	theme: Theme;
 	markdownTheme: MarkdownTheme;
-	notesKey: string;
 }
 
 export class PreviewBlockRenderer {
 	private readonly theme: Theme;
 	private readonly cache: MarkdownContentCache;
-	private readonly notesKey: string;
 
 	constructor(config: PreviewBlockRendererConfig) {
 		this.theme = config.theme;
-		this.notesKey = config.notesKey;
 		this.cache = new MarkdownContentCache(config.question, config.theme, config.markdownTheme);
 	}
 
@@ -112,7 +98,7 @@ export class PreviewBlockRenderer {
 		if (!fit.affordance) return boxedLines;
 
 		const text =
-			affordance !== "none" && this.cache.has(optionIndex) ? affordanceText(affordance, this.notesKey) : "";
+			affordance !== "none" && this.cache.has(optionIndex) ? affordance === "edit" ? NOTES_EDIT_AFFORDANCE_TEXT : NOTES_AFFORDANCE_TEXT : "";
 		return [...boxedLines, "", text ? this.theme.fg("muted", text) : ""];
 	}
 }

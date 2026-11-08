@@ -1,6 +1,5 @@
 import type { Theme, ToolSummary } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { t } from "../state/i18n-bridge.ts";
 import { NO_INPUT_PLACEHOLDER } from "../tool/format-answer.ts";
 import {
 	isQuestionnaireResult,
@@ -54,7 +53,7 @@ export function renderAskResult(
 	}
 	if (!details) return new WidthLines(() => [theme.fg("success", "✓")]);
 	if (details.cancelled) {
-		return new WidthLines(() => [theme.fg("dim", `✗ ${t("transcript.no_answer", "no answer")}`)]);
+		return new WidthLines(() => [theme.fg("dim", `✗ ${"no answer"}`)]);
 	}
 	const questions = args?.questions ?? [];
 	return new WidthLines((width) =>
@@ -118,7 +117,7 @@ function globalNoteLines(details: QuestionnaireResult, theme: Theme, width: numb
 }
 
 function answerText(answer: QuestionAnswer | undefined, theme: Theme): string {
-	if (!answer) return theme.fg("dim", t("transcript.not_answered", "not answered"));
+	if (!answer) return theme.fg("dim", "not answered");
 	const typed = answer.answer ? `"${answer.answer}"` : undefined;
 	const picks =
 		answer.kind === "option"

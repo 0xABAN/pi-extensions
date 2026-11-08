@@ -24,6 +24,4 @@ export interface QuestionnaireRuntime {
 	isMulti: boolean;
 	currentItem: WrappingSelectItem | undefined;
 	items: readonly WrappingSelectItem[];
-	collapseKey: string;
-	notesKey: string;
 }

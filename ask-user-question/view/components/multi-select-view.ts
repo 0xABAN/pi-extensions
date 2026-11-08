@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { displayLabel } from "../../state/i18n-bridge.ts";
+import { ROW_INTENT_META } from "../../state/row-intent.ts";
 import type { QuestionData } from "../../tool/types.ts";
 import type { StatefulView } from "../stateful-view.ts";
 import { renderInlineInputRow } from "./inline-input.ts";
@@ -52,7 +52,7 @@ export class MultiSelectView implements StatefulView<MultiSelectViewProps> {
 			rows: [],
 			other: { active: false, checked: false, inputMode: false, inputBuffer: "", inputCursorOffset: undefined },
 			nextActive: false,
-			nextLabel: displayLabel("next"),
+			nextLabel: ROW_INTENT_META.next.label,
 		};
 	}
 
@@ -152,7 +152,7 @@ export class MultiSelectView implements StatefulView<MultiSelectViewProps> {
 			});
 		}
 
-		return wrapTextWithAnsi(other.inputBuffer || displayLabel("other"), contentWidth).map((segment, index) => {
+		return wrapTextWithAnsi(other.inputBuffer || ROW_INTENT_META.other.label, contentWidth).map((segment, index) => {
 			const line = `${index === 0 ? rowPrefix : continuationPrefix}${segment}`;
 			return other.active ? selectedText(line) : line;
 		});

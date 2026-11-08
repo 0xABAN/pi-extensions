@@ -1,7 +1,5 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Container, type Editor, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
-import { COLLAPSE_KEY_OFF } from "../config.ts";
-import { t } from "../state/i18n-bridge.ts";
 import { selectSavedNote } from "../state/selectors/derivations.ts";
 import { formatAnswerScalar } from "../tool/format-answer.ts";
 import type { QuestionData } from "../tool/types.ts";
@@ -10,13 +8,13 @@ import type { DialogState } from "./dialog-builder.ts";
 import {
 	HINT_PART_CANCEL,
 	HINT_PART_CLEAR,
-	HINT_PART_COLLAPSE_TEMPLATE,
+	HINT_PART_COLLAPSE,
 	HINT_PART_NEW_LINE,
-	HINT_PART_NOTES_TEMPLATE,
+	HINT_PART_NOTES,
+	HINT_PART_REVIEW_NOTE,
 	HINT_PART_TAB,
 	HINT_PART_TOGGLE,
 	INCOMPLETE_WARNING_PREFIX,
-	KEY_PLACEHOLDER,
 	READY_PROMPT,
 	REVIEW_HEADING,
 } from "./dialog-copy.ts";
@@ -25,7 +23,6 @@ import type { TabComponents } from "./tab-components.ts";
 
 const NOTES_HEADER = "Notes:";
 const GLOBAL_NOTES_HEADER = "Global note:";
-const REVIEW_GLOBAL_HINT_TEMPLATE = `${KEY_PLACEHOLDER} to add a note`;
 const REVIEW_NOTE_LABEL = "Note";
 const SAVED_NOTE_LABEL = "Note for this answer:";
 
@@ -70,8 +67,6 @@ export interface QuestionTabStrategyConfig {
 	notesInput: Editor;
 	isMulti: boolean;
 	getCurrentBodyHeight: (width: number) => number;
-	collapseKey: string;
-	notesKey: string;
 }
 
 export class QuestionTabStrategy implements TabContentStrategy {
@@ -107,7 +102,7 @@ export class QuestionTabStrategy implements TabContentStrategy {
 	midRows(state: DialogState): Component[] {
 		if (state.notesVisible) {
 			return [
-				new Text(this.config.theme.fg("muted", t("notes.header", NOTES_HEADER)), 1, 0),
+				new Text(this.config.theme.fg("muted", NOTES_HEADER), 1, 0),
 				this.config.notesInput,
 				new Spacer(1),
 			];
@@ -115,7 +110,7 @@ export class QuestionTabStrategy implements TabContentStrategy {
 		const note = selectSavedNote(state.notesByTab, state.answers, state.currentTab);
 		if (note === undefined) return [];
 		const [firstLine = "", ...rest] = note.split("\n");
-		const text = `${t("notes.saved_label", SAVED_NOTE_LABEL)} ${firstLine}${rest.length > 0 ? " …" : ""}`;
+		const text = `${SAVED_NOTE_LABEL} ${firstLine}${rest.length > 0 ? " …" : ""}`;
 		return [new OneLineClippedText(this.config.theme.fg("dim", text), 1)];
 	}
 
@@ -126,7 +121,7 @@ export class QuestionTabStrategy implements TabContentStrategy {
 			new OneLineClippedText(
 				this.config.theme.fg(
 					"dim",
-					buildHintText(question, this.config.isMulti, state, this.config.collapseKey, this.config.notesKey),
+					buildHintText(question, this.config.isMulti, state),
 				),
 				1,
 			),
@@ -146,7 +141,6 @@ export interface SubmitTabStrategyConfig {
 	questions: readonly QuestionData[];
 	submitPicker: Component | undefined;
 	notesInput: Editor;
-	notesKey: string;
 }
 
 export class SubmitTabStrategy implements TabContentStrategy {
@@ -156,7 +150,7 @@ export class SubmitTabStrategy implements TabContentStrategy {
 
 	headingRows(_state: DialogState): Component[] {
 		return [
-			new Text(this.config.theme.bold(this.config.theme.fg("accent", t("review.heading", REVIEW_HEADING))), 1, 0),
+			new Text(this.config.theme.bold(this.config.theme.fg("accent", REVIEW_HEADING)), 1, 0),
 			new Spacer(1),
 		];
 	}
@@ -168,7 +162,7 @@ export class SubmitTabStrategy implements TabContentStrategy {
 			const a = state.answers.get(i);
 			if (!a) continue;
 			const label = q.header && q.header.length > 0 ? q.header : `Q${i + 1}`;
-			const answerText = formatAnswerScalar(a, "summary");
+			const answerText = formatAnswerScalar(a);
 			c.addChild(new Text(this.config.theme.fg("muted", ` ● ${label}`), 1, 0));
 			c.addChild(
 				new Text(`   ${this.config.theme.fg("muted", "→")} ${this.config.theme.fg("text", answerText)}`, 1, 0),
@@ -176,7 +170,7 @@ export class SubmitTabStrategy implements TabContentStrategy {
 			if (a.notes && a.notes.length > 0) {
 				c.addChild(
 					new Text(
-						this.config.theme.fg("dim", `     ${t("notes.saved_label", SAVED_NOTE_LABEL)} ${a.notes}`),
+						this.config.theme.fg("dim", `     ${SAVED_NOTE_LABEL} ${a.notes}`),
 						1,
 						0,
 					),
@@ -185,7 +179,7 @@ export class SubmitTabStrategy implements TabContentStrategy {
 		}
 		const globalNote = state.notesByTab.get(this.config.questions.length);
 		if (!state.notesVisible && globalNote && globalNote.length > 0) {
-			c.addChild(new Text(this.config.theme.fg("muted", ` ● ${t("review.note_label", REVIEW_NOTE_LABEL)}`), 1, 0));
+			c.addChild(new Text(this.config.theme.fg("muted", ` ● ${REVIEW_NOTE_LABEL}`), 1, 0));
 			c.addChild(
 				new Text(`   ${this.config.theme.fg("muted", "→")} ${this.config.theme.fg("text", globalNote)}`, 1, 0),
 			);
@@ -200,7 +194,7 @@ export class SubmitTabStrategy implements TabContentStrategy {
 	midRows(state: DialogState): Component[] {
 		if (!state.notesVisible) return [];
 		return [
-			new Text(this.config.theme.fg("muted", t("notes.global_header", GLOBAL_NOTES_HEADER)), 1, 0),
+			new Text(this.config.theme.fg("muted", GLOBAL_NOTES_HEADER), 1, 0),
 			this.config.notesInput,
 			new Spacer(1),
 		];
@@ -216,10 +210,10 @@ export class SubmitTabStrategy implements TabContentStrategy {
 		}
 		const promptText =
 			missing.length === 0
-				? this.config.theme.fg("muted", t("review.ready", READY_PROMPT))
+				? this.config.theme.fg("muted", READY_PROMPT)
 				: this.config.theme.fg(
 						"warning",
-						`${t("review.incomplete", INCOMPLETE_WARNING_PREFIX)} ${missing.join(", ")}`,
+						`${INCOMPLETE_WARNING_PREFIX} ${missing.join(", ")}`,
 					);
 		const out: Component[] = [new Spacer(1), new OneLineClippedText(promptText, 1)];
 		if (this.config.submitPicker) {
@@ -229,7 +223,7 @@ export class SubmitTabStrategy implements TabContentStrategy {
 			out.push(new Spacer(1));
 		}
 		out.push(
-			new OneLineClippedText(this.config.theme.fg("dim", buildSubmitHintText(state, this.config.notesKey)), 1),
+			new OneLineClippedText(this.config.theme.fg("dim", buildSubmitHintText(state)), 1),
 		);
 		return out;
 	}
@@ -243,33 +237,23 @@ export function buildHintText(
 	question: QuestionData | undefined,
 	isMulti: boolean,
 	state: DialogState,
-	collapseKey: string,
-	notesKey: string,
 ): string {
 	const parts: string[] = [];
-	if (question?.multiSelect === true) parts.push(t("hint.toggle", HINT_PART_TOGGLE));
+	if (question?.multiSelect === true) parts.push(HINT_PART_TOGGLE);
 	if (question && !state.notesVisible && !state.inputMode)
-		parts.push(notesHint("hint.notes", HINT_PART_NOTES_TEMPLATE, notesKey));
-	if (isMulti) parts.push(t("hint.tab", HINT_PART_TAB));
-	parts.push(t("hint.cancel", HINT_PART_CANCEL));
-	if (collapseKey !== COLLAPSE_KEY_OFF) {
-		parts.push(
-			t("hint.collapse", HINT_PART_COLLAPSE_TEMPLATE).replace(KEY_PLACEHOLDER, collapseKey),
-		);
-	}
-	if (state.notesVisible || state.inputMode) parts.push(t("hint.newline", HINT_PART_NEW_LINE));
-	if (state.inputMode) parts.push(t("hint.clear", HINT_PART_CLEAR));
+		parts.push(HINT_PART_NOTES);
+	if (isMulti) parts.push(HINT_PART_TAB);
+	parts.push(HINT_PART_CANCEL);
+	parts.push(HINT_PART_COLLAPSE);
+	if (state.notesVisible || state.inputMode) parts.push(HINT_PART_NEW_LINE);
+	if (state.inputMode) parts.push(HINT_PART_CLEAR);
 	return parts.join(" · ");
 }
 
-export function buildSubmitHintText(state: DialogState, notesKey: string): string {
+export function buildSubmitHintText(state: DialogState): string {
 	const parts: string[] = [];
-	if (!state.notesVisible) parts.push(notesHint("review.global_hint", REVIEW_GLOBAL_HINT_TEMPLATE, notesKey));
-	parts.push(t("hint.cancel", HINT_PART_CANCEL));
-	if (state.notesVisible) parts.push(t("hint.newline", HINT_PART_NEW_LINE));
+	if (!state.notesVisible) parts.push(HINT_PART_REVIEW_NOTE);
+	parts.push(HINT_PART_CANCEL);
+	if (state.notesVisible) parts.push(HINT_PART_NEW_LINE);
 	return parts.join(" · ");
-}
-
-function notesHint(key: string, template: string, notesKey: string): string {
-	return t(key, template).replace(KEY_PLACEHOLDER, notesKey);
 }

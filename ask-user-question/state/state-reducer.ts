@@ -12,11 +12,9 @@ export interface ApplyContext {
 export type Effect =
 	| { kind: "set_input_buffer"; value: string }
 	| { kind: "clear_input_buffer" }
-	| { kind: "open_input_editor"; value: string }
 	| { kind: "set_notes_value"; value: string }
 	| { kind: "set_notes_focused"; focused: boolean }
 	| { kind: "forward_notes_keystroke"; data: string }
-	| { kind: "set_overlay_hidden"; hidden: boolean }
 	| { kind: "done"; result: QuestionnaireResult };
 
 export interface ApplyResult {
@@ -172,14 +170,6 @@ const inputClearHandler: Handler<"input_clear"> = (state, _action, _ctx) => ({
 	state: { ...state, customDraftsByTab: setCustomDraft(state, state.currentTab, "") },
 	effects: [{ kind: "clear_input_buffer" }],
 });
-const inputEditHandler: Handler<"input_edit"> = (state, action, _ctx) => ({
-	state,
-	effects: [{ kind: "open_input_editor", value: action.value }],
-});
-const inputReplaceHandler: Handler<"input_replace"> = (state, action, _ctx) => ({
-	state: { ...state, customDraftsByTab: setCustomDraft(state, state.currentTab, action.value) },
-	effects: [{ kind: "set_input_buffer", value: action.value }],
-});
 
 const tabSwitchHandler: Handler<"tab_switch"> = (state, action, ctx) => switchTabResult(state, action.nextTab, ctx);
 
@@ -291,15 +281,13 @@ const notesForwardHandler: Handler<"notes_forward"> = (s, a, _c) => ({
 });
 const toggleCollapsedHandler: Handler<"toggle_collapsed"> = (s, _a, _c) => ({
 	state: { ...s, collapsed: !s.collapsed },
-	effects: [{ kind: "set_overlay_hidden", hidden: !s.collapsed }],
+	effects: [],
 });
 const ignoreHandler: Handler<"ignore"> = (s, _a, _c) => ({ state: s, effects: [] });
 
 const HANDLERS: { [K in QuestionnaireAction["kind"]]: Handler<K> } = {
 	nav: navHandler,
 	input_clear: inputClearHandler,
-	input_edit: inputEditHandler,
-	input_replace: inputReplaceHandler,
 	tab_switch: tabSwitchHandler,
 	confirm: confirmHandler,
 	toggle: toggleHandler,

@@ -10,10 +10,8 @@ export const MAX_LABEL_LENGTH = 60;
 export const SENTINEL_LABELS = LABELS_BY_KIND;
 
 export type SentinelKind = keyof typeof SENTINEL_LABELS;
-export type SentinelLabel = (typeof SENTINEL_LABELS)[SentinelKind];
 
 export const RESERVED_LABELS = ["Other", ROW_INTENT_META.other.label, ROW_INTENT_META.next.label] as const;
-export type ReservedLabel = (typeof RESERVED_LABELS)[number];
 
 export const OptionSchema = Type.Object({
 	label: Type.String({
@@ -66,7 +64,6 @@ export const QuestionParamsSchema = Type.Object({
 	questions: QuestionsSchema,
 });
 
-export type OptionData = Static<typeof OptionSchema>;
 export type QuestionData = Static<typeof QuestionSchema>;
 export type QuestionParams = Static<typeof QuestionParamsSchema>;
 
@@ -82,15 +79,13 @@ export interface QuestionAnswer {
 
 export type QuestionnaireError =
 	| "no_ui"
-	| "no_custom_ui"
 	| "no_questions"
 	| "empty_options"
 	| "too_many_questions"
 	| "duplicate_question"
 	| "duplicate_option_label"
 	| "reserved_label"
-	| "session_load_failed"
-	| "stale_module_cache";
+;
 
 export interface QuestionnaireResult {
 	answers: QuestionAnswer[];

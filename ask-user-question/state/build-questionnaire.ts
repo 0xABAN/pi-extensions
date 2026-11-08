@@ -32,6 +32,10 @@ import {
 } from "./selectors/projections.ts";
 import type { QuestionnaireState } from "./state.ts";
 
+function inlineRowBudget(terminalRows: number): number {
+	return Math.min(terminalRows, Math.max(12, Math.floor(terminalRows * 0.7)));
+}
+
 export interface QuestionnaireBuildConfig {
 	tui: TUI;
 	theme: Theme;
@@ -40,9 +44,6 @@ export interface QuestionnaireBuildConfig {
 	isMulti: boolean;
 	initialState: QuestionnaireState;
 	getCurrentTab: () => number;
-	collapseKey: string;
-	notesKey: string;
-	rowBudget: (terminalRows: number) => number;
 }
 
 export interface QuestionnaireBuilt {
@@ -100,16 +101,13 @@ class QuestionnaireBuilder {
 	private readonly isMulti: boolean;
 	private readonly initialState: QuestionnaireState;
 	private readonly getCurrentTab: () => number;
-	private readonly collapseKey: string;
-	private readonly notesKey: string;
-	private readonly rowBudget: (terminalRows: number) => number;
 
 	private readonly selectTheme: WrappingSelectTheme;
 	private readonly markdownTheme = getMarkdownTheme();
 	private readonly notesInput: Editor;
 	private readonly inlineInput: Editor;
 	private readonly getTerminalWidth = () => this.tui.terminal.columns;
-	private readonly getTerminalRows = () => this.rowBudget(this.tui.terminal.rows);
+	private readonly getTerminalRows = () => inlineRowBudget(this.tui.terminal.rows);
 
 	constructor(config: QuestionnaireBuildConfig) {
 		this.tui = config.tui;
@@ -119,9 +117,6 @@ class QuestionnaireBuilder {
 		this.isMulti = config.isMulti;
 		this.initialState = config.initialState;
 		this.getCurrentTab = config.getCurrentTab;
-		this.collapseKey = config.collapseKey;
-		this.notesKey = config.notesKey;
-		this.rowBudget = config.rowBudget;
 
 		this.selectTheme = this.makeSelectTheme();
 		const textEditorTheme = editorTheme(this.theme);
@@ -166,7 +161,6 @@ class QuestionnaireBuilder {
 			question,
 			theme: this.theme,
 			markdownTheme: this.markdownTheme,
-			notesKey: this.notesKey,
 		});
 		const preview = new PreviewPane({
 			question,
@@ -246,8 +240,6 @@ class QuestionnaireBuilder {
 				getBodyHeight: heights.global,
 				getCurrentBodyHeight: heights.current,
 				getTerminalRows: this.getTerminalRows,
-				collapseKey: this.collapseKey,
-				notesKey: this.notesKey,
 			},
 			{ state: this.initialState, activePreviewPane: this.pickInitialActivePreview(tabs) },
 		);

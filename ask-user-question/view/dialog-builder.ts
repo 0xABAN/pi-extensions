@@ -9,23 +9,6 @@ import type { StatefulView } from "./stateful-view.ts";
 import type { TabComponents } from "./tab-components.ts";
 import { QuestionTabStrategy, SubmitTabStrategy, type TabContentStrategy } from "./tab-content-strategy.ts";
 
-export {
-	COLLAPSED_HINT_TEMPLATE,
-	HINT_PART_CANCEL,
-	HINT_PART_CLEAR,
-	HINT_PART_COLLAPSE,
-	HINT_PART_COLLAPSE_TEMPLATE,
-	HINT_PART_EXPAND_TEMPLATE,
-	HINT_PART_NEW_LINE,
-	HINT_PART_NOTES,
-	HINT_PART_TAB,
-	HINT_PART_TOGGLE,
-	INCOMPLETE_WARNING_PREFIX,
-	KEY_PLACEHOLDER,
-	READY_PROMPT,
-	REVIEW_HEADING,
-} from "./dialog-copy.ts";
-
 const MIN_SCROLL_ROWS_WITH_PINNED_HEADING = 3;
 
 function renderFitsTerminal(natural: string[], spacerRows: number): string[] {
@@ -59,8 +42,6 @@ export interface DialogConfig {
 	getBodyHeight: (width: number) => number;
 	getCurrentBodyHeight: (width: number) => number;
 	getTerminalRows: () => number;
-	collapseKey: string;
-	notesKey: string;
 }
 
 export class DialogView implements StatefulView<DialogProps> {
@@ -81,8 +62,6 @@ export class DialogView implements StatefulView<DialogProps> {
 			notesInput: config.notesInput,
 			isMulti: config.isMulti,
 			getCurrentBodyHeight: config.getCurrentBodyHeight,
-			collapseKey: config.collapseKey,
-			notesKey: config.notesKey,
 		});
 		this.submitStrategy = config.isMulti
 			? new SubmitTabStrategy({
@@ -90,7 +69,6 @@ export class DialogView implements StatefulView<DialogProps> {
 					questions: config.questions,
 					submitPicker: config.submitPicker,
 					notesInput: config.notesInput,
-					notesKey: config.notesKey,
 				})
 			: undefined;
 		this.maxFooterRowCount = Math.max(this.questionStrategy.footerRowCount, this.submitStrategy?.footerRowCount ?? 0);

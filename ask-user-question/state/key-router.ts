@@ -12,20 +12,13 @@ const KEYBIND_NEW_LINE = "tui.input.newLine";
 const KEYBIND_EDITOR_UP = "tui.editor.cursorUp";
 const KEYBIND_EDITOR_DOWN = "tui.editor.cursorDown";
 const KEYBIND_CLEAR = "tui.editor.deleteToLineStart";
-const KEYBIND_EXTERNAL_EDITOR = "app.editor.external";
 
-const NOTES_ACTIVATE_KEY = "n";
-
-function matchesNotesKey(data: string, notesKey: unknown): boolean {
-	const key = typeof notesKey === "string" ? notesKey : NOTES_ACTIVATE_KEY;
-	return data === key || matchesKey(data, key as Parameters<typeof matchesKey>[1]);
-}
+export const NOTES_KEY = "n";
+export const COLLAPSE_KEY = "ctrl+]";
 
 export type QuestionnaireAction =
 	| { kind: "nav"; nextIndex: number; inputValue: string }
 	| { kind: "input_clear" }
-	| { kind: "input_edit"; value: string }
-	| { kind: "input_replace"; value: string }
 	| { kind: "tab_switch"; nextTab: number }
 	| { kind: "confirm"; answer: QuestionAnswer; autoAdvanceTab?: number }
 	| { kind: "toggle"; index: number }
@@ -182,7 +175,6 @@ function routeInputMode(
 		return { kind: "confirm", answer, autoAdvanceTab: computeAutoAdvanceTab(state, runtime) };
 	}
 	if (kb.matches(data, KEYBIND_CLEAR)) return { kind: "input_clear" };
-	if (kb.matches(data, KEYBIND_EXTERNAL_EDITOR)) return { kind: "input_edit", value: runtime.inputBuffer };
 	if (kb.matches(data, KEYBIND_CANCEL)) return { kind: "cancel" };
 	if (kb.matches(data, KEYBIND_EDITOR_UP) && runtime.canMoveInputUp) return { kind: "ignore" };
 	if (kb.matches(data, KEYBIND_EDITOR_DOWN) && runtime.canMoveInputDown) return { kind: "ignore" };
@@ -208,7 +200,7 @@ function routeSubmitTab(
 	if (isConfirm(kb, data)) {
 		return state.submitChoiceIndex === 1 ? { kind: "cancel" } : { kind: "submit" };
 	}
-	if (matchesNotesKey(data, runtime.notesKey)) {
+	if (matchesKey(data, NOTES_KEY)) {
 		return { kind: "notes_enter" };
 	}
 	return { kind: "ignore" };
@@ -277,13 +269,7 @@ function routeSingleSelectTab(
 export function routeKey(data: string, state: QuestionnaireState, runtime: QuestionnaireRuntime): QuestionnaireAction {
 	const kb = runtime.keybindings;
 
-	if (
-		typeof runtime.collapseKey === "string" &&
-		runtime.collapseKey !== "off" &&
-		matchesKey(data, runtime.collapseKey as Parameters<typeof matchesKey>[1])
-	) {
-		return { kind: "toggle_collapsed" };
-	}
+	if (matchesKey(data, COLLAPSE_KEY)) return { kind: "toggle_collapsed" };
 
 	if (state.collapsed) return routeCollapsed(kb, data);
 	if (state.notesVisible) return routeNotesMode(kb, data);
@@ -298,7 +284,7 @@ export function routeKey(data: string, state: QuestionnaireState, runtime: Quest
 	const q = runtime.questions[state.currentTab];
 	if (!q) return { kind: "ignore" };
 
-	if (matchesNotesKey(data, runtime.notesKey)) {
+	if (matchesKey(data, NOTES_KEY)) {
 		return { kind: "notes_enter" };
 	}
 
