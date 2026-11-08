@@ -1,4 +1,5 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
+import { type Component, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 export const PLAN_TOOL = "plan";
@@ -26,6 +27,37 @@ const APPROVED =
 
 const REVISE = "The user wants to revise the plan. Stop here and wait for their feedback.";
 
+const QUESTION = "The plan is ready. Would you like to proceed?";
+const CHOICES = ["Approve", "Revise"] as const;
+type Choice = (typeof CHOICES)[number];
+
+function approvalPicker(theme: Theme, keybindings: KeybindingsManager, done: (choice: Choice) => void): Component {
+	let selected = 0;
+
+	return {
+		render(width: number): string[] {
+			const question = wrapTextWithAnsi(QUESTION, width - 1).map((line) => ` ${theme.fg("muted", line)}`);
+			const options = CHOICES.map((choice, index) => {
+				const line = `${index === selected ? "❯" : " "} ${index + 1}. ${choice}`;
+				return truncateToWidth(` ${index === selected ? theme.fg("accent", line) : line}`, width);
+			});
+
+			return [theme.fg("borderAccent", "─".repeat(width)), ...question, "", ...options, ""];
+		},
+
+		handleInput(data: string): void {
+			const picked = CHOICES[Number(data) - 1];
+			if (picked) done(picked);
+			else if (keybindings.matches(data, "tui.select.up")) selected = Math.max(0, selected - 1);
+			else if (keybindings.matches(data, "tui.select.down")) selected = Math.min(CHOICES.length - 1, selected + 1);
+			else if (keybindings.matches(data, "tui.select.confirm")) done(CHOICES[selected]!);
+			else if (keybindings.matches(data, "tui.select.cancel")) done("Revise");
+		},
+
+		invalidate() {},
+	};
+}
+
 export function registerPlanTool(pi: ExtensionAPI, approve: (ctx: ExtensionContext) => void): void {
 	pi.registerTool({
 		name: PLAN_TOOL,
@@ -36,8 +68,12 @@ export function registerPlanTool(pi: ExtensionAPI, approve: (ctx: ExtensionConte
 		parameters: Type.Object({}),
 		defaultActive: false,
 
-		async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
-			const choice = await ctx.ui.select("Approve this plan?", ["Approve", "Revise"], { signal });
+		async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+			ctx.ui.setWorkingVisible(false);
+			const choice = await ctx.ui.custom<Choice | undefined>((_tui, theme, keybindings, done) =>
+				approvalPicker(theme, keybindings, done),
+			);
+			ctx.ui.setWorkingVisible(true);
 
 			if (choice === "Approve") {
 				approve(ctx);

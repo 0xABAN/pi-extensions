@@ -10,6 +10,16 @@ const LEARN_LABEL = "\uF19D  learn mode";
 
 const stripColor = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, "");
 
+const KEY = { up: "\x1b[A", down: "\x1b[B", enter: "\r", escape: "\x1b" };
+const KEY_IDS: Record<string, string> = {
+	"tui.select.up": KEY.up,
+	"tui.select.down": KEY.down,
+	"tui.select.confirm": KEY.enter,
+	"tui.select.cancel": KEY.escape,
+};
+const KEYBINDINGS = { matches: (data: string, id: string) => KEY_IDS[id] === data };
+const PLAIN_THEME = { fg: (_color: string, text: string) => text };
+
 type Entry = { type: string; customType: string; data: any };
 
 interface HarnessOptions {
@@ -23,11 +33,12 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 	let branch = structuredClone(entries);
 	let activeTools = [...tools];
 	let idle = true;
-	let choice: string | undefined;
+	let keys: string[] = [];
 
 	const handlers = new Map<string, Function>();
 	const registeredTools = new Map<string, any>();
-	const selects: { title: string; options: string[] }[] = [];
+	const pickers: string[][] = [];
+	const workingVisible: boolean[] = [];
 	const commands = new Map<string, unknown>();
 	const shortcuts = new Map<string, { handler: Function }>();
 	const statuses = new Map<string, string>();
@@ -44,10 +55,16 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 			theme: { name: "everforest-dark-hard" },
 			setStatus: (key: string, text: string) => statuses.set(key, text),
 			notify: (text: string, level: string) => notices.push({ text, level }),
-			select: async (title: string, options: string[]) => {
-				selects.push({ title, options });
-				return choice;
-			},
+			setWorkingVisible: (visible: boolean) => workingVisible.push(visible),
+			custom: (factory: Function) =>
+				new Promise((resolve) => {
+					const picker = factory({}, PLAIN_THEME, KEYBINDINGS, resolve);
+					pickers.push(picker.render(40));
+					for (const key of keys) {
+						picker.handleInput(key);
+						pickers.push(picker.render(40));
+					}
+				}),
 		},
 	};
 
@@ -75,7 +92,8 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 		ctx,
 		statuses,
 		notices,
-		selects,
+		pickers,
+		workingVisible,
 		commands,
 		shortcuts,
 		planTool: registeredTools.get("plan"),
@@ -89,8 +107,8 @@ async function harness({ entries = [], tools = BUILD_TOOLS, flags = {}, reason =
 		setIdle: (value: boolean) => {
 			idle = value;
 		},
-		setChoice: (value: string | undefined) => {
-			choice = value;
+		press: (...pressed: string[]) => {
+			keys = pressed;
 		},
 		mode: () => stripColor(statuses.get("agent-mode")!),
 	};
@@ -350,26 +368,47 @@ test("startup flags override saved state, and learn wins over plan", async () =>
 	expect((await harness({ flags: { plan: true } })).mode()).toMatch(/plan mode$/);
 });
 
-test("approving a plan switches to build within the running turn", async () => {
+test("the plan picker asks to proceed with numbered options and hides the working line", async () => {
 	const h = await harness({ flags: { plan: true } });
-	h.setIdle(false);
-	h.setChoice("Approve");
+	h.press(KEY.down, KEY.up, KEY.enter);
 
-	const result = await h.callPlan();
+	await h.callPlan();
 
-	expect(h.selects).toEqual([{ title: "Approve this plan?", options: ["Approve", "Revise"] }]);
-	expect(result.terminate).toBeUndefined();
-	expect(result.content[0].text).toContain("The user approved the plan");
-	expect(h.mode()).toMatch(/build mode$/);
-	expect(h.tools()).toEqual(BUILD_TOOLS);
-	expect(h.entries().at(-1)!.data.mode).toBe("build");
-	expect(await h.emit("tool_call", { toolName: "edit", input: {} })).toBeUndefined();
+	expect(h.pickers[0]).toEqual([
+		"─".repeat(40),
+		" The plan is ready. Would you like to",
+		" proceed?",
+		"",
+		" ❯ 1. Approve",
+		"   2. Revise",
+		"",
+	]);
+	expect(h.pickers[1]!.slice(-3, -1)).toEqual(["   1. Approve", " ❯ 2. Revise"]);
+	expect(h.pickers[2]!.slice(-3, -1)).toEqual([" ❯ 1. Approve", "   2. Revise"]);
+	expect(h.workingVisible).toEqual([false, true]);
 });
 
-for (const choice of ["Revise", undefined]) {
-	test(`choosing ${choice ?? "nothing"} keeps plan mode and ends the turn`, async () => {
+for (const keys of [[KEY.enter], ["1"], [KEY.down, KEY.up, KEY.enter]]) {
+	test(`approving with ${JSON.stringify(keys)} switches to build within the running turn`, async () => {
 		const h = await harness({ flags: { plan: true } });
-		h.setChoice(choice);
+		h.setIdle(false);
+		h.press(...keys);
+
+		const result = await h.callPlan();
+
+		expect(result.terminate).toBeUndefined();
+		expect(result.content[0].text).toContain("The user approved the plan");
+		expect(h.mode()).toMatch(/build mode$/);
+		expect(h.tools()).toEqual(BUILD_TOOLS);
+		expect(h.entries().at(-1)!.data.mode).toBe("build");
+		expect(await h.emit("tool_call", { toolName: "edit", input: {} })).toBeUndefined();
+	});
+}
+
+for (const keys of [[KEY.down, KEY.enter], ["2"], [KEY.escape]]) {
+	test(`revising with ${JSON.stringify(keys)} keeps plan mode and ends the turn`, async () => {
+		const h = await harness({ flags: { plan: true } });
+		h.press(...keys);
 
 		const result = await h.callPlan();
 
