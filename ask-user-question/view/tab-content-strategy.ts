@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { type Component, Container, type Editor, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
-import { COLLAPSE_KEY_OFF, formatKeySpecForDisplay, formatNotesKeyForDisplay } from "../config.ts";
+import { COLLAPSE_KEY_OFF } from "../config.ts";
 import { t } from "../state/i18n-bridge.ts";
 import { selectSavedNote } from "../state/selectors/derivations.ts";
 import { formatAnswerScalar } from "../tool/format-answer.ts";
@@ -323,7 +323,7 @@ export function buildHintText(
 	parts.push(t("hint.cancel", HINT_PART_CANCEL));
 	if (collapseKey !== COLLAPSE_KEY_OFF) {
 		parts.push(
-			t("hint.collapse", HINT_PART_COLLAPSE_TEMPLATE).replace(KEY_PLACEHOLDER, formatKeySpecForDisplay(collapseKey)),
+			t("hint.collapse", HINT_PART_COLLAPSE_TEMPLATE).replace(KEY_PLACEHOLDER, collapseKey),
 		);
 	}
 	if (state.notesVisible || state.inputMode) parts.push(t("hint.newline", HINT_PART_NEW_LINE));
@@ -347,5 +347,5 @@ export function buildSubmitHintText(state: DialogState, notesKey: string): strin
 
 /** A notes hint with the configured key in place of `{key}`. */
 function notesHint(key: string, template: string, notesKey: string): string {
-	return t(key, template).replace(KEY_PLACEHOLDER, formatNotesKeyForDisplay(notesKey));
+	return t(key, template).replace(KEY_PLACEHOLDER, notesKey);
 }

@@ -7,12 +7,12 @@
   "submit.label": "Надіслати відповіді",
   "submit.cancel": "Скасувати",
 
-  "hint.newline": "Shift+Enter — новий рядок",
-  "hint.clear": "Ctrl+U — очистити",
-  "hint.toggle": "Space — перемкнути",
+  "hint.newline": "shift+enter — новий рядок",
+  "hint.clear": "ctrl+u — очистити",
+  "hint.toggle": "space — перемкнути",
   "hint.notes": "{key} — додати нотатки",
-  "hint.tab": "Tab — наступне питання",
-  "hint.cancel": "Esc — скасувати",
+  "hint.tab": "tab — наступне питання",
+  "hint.cancel": "esc — скасувати",
 
   "review.heading": "Перегляньте свої відповіді",
   "review.ready": "Готові надіслати відповіді?",

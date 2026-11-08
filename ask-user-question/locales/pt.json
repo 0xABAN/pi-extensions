@@ -7,12 +7,12 @@
   "submit.label": "Enviar respostas",
   "submit.cancel": "Cancelar",
 
-  "hint.newline": "Shift+Enter para nova linha",
-  "hint.clear": "Ctrl+U para limpar",
-  "hint.toggle": "Espaço para alternar",
+  "hint.newline": "shift+enter para nova linha",
+  "hint.clear": "ctrl+u para limpar",
+  "hint.toggle": "espaço para alternar",
   "hint.notes": "{key} para adicionar notas",
-  "hint.tab": "Tab para mudar de pergunta",
-  "hint.cancel": "Esc para cancelar",
+  "hint.tab": "tab para mudar de pergunta",
+  "hint.cancel": "esc para cancelar",
 
   "review.heading": "Reveja as suas respostas",
   "review.ready": "Pronto para enviar as suas respostas?",

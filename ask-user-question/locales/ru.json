@@ -7,12 +7,12 @@
   "submit.label": "Отправить ответы",
   "submit.cancel": "Отмена",
 
-  "hint.newline": "Shift+Enter — новая строка",
-  "hint.clear": "Ctrl+U — очистить",
-  "hint.toggle": "Space — переключить",
+  "hint.newline": "shift+enter — новая строка",
+  "hint.clear": "ctrl+u — очистить",
+  "hint.toggle": "space — переключить",
   "hint.notes": "{key} — добавить заметки",
-  "hint.tab": "Tab — следующий вопрос",
-  "hint.cancel": "Esc — отменить",
+  "hint.tab": "tab — следующий вопрос",
+  "hint.cancel": "esc — отменить",
 
   "review.heading": "Проверьте свои ответы",
   "review.ready": "Готовы отправить ответы?",

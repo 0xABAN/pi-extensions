@@ -7,12 +7,12 @@
   "submit.label": "Antworten senden",
   "submit.cancel": "Abbrechen",
 
-  "hint.newline": "Umschalt+Enter für neue Zeile",
-  "hint.clear": "Ctrl+U zum Leeren",
-  "hint.toggle": "Leertaste zum Umschalten",
+  "hint.newline": "umschalt+enter für neue Zeile",
+  "hint.clear": "ctrl+u zum Leeren",
+  "hint.toggle": "leertaste zum Umschalten",
   "hint.notes": "{key} für Notizen",
-  "hint.tab": "Tab wechselt die Frage",
-  "hint.cancel": "Esc zum Abbrechen",
+  "hint.tab": "tab wechselt die Frage",
+  "hint.cancel": "esc zum Abbrechen",
 
   "review.heading": "Antworten überprüfen",
   "review.ready": "Bereit, deine Antworten zu senden?",

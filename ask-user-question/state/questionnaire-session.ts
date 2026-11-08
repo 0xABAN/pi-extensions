@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { Editor, OverlayHandle, TUI } from "@earendil-works/pi-tui";
-import { COLLAPSE_KEY_OFF, formatKeySpecForDisplay } from "../config.ts";
+import { COLLAPSE_KEY_OFF } from "../config.ts";
 import type { QuestionData, QuestionnaireResult, QuestionParams } from "../tool/types.ts";
 import type { WrappingSelectItem } from "../view/components/wrapping-select.ts";
 import { COLLAPSED_HINT_TEMPLATE, HINT_PART_CANCEL, KEY_PLACEHOLDER } from "../view/dialog-builder.ts";
@@ -148,11 +148,10 @@ export class QuestionnaireSession {
 	 * cancel-only line rather than rendering a literal "Off to expand".
 	 */
 	private buildCollapsedRender(theme: Theme): (width: number) => string[] {
-		const collapseKeyDisplay = formatKeySpecForDisplay(this.collapseKey);
 		const collapsedHintLine = (): string =>
 			this.collapseKey === COLLAPSE_KEY_OFF
 				? t("hint.cancel", HINT_PART_CANCEL)
-				: t("hint.expand_line", COLLAPSED_HINT_TEMPLATE).replace(KEY_PLACEHOLDER, collapseKeyDisplay);
+				: t("hint.expand_line", COLLAPSED_HINT_TEMPLATE).replace(KEY_PLACEHOLDER, this.collapseKey);
 		return (_width: number): string[] => [theme.fg("dim", ` ${collapsedHintLine()} `)];
 	}
 

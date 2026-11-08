@@ -1,6 +1,6 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import type { MarkdownTheme } from "@earendil-works/pi-tui";
-import { DEFAULT_NOTES_KEY, formatNotesKeyForDisplay } from "../../../config.ts";
+import { DEFAULT_NOTES_KEY } from "../../../config.ts";
 import { t } from "../../../state/i18n-bridge.ts";
 import type { QuestionData } from "../../../tool/types.ts";
 import { KEY_PLACEHOLDER } from "../../dialog-copy.ts";
@@ -42,7 +42,7 @@ function affordanceText(affordance: Exclude<NotesAffordance, "none">, notesKey: 
 		affordance === "edit"
 			? t("preview.notes_edit_affordance", NOTES_EDIT_AFFORDANCE_TEMPLATE)
 			: t("preview.notes_affordance", NOTES_AFFORDANCE_TEMPLATE);
-	return text.replace(KEY_PLACEHOLDER, formatNotesKeyForDisplay(notesKey));
+	return text.replace(KEY_PLACEHOLDER, notesKey);
 }
 
 /** Content row budget for a layout mode: preview cap minus border + affordance overhead. */

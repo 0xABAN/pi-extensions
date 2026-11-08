@@ -3,7 +3,6 @@ import { isKeyRelease, isKeyRepeat, matchesKey, type OverlayHandle, type TUI } f
 import { type OpenQuestionnaire, registerAnswerChannel } from "./answer-channel.ts";
 import {
 	COLLAPSE_KEY_OFF,
-	formatKeySpecForDisplay,
 	loadConfig,
 	resolveCollapseKey,
 	resolveNotesKey,
@@ -185,7 +184,7 @@ function registerCollapseKeyListener(
 		sessionRef.current?.toggleCollapsedExternal();
 		if (handle.isHidden() && !hasAnnouncedHide) {
 			hasAnnouncedHide = true;
-			ctx.ui.notify?.(`ask_user_question hidden — press ${formatKeySpecForDisplay(collapseKey)} to reopen`, "info");
+			ctx.ui.notify?.(`ask_user_question hidden — press ${collapseKey} to reopen`, "info");
 		}
 		return { consume: true };
 	});
