@@ -1,28 +1,19 @@
 # pi-extensions
 
-Personal extensions for the [Pi coding agent](https://github.com/earendil-works/pi).
+Personal extensions for the [Pi fork](https://github.com/0xABAN/pi). Most rely on fork-only APIs, so they need the fork rather than stock Pi.
 
-## Extensions
-
-| Extension | Description |
+| Extension | What it does |
 | --- | --- |
-| [dj](dj/) | Spotify now playing, with pastel themes and layout presets |
-| [modes](modes/) | Switch between Build, Plan, and Learn modes |
-| [whimsical](whimsical/) | Sparkle animation for Pi's status line; needs the [Pi fork](https://github.com/0xABAN/pi) |
-
-## Maintained copies
-
-These are our versions of third-party extensions, changed for the [Pi fork](https://github.com/0xABAN/pi). Each started as a pristine import of the upstream release below, so `git diff` against that import commit shows every local change. They need the fork and are not part of the collection yet; install each directory as its own package.
-
-| Extension | Upstream | Changes |
-| --- | --- | --- |
-| [powerline](powerline/) | [pi-powerline-footer](https://github.com/nicobailon/pi-powerline-footer) 0.22.0 | Rounded editor box with response time and status badges, aligned and compact footer, context meter, DJ ordering |
-| [todo](todo/) | [@juicesharp/rpiv-todo](https://github.com/juicesharp/rpiv-mono) 2.15.0 | Transcript styling, auto-clear and `/todos-clear`, open-task reminders, no dependencies |
-| [ask-user-question](ask-user-question/) | [@juicesharp/rpiv-ask-user-question](https://github.com/juicesharp/rpiv-mono) 2.15.0 | Transcript row summary |
-| [intercom](intercom/) | pi-intercom 0.18.1 | Messages and calls as transcript rows |
-| [claude-bridge](claude-bridge/) | [pi-claude-bridge](https://github.com/elidickinson/pi-claude-bridge) 0.11.0 | Sends Pi's current system prompt on every resumed query |
-
-Their tests run against the fork's source, which must be checked out at `../pi`.
+| [ask-user-question](ask-user-question/) | The model asks up to four multiple-choice questions in a dialog under the transcript |
+| [cd](cd/) | `/cd` moves the session to another directory |
+| [claude-bridge](claude-bridge/) | Claude models through Claude Code and your Claude subscription |
+| [dj](dj/) | Spotify now playing, with pastel themes and layouts |
+| [intercom](intercom/) | Messages, asks and handovers between Pi sessions on this machine |
+| [modes](modes/) | Build, Plan and Learn modes on shift+tab |
+| [reply](reply/) | `/reply` quotes an earlier message into the editor |
+| [stash](stash/) | ctrl+s stashes the editor text and brings it back |
+| [todo](todo/) | A task list the model keeps, shown above the editor |
+| [whimsical](whimsical/) | A sparkle animation for the working line |
 
 ## Install
 
@@ -30,6 +21,14 @@ Their tests run against the fork's source, which must be checked out at `../pi`.
 pi install git:github.com/0xABAN/pi-extensions
 ```
 
-Use `pi config` to choose extensions, then `/reload`.
+Use `pi config` to pick extensions, then `/reload`.
 
-See each extension's README for individual installation and usage. Install individually or through the collection, not both.
+## Development
+
+The fork must be checked out at `../pi`. Type checks, tests and Biome all use its source and tools.
+
+```sh
+bun install
+bun run check
+bun test
+```
