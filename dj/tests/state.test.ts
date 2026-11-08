@@ -1,4 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   mkdtempSync,
   mkdirSync,
@@ -215,18 +217,13 @@ test("preference locks also merge writes from separate processes", async () => {
   await store.initialize();
   const modulePath = new URL("../src/state.ts", import.meta.url).pathname;
   const children = [{ placement: "above" }, { layout: "medium" }].map((patch) =>
-    Bun.spawn(
-      [
-        process.execPath,
-        "-e",
-        `import { createStore } from ${JSON.stringify(modulePath)}; await createStore(${JSON.stringify(directory)}).updateSettings(${JSON.stringify(patch)});`,
-      ],
-      { stdout: "pipe", stderr: "pipe" },
-    ),
+    promisify(execFile)(process.execPath, [
+      "-e",
+      `import { createStore } from ${JSON.stringify(modulePath)}; await createStore(${JSON.stringify(directory)}).updateSettings(${JSON.stringify(patch)});`,
+    ]),
   );
-  for (const child of children) {
-    expect(await new Response(child.stderr).text()).toBe("");
-    expect(await child.exited).toBe(0);
+  for (const { stderr } of await Promise.all(children)) {
+    expect(stderr).toBe("");
   }
   expect(store.readSettings()).toMatchObject({ placement: "above", layout: "medium" });
 });

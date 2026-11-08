@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { InboundEntry } from "../inbound.ts";
 
 const agentDir = mkdtempSync("/tmp/pi-ic-ext-");
@@ -53,7 +54,7 @@ function fakeSession(name: string, sessionId: string) {
 async function waitFor(check: () => boolean | Promise<boolean>): Promise<void> {
 	for (let attempt = 0; attempt < 100; attempt++) {
 		if (await check()) return;
-		await Bun.sleep(20);
+		await sleep(20);
 	}
 	throw new Error("timed out");
 }
@@ -107,7 +108,7 @@ test("holds a message while the receiver is busy outside a turn", async () => {
 	beta.setIdle(false);
 	const before = beta.delivered.length;
 	await alpha.call({ action: "send", to: "beta", message: "held" });
-	await Bun.sleep(200);
+	await sleep(200);
 	expect(beta.delivered.length).toBe(before);
 
 	beta.emit("agent_start");
