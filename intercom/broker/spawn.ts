@@ -222,6 +222,10 @@ function checkSocketConnectable(): Promise<boolean> {
       resolve(false);
       return;
     }
+    if (typeof target === "string" && !existsSync(target)) {
+      resolve(false);
+      return;
+    }
 
     const socket = connectToBrokerTarget(target);
     const requestId = randomUUID();
