@@ -1,8 +1,10 @@
 {
   "name": "pi-intercom",
   "version": "0.18.1",
+  "private": true,
   "license": "MIT",
   "type": "module",
+  "description": "Messaging between Pi sessions on the same machine.",
   "keywords": [
     "pi-package"
   ],
@@ -19,5 +21,19 @@
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
     "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-ai": {
+      "optional": true
+    },
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
   }
 }
