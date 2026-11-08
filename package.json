@@ -6,16 +6,21 @@
   "keywords": ["pi-package"],
   "pi": {
     "extensions": [
+      "cd/index.ts",
       "dj/index.ts",
       "modes/index.ts",
+      "reply/index.ts",
+      "stash/index.ts",
       "whimsical/index.ts"
     ]
   },
   "workspaces": [
+    "cd",
     "dj",
     "modes",
+    "reply",
+    "stash",
     "whimsical",
-    "powerline",
     "todo",
     "ask-user-question",
     "intercom",

@@ -10,8 +10,11 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 test("the collection explicitly lists package entry points, never helpers or tests", () => {
   const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   expect(manifest.pi.extensions).toEqual([
+    "cd/index.ts",
     "dj/index.ts",
     "modes/index.ts",
+    "reply/index.ts",
+    "stash/index.ts",
     "whimsical/index.ts",
   ]);
   for (const entry of manifest.pi.extensions as string[]) {
@@ -33,7 +36,7 @@ test("Pi loads the collection and honors per-extension filtering", async () => {
       await loader.reload();
       const loaded = loader.getExtensions();
       expect(loaded.errors).toEqual([]);
-      expect(loaded.extensions).toHaveLength(filter ? 1 : 3);
+      expect(loaded.extensions).toHaveLength(filter ? 1 : 6);
       expect(loaded.extensions.filter(extension => extension.commands.has("dj"))).toHaveLength(1);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   }

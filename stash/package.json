@@ -1,0 +1,14 @@
+{
+  "name": "pi-stash",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Stash the editor text with ctrl+s and bring it back later.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
