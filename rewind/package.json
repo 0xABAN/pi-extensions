@@ -1,0 +1,24 @@
+{
+  "name": "pi-rewind",
+  "version": "1.8.6",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Automatic git checkpoints with file and conversation rewind.",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  }
+}

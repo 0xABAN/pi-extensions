@@ -15,6 +15,7 @@
       "intercom/index.ts",
       "modes/index.ts",
       "reply/index.ts",
+      "rewind/index.ts",
       "stash/index.ts",
       "todo/index.ts",
       "whimsical/index.ts"
@@ -31,6 +32,7 @@
     "intercom",
     "modes",
     "reply",
+    "rewind",
     "stash",
     "todo",
     "whimsical"
