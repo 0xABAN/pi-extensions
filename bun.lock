@@ -4,6 +4,12 @@
   "workspaces": {
     "": {
       "name": "pi-extensions",
+      "dependencies": {
+        "@anthropic-ai/claude-agent-sdk": "0.3.308",
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "cc-session-io": "^0.4.1",
+        "proper-lockfile": "4.1.2",
+      },
       "devDependencies": {
         "@types/proper-lockfile": "^4.1.4",
         "bun-types": "1.4.1",
@@ -112,6 +118,16 @@
       "optionalPeers": [
         "@earendil-works/pi-coding-agent",
         "@earendil-works/pi-tui",
+      ],
+    },
+    "rewind": {
+      "name": "pi-rewind",
+      "version": "1.8.6",
+      "peerDependencies": {
+        "@earendil-works/pi-coding-agent": "*",
+      },
+      "optionalPeers": [
+        "@earendil-works/pi-coding-agent",
       ],
     },
     "stash": {
@@ -503,6 +519,8 @@
     "pi-modes": ["pi-modes@workspace:modes"],
 
     "pi-reply": ["pi-reply@workspace:reply"],
+
+    "pi-rewind": ["pi-rewind@workspace:rewind"],
 
     "pi-stash": ["pi-stash@workspace:stash"],
 
