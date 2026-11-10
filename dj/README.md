@@ -6,8 +6,7 @@ Spotify now playing for [Pi](https://github.com/earendil-works/pi), with pastel 
 *Spotify while you work.*
 
 - `/dj`: toggle
-- `/dj layout`: pick a layout, or use `/dj minimal|medium|full`
-- `/dj theme`: animated palettes, solid colors, custom hex
+- `/dj minimal|medium|full`: pick a layout
 - `/dj placement above|below`: move around the editor
 - `/dj auth`: connect Spotify
 
@@ -31,7 +30,7 @@ Install DJ individually or through the collection, not both. Run `/reload`.
 
 Create a [Spotify app](https://developer.spotify.com/dashboard) with redirect URI `http://127.0.0.1/callback` (no port). Run `/dj auth` and enter its Client ID. No client secret needed; DJ requests read-only playback access.
 
-Defaults: full layout, below the editor, pastel rainbow. Pickers preview live; enter saves, esc goes back. Custom colors accept `#RGB` or `#RRGGBB`: one for solid, two or more for animated.
+Defaults: full layout, below the editor, pastel rainbow.
 
 DJ stores preferences and credentials in `~/.pi/agent/dj/` and imports legacy Agent DJ credentials once. Use `/dj auth` to reconnect, not the legacy installer.
 

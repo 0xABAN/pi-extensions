@@ -6,8 +6,6 @@ export interface Settings {
 	layout: Layout;
 	placement: Placement;
 	theme: Theme;
-	customAnimated?: string[];
-	customSolid?: string[];
 }
 
 export interface Track {

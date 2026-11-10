@@ -10,20 +10,10 @@ import {
 import { renderLine } from "./src/display.ts";
 import { createSpotify } from "./src/spotify.ts";
 import { createStore } from "./src/state.ts";
-import { pickLayout, pickTheme } from "./src/theme-picker.ts";
-import { DEFAULTS, type Layout, type Playback, type Settings, type Theme } from "./src/types.ts";
+import { DEFAULTS, type Layout, type Playback, type Settings } from "./src/types.ts";
 
 const LAYOUTS: Layout[] = ["minimal", "medium", "full"];
-const ARGUMENTS = [
-	...LAYOUTS,
-	"layout",
-	"theme",
-	"auth",
-	"placement",
-	"placement above",
-	"placement below",
-	"placement toggle",
-];
+const ARGUMENTS = [...LAYOUTS, "auth", "placement", "placement above", "placement below", "placement toggle"];
 
 export default function dj(
 	pi: ExtensionAPI,
@@ -33,7 +23,6 @@ export default function dj(
 	let enabled = true;
 	let settings = structuredClone(DEFAULTS);
 	let playback: Playback = { status: "idle", sampledAt: 0 };
-	let preview: Theme | undefined;
 	let run: { ctx: ExtensionContext; abort: AbortController } | undefined;
 	let auth: AbortController | undefined;
 	let pollTimer: ReturnType<typeof setTimeout> | undefined;
@@ -46,7 +35,7 @@ export default function dj(
 	function paint() {
 		clearInterval(paintTimer);
 
-		const animated = (preview ?? settings.theme).mode === "animated";
+		const animated = settings.theme.mode === "animated";
 		const delay = animated ? 90 : playback.status === "playing" && settings.layout === "full" ? 1000 : 0;
 
 		if (run && delay) paintTimer = setInterval(() => repaint?.(), delay);
@@ -59,7 +48,7 @@ export default function dj(
 			(tui) => {
 				repaint = () => tui.requestRender();
 				return {
-					render: (width) => [renderLine(playback, { ...settings, theme: preview ?? settings.theme }, width)],
+					render: (width) => [renderLine(playback, settings, width)],
 					invalidate() {},
 				};
 			},
@@ -195,7 +184,7 @@ export default function dj(
 		stop();
 	});
 	pi.registerCommand("dj", {
-		description: "minimal, medium, full, layout, placement, theme, auth",
+		description: "minimal, medium, full, placement, auth",
 		getArgumentCompletions: (prefix) =>
 			ARGUMENTS.filter((value) => value.startsWith(prefix.toLowerCase())).map((value) => ({
 				value,
@@ -212,9 +201,6 @@ export default function dj(
 					ctx.ui.notify(`DJ ${enabled ? "enabled" : "disabled"}`, "info");
 				} else if (LAYOUTS.includes(value as Layout)) {
 					await save({ layout: value as Layout }, ctx);
-				} else if (value === "layout") {
-					const selected = await pickLayout(ctx, settings.layout);
-					if (selected) await save({ layout: selected }, ctx);
 				} else if (/^placement(?:\s+(above|below|toggle))?$/.test(value)) {
 					const requested = value.split(/\s+/)[1];
 					const placement =
@@ -224,19 +210,10 @@ export default function dj(
 								? "below"
 								: "above";
 					await save({ placement }, ctx);
-				} else if (value === "theme") {
-					const selected = await pickTheme(ctx, settings, (theme) => {
-						preview = theme;
-						paint();
-					});
-					if (selected) await save(selected, ctx);
 				} else if (value === "auth") {
 					await login(ctx);
 				} else {
-					ctx.ui.notify(
-						"Usage: /dj [minimal|medium|full|layout|theme|auth|placement [above|below|toggle]]",
-						"info",
-					);
+					ctx.ui.notify("Usage: /dj [minimal|medium|full|auth|placement [above|below|toggle]]", "info");
 				}
 			} catch (error) {
 				if (!disposed) ctx.ui.notify(`DJ: ${String(error)}`, "error");

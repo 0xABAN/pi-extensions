@@ -62,8 +62,6 @@ test("fresh state defaults, scoped concurrent preferences, custom values and env
 	expect(store.readSettings()).toMatchObject({ layout: "minimal", placement: "above" });
 	await store.updateSettings({
 		theme: { mode: "solid", colors: ["#abc"] },
-		customSolid: ["#abc"],
-		customAnimated: ["#abc", "#fff"],
 	});
 	expect(second.readSettings().theme).toEqual({ mode: "solid", colors: ["#AABBCC"] });
 	await store.withLock(async (lease) => store.writeCredentials({ clientId: "saved" }, lease));

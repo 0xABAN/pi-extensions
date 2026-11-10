@@ -68,7 +68,7 @@ function settings(value: unknown): Settings {
 		!["above", "below"].includes(data.placement as string) ||
 		!["animated", "solid"].includes(theme.mode as string) ||
 		Object.keys(theme).some((key) => key !== "mode" && key !== "colors") ||
-		Object.keys(data).some((key) => !["layout", "placement", "theme", "customAnimated", "customSolid"].includes(key))
+		Object.keys(data).some((key) => !["layout", "placement", "theme"].includes(key))
 	) {
 		throw new Error("Invalid DJ layout, placement, or theme settings");
 	}
@@ -79,8 +79,6 @@ function settings(value: unknown): Settings {
 			mode: theme.mode as Settings["theme"]["mode"],
 			colors: colors(theme.colors, theme.mode === "solid"),
 		},
-		...(data.customAnimated === undefined ? {} : { customAnimated: colors(data.customAnimated) }),
-		...(data.customSolid === undefined ? {} : { customSolid: colors(data.customSolid, true) }),
 	};
 }
 

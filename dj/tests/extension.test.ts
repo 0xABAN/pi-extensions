@@ -172,9 +172,7 @@ test("Pi discovers and loads the standalone DJ package without initializing Spot
 	const result = loader.getExtensions();
 	expect(result.errors).toEqual([]);
 	expect(result.extensions).toHaveLength(1);
-	expect(result.extensions[0].commands.get("dj")?.description).toBe(
-		"minimal, medium, full, layout, placement, theme, auth",
-	);
+	expect(result.extensions[0].commands.get("dj")?.description).toBe("minimal, medium, full, placement, auth");
 });
 
 test("commands are discoverable and invalid input doesn't alter preferences", async () => {
