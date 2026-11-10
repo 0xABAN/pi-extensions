@@ -181,7 +181,6 @@ function canonicalizePath(value: string): string {
 	try {
 		return realpathSync.native(resolvedValue);
 	} catch {
-		// Path may not exist yet; compare with the resolved path directly.
 		return resolvedValue;
 	}
 }
@@ -528,9 +527,7 @@ export default function rewindExtension(pi: ExtensionAPI) {
 			await assertSubmoduleWorktreesClean(root, [...entriesByPath.values()], "capture exact files");
 			return { treeSha };
 		} finally {
-			await rm(tempDir, { recursive: true, force: true }).catch(() => {
-				// Best effort cleanup for temporary index directory.
-			});
+			await rm(tempDir, { recursive: true, force: true }).catch(() => {});
 		}
 	}
 
@@ -582,8 +579,6 @@ export default function rewindExtension(pi: ExtensionAPI) {
 				}
 				return;
 			} catch (error) {
-				// Retry if another process updated the store ref concurrently.
-				// Keep the most recent error for actionable failure context.
 				lastError = error;
 			}
 		}
@@ -605,9 +600,6 @@ export default function rewindExtension(pi: ExtensionAPI) {
 		while (attempts < 5) {
 			attempts += 1;
 			const oldHead = await getStoreHead();
-			// A failed compare-and-swap means another session added snapshots while
-			// this sweep was running. Preserve that new reachability and let a later
-			// uncontended sweep prune anything no longer retained.
 			let head = preserveConcurrentHead ? oldHead : undefined;
 			for (const commitSha of uniqueLiveCommits) {
 				head = await createStoreKeepaliveCommit(commitSha, head);
@@ -621,8 +613,6 @@ export default function rewindExtension(pi: ExtensionAPI) {
 				}
 				return "rewritten";
 			} catch (error) {
-				// Retry if another process updated the store ref concurrently.
-				// Keep the most recent error for actionable failure context.
 				lastError = error;
 				preserveConcurrentHead = true;
 			}
@@ -846,7 +836,6 @@ export default function rewindExtension(pi: ExtensionAPI) {
 			const hasRewindEntries = content.includes('"rewind-');
 
 			if (!hasRewindEntries) {
-				// Fast path: extract session header only, skip line-by-line JSON parsing
 				let pos = 0;
 				for (let i = 0; i < 5 && pos < content.length; i++) {
 					const nextNewline = content.indexOf("\n", pos);
@@ -877,7 +866,6 @@ export default function rewindExtension(pi: ExtensionAPI) {
 						entry = parsed as FileEntry;
 					}
 				} catch {
-					// Ignore malformed JSONL lines; retention discovery is best-effort.
 					continue;
 				}
 
@@ -923,7 +911,6 @@ export default function rewindExtension(pi: ExtensionAPI) {
 			parsedSessionCache.set(sessionFile, { mtimeMs: fileStat.mtimeMs, ledger });
 			return ledger;
 		} catch {
-			// Unreadable/missing session file: skip it and continue lineage/discovery.
 			return null;
 		}
 	}
@@ -1034,7 +1021,6 @@ export default function rewindExtension(pi: ExtensionAPI) {
 				try {
 					entries = await readdir(dir, { withFileTypes: true, encoding: "utf8" });
 				} catch {
-					// Skip unreadable directories during best-effort discovery.
 					continue;
 				}
 
@@ -1071,8 +1057,6 @@ export default function rewindExtension(pi: ExtensionAPI) {
 		if (reason === "shutdown" && sweepCompletedThisSession && newSnapshotsSinceSweep < RETENTION_SWEEP_THRESHOLD)
 			return;
 		if (!repoRoot) return;
-		// Session replacement invalidates ctx after session_shutdown resolves, so reuse
-		// the in-flight startup sweep and let shutdown await it before returning.
 		if (retentionSweep) return retentionSweep;
 		retentionSweep = runRetentionSweep(ctx, reason).finally(() => {
 			retentionSweep = undefined;
@@ -1208,16 +1192,13 @@ export default function rewindExtension(pi: ExtensionAPI) {
 			return;
 		}
 
-		// Skip gc on background startup sweeps to avoid racing with concurrent snapshot creation
 		if (reason !== "startup") {
 			try {
 				const result = await pi.exec("git", ["gc", "--auto"]);
 				if (result.code !== 0) {
 					throw new Error(result.stderr.trim() || `git gc --auto failed with code ${result.code}`);
 				}
-			} catch {
-				// Best effort only; retention reachability rewrite already completed.
-			}
+			} catch {}
 		}
 
 		newSnapshotsSinceSweep = 0;
@@ -1253,7 +1234,6 @@ export default function rewindExtension(pi: ExtensionAPI) {
 			const result = await pi.exec("git", ["rev-parse", "--is-inside-work-tree"]);
 			isGitRepo = result.code === 0 && result.stdout.trim() === "true";
 		} catch {
-			// Treat git probing failures as non-git context for this session.
 			isGitRepo = false;
 		}
 

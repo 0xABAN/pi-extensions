@@ -8,7 +8,6 @@ const EVERFOREST = {
 	purple: "#D699B6",
 };
 
-/** Interpolate the label without painting its spaces. */
 function shine(text: string, stops: [number, number, number][]): string {
 	const chars = [...text];
 	const paint = chars.filter((c) => c !== " ");
@@ -42,7 +41,6 @@ function thinkingLabel(level: string): string {
 	return `think:${labels[level] ?? level}`;
 }
 
-/** Pure presentation: lifecycle code owns status keys, tool state and persistence. */
 export function formatModeStatus(
 	mode: AgentMode,
 	thinkingLevel?: string,
@@ -55,13 +53,10 @@ export function formatModeStatus(
 				? [196, 160, 230] // pastel purple (plan)
 				: [173, 210, 203]; // pale teal (build, #add2cb)
 
-	// Reuse the Everforest palette; Pi's built-in themes keep the default gradient.
-	// Hard and Medium share their foreground/accent colors.
 	const forest = EVERFOREST;
 	let hexStops: string[] | undefined;
 	if (themeName === "everforest-dark-medium" || themeName === "everforest-dark-hard") {
 		const accent = mode === "learn" ? forest.blue : mode === "plan" ? forest.purple : forest.green;
-		// All mode icons start at the neutral foreground; only the accent differs.
 		hexStops = [forest.fg, accent, forest.yellow];
 	}
 

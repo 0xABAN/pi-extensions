@@ -14,7 +14,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import { lock } from "proper-lockfile";
 import { DEFAULTS, type Playback, type Settings } from "./types.ts";
 
-/** Stored expiry is epoch milliseconds, unlike the legacy Python token file's seconds. */
 export interface Tokens {
 	access_token: string;
 	refresh_token: string;
@@ -22,7 +21,6 @@ export interface Tokens {
 	scope: string;
 }
 
-/** grant identifies an authorization, not an access token; refreshing keeps it unchanged. */
 export interface Credentials {
 	clientId?: string;
 	tokens?: Tokens;
@@ -30,14 +28,12 @@ export interface Credentials {
 	needsAuth?: boolean;
 }
 
-/** nextPollAt is an epoch-ms deadline shared by normal polling and failure backoff. */
 export interface Cache {
 	grant: string;
 	nextPollAt: number;
 	playback: Playback;
 }
 
-/** Call check immediately before committing; signal also aborts I/O if ownership is lost. */
 export interface Lease {
 	signal: AbortSignal;
 	check(): void;
@@ -64,7 +60,6 @@ function colors(value: unknown, solid = false): string[] {
 	);
 }
 
-/** Validate complete persisted settings rather than silently replacing malformed user data. */
 function settings(value: unknown): Settings {
 	const data = object(value),
 		theme = object(data.theme);
@@ -146,7 +141,6 @@ function cache(value: unknown): Cache {
 	return data as unknown as Cache;
 }
 
-/** Only a missing file means "unset"; parse, validation, and permission failures stay visible. */
 function read<T>(path: string, validate: (value: unknown) => T): T | undefined {
 	try {
 		return validate(JSON.parse(readFileSync(path, "utf8")));
@@ -158,11 +152,6 @@ function read<T>(path: string, validate: (value: unknown) => T): T | undefined {
 	}
 }
 
-/**
- * Own DJ's private files. Call initialize before use; construction performs no I/O.
- * Settings and Spotify state use separate locks so preference saves cannot block polling.
- * Credential/cache writes require a live Spotify lease from withLock.
- */
 export function createStore(directory: string, legacyDirectory?: string) {
 	const settingsPath = join(directory, "settings.json"),
 		credentialsPath = join(directory, "spotify_tokens.json");
@@ -171,7 +160,6 @@ export function createStore(directory: string, legacyDirectory?: string) {
 	const readCredentials = () => read(credentialsPath, credentials) ?? {};
 	const readCache = () => read(cachePath, cache);
 
-	// Synchronous rename keeps the abort/ownership check and commit in one event-loop turn.
 	function write(path: string, value: unknown, lease: Lease) {
 		lease.check();
 		const temporary = `${path}.${randomUUID()}.tmp`;
@@ -184,10 +172,6 @@ export function createStore(directory: string, legacyDirectory?: string) {
 		}
 	}
 
-	/**
-	 * Serialize one state namespace across processes. Waiting is bounded and abortable;
-	 * wait=false exposes ELOCKED so polling can reuse another session's cached result.
-	 */
 	async function locked<T>(
 		name: string,
 		work: (lease: Lease) => Promise<T>,
@@ -202,7 +186,6 @@ export function createStore(directory: string, legacyDirectory?: string) {
 		for (let attempt = 0; ; attempt++) {
 			signal?.throwIfAborted();
 			try {
-				// proper-lockfile keys ownership by target, not by lockfilePath.
 				release = await lock(join(directory, name), {
 					realpath: false,
 					lockfilePath: lockPath,
@@ -219,7 +202,6 @@ export function createStore(directory: string, legacyDirectory?: string) {
 
 		const combined = signal ? AbortSignal.any([signal, lost.signal]) : lost.signal;
 
-		// Detect replacement before the heartbeat does; never commit under or release a successor's lock.
 		const identity = statSync(lockPath);
 
 		function ownsLock() {
@@ -251,7 +233,6 @@ export function createStore(directory: string, legacyDirectory?: string) {
 	}
 
 	return {
-		/** Import each absent state file once, leaving legacy files and existing DJ choices intact. */
 		async initialize() {
 			mkdirSync(directory, { recursive: true, mode: 0o700 });
 			chmodSync(directory, 0o700);
@@ -277,7 +258,6 @@ export function createStore(directory: string, legacyDirectory?: string) {
 				const clientId = legacy().spotify_client_id;
 				if (clientId !== undefined && !text(clientId)) throw new Error("Invalid legacy Spotify client ID");
 				const imported = legacyDirectory ? read(join(legacyDirectory, "spotify_tokens.json"), tokens) : undefined;
-				// Contemporary epoch seconds are below this cutoff; existing epoch-ms values pass through.
 				if (imported && imported.expires_at < 1e12) imported.expires_at *= 1000;
 				write(credentialsPath, credentials({ clientId, tokens: imported, grant: randomUUID() }), lease);
 			});
@@ -289,7 +269,6 @@ export function createStore(directory: string, legacyDirectory?: string) {
 		readCredentials,
 		readCache,
 
-		/** Reread under the lock so concurrent sessions preserve each other's unrelated choices. */
 		async updateSettings(patch: Partial<Settings>) {
 			return locked("settings", async (lease) => {
 				const next = settings({ ...readSettings(), ...patch });

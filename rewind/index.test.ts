@@ -818,8 +818,6 @@ test("ancestor-only retention discovery ignores unrelated session trees", async 
 test("session shutdown waits for an in-flight startup retention sweep", async () => {
 	const harness = await createHarness({
 		settings: { rewind: { retention: { maxSnapshots: 10 } } },
-		// The first check reconstructs the active rewind state; the second is the
-		// detached startup sweep that a session replacement must join.
 		pauseGitSubcommand: { name: "cat-file", occurrence: 2 },
 	});
 	let paused = false;
@@ -889,7 +887,6 @@ test("retention rewrites the keepalive ref when a live snapshot exists", async (
 
 		await harness.invoke("session_start", {});
 
-		// Retention sweep runs in the background on startup; poll for completion
 		const deadline = Date.now() + 3000;
 		let storeHead: string | undefined;
 		while (Date.now() < deadline) {

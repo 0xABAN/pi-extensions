@@ -38,7 +38,6 @@ function harness(poll: (signal: AbortSignal) => Promise<Playback> = async () => 
 			},
 			setWidget(id: string, factory: any, options?: { placement: string }) {
 				expect(id).toBe("dj");
-				// Pi deletes before setting, so updates move a widget to the end of its group.
 				widgets.delete(id);
 				if (factory) {
 					placements.push(options!.placement);

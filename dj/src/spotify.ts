@@ -6,7 +6,6 @@ import type { Playback } from "./types.ts";
 const SCOPE = "user-read-playback-state",
 	TOKEN_URL = "https://accounts.spotify.com/api/token";
 
-/** Safe UI error plus retry policy; unauthorized permits one refresh, auth requires login. */
 class SpotifyFailure extends Error {
 	readonly auth: boolean;
 	readonly retryMs: number;
@@ -20,7 +19,6 @@ class SpotifyFailure extends Error {
 	}
 }
 
-/** Validate the API boundary and keep track-only behavior; episodes/unknown items are idle. */
 function snapshot(value: unknown, sampledAt: number): Playback {
 	const data = object(value);
 	if (typeof data.is_playing !== "boolean") throw new Error("Invalid Spotify playback state");
@@ -48,10 +46,6 @@ function snapshot(value: unknown, sampledAt: number): Playback {
 	};
 }
 
-/**
- * Spotify I/O without Pi UI dependencies. The store must already be initialized.
- * fetch and the epoch-ms clock can be supplied for offline, deterministic tests.
- */
 export function createSpotify(store: Store, options: { fetch?: typeof fetch; now?: () => number } = {}) {
 	const request = options.fetch ?? fetch,
 		now = options.now ?? Date.now;
@@ -62,7 +56,6 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 		if (response.ok) return response;
 
 		if (response.status === 429) {
-			// Spotify normally sends seconds. Also accept HTTP dates, with a bounded-rate fallback.
 			const header = response.headers.get("Retry-After");
 			const delay =
 				header === null ? NaN : /^\d+(?:\.\d+)?$/.test(header) ? Number(header) * 1000 : Date.parse(header) - now();
@@ -82,7 +75,6 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 		throw new SpotifyFailure(`Spotify unavailable (HTTP ${response.status})`);
 	}
 
-	/** Exchange a code or refresh token, retaining refresh credentials Spotify omits on renewal. */
 	async function exchange(
 		parameters: Record<string, string>,
 		signal: AbortSignal,
@@ -120,10 +112,6 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 		};
 	}
 
-	/**
-	 * Reuse the shared cache or fetch once under its lock. Network/auth failures become display
-	 * states; cancellation, corrupt local state, and lost lock ownership propagate to the caller.
-	 */
 	async function poll(signal: AbortSignal): Promise<Playback> {
 		signal.throwIfAborted();
 		try {
@@ -132,7 +120,6 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 					const credentials = store.readCredentials(),
 						cached = store.readCache();
 
-					// A new login changes grant, preventing an old account's track from being reused.
 					const grant = credentials.grant ?? "",
 						previous = cached?.grant === grant ? cached : undefined;
 					if (previous && now() < previous.nextPollAt) return previous.playback;
@@ -168,7 +155,6 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 							);
 						}
 
-						// Refresh before expiry; a later 401 gets one retry, never an unbounded refresh loop.
 						if (tokens.expires_at <= now() + 30_000) await refresh();
 						const fetchPlayback = () =>
 							checked(
@@ -186,7 +172,6 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 							response = await fetchPlayback();
 						}
 
-						// 204 is a successful empty response, so it must not be parsed as JSON.
 						playback =
 							response.status === 204
 								? { status: "idle", sampledAt: now() }
@@ -203,12 +188,10 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 							message: failure.message,
 							...(previous?.playback.track ? { track: previous.playback.track } : {}),
 						};
-						// Persist login-required state so other sessions also stop retrying rejected credentials.
 						if (failure.auth && !credentials.needsAuth)
 							store.writeCredentials({ ...credentials, tokens, needsAuth: true }, lease);
 					}
 
-					// Share failure cooldowns too; otherwise every Pi session would retry independently.
 					store.writeCache({ grant, nextPollAt: now() + retryMs, playback }, lease);
 					return playback;
 				},
@@ -219,7 +202,6 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 			signal.throwIfAborted();
 			if ((error as NodeJS.ErrnoException).code !== "ELOCKED") throw error;
 
-			// Another session owns the request. Return its last sample instead of issuing a duplicate.
 			const credentials = store.readCredentials(),
 				cached = store.readCache();
 			return cached?.grant === (credentials.grant ?? "")
@@ -232,11 +214,6 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 		}
 	}
 
-	/**
-	 * Run PKCE through a loopback callback. onUrl displays/opens the authorization URL;
-	 * cancellation or the three-minute deadline closes the server and prevents a pending commit.
-	 * No state lock is held while waiting for the browser; commit only after a valid exchange.
-	 */
 	async function authorize(
 		clientId: string,
 		onUrl: (url: string) => void | Promise<void>,
@@ -255,7 +232,6 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 			accept = resolve;
 			fail = reject;
 		});
-		// A callback/abort may arrive before onUrl has finished opening the browser.
 		void authorization.catch(() => {});
 		const abort = () => fail(deadline.reason);
 		deadline.addEventListener("abort", abort, { once: true });
@@ -269,12 +245,10 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 				return;
 			}
 			const returnedState = url.searchParams.get("state") ?? "";
-			// timingSafeEqual requires equal byte lengths. Reject ambiguous duplicate state parameters.
 			const validState =
 				url.searchParams.getAll("state").length === 1 &&
 				Buffer.byteLength(returnedState) === Buffer.byteLength(state) &&
 				timingSafeEqual(Buffer.from(returnedState), Buffer.from(state));
-			// Unrelated browser requests must not consume the one authorization attempt.
 			if (request.method !== "GET" || url.pathname !== "/callback" || !validState) {
 				response.writeHead(400).end("Not a Spotify authorization callback");
 				return;
@@ -296,7 +270,6 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 			deadline.throwIfAborted();
 			const address = server.address();
 			if (!address || typeof address === "string") throw new Error("Could not bind Spotify callback server");
-			// A portless loopback URI is registered with Spotify; exchange must use this exact bound URI.
 			const redirect = `http://127.0.0.1:${address.port}/callback`;
 			const url = new URL("https://accounts.spotify.com/authorize");
 			url.search = new URLSearchParams({
@@ -324,7 +297,6 @@ export function createSpotify(store: Store, options: { fetch?: typeof fetch; now
 			);
 			deadline.throwIfAborted();
 			await store.withLock(async (lease) => {
-				// Explicit successful authorization replaces credentials, including an unreadable old file.
 				store.writeCredentials({ clientId: clientId.trim(), tokens, grant: randomUUID() }, lease);
 				store.clearCache(lease);
 			}, deadline);

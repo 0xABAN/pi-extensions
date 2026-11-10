@@ -140,7 +140,6 @@ test("custom solid prefills saved values, retains invalid input and saves normal
 			const cursorLine = dialog.render(64).find((line) => line.includes(CURSOR_MARKER))!;
 			expect(cursorLine).toBeDefined();
 			expect(visibleWidth(cursorLine.split(CURSOR_MARKER)[0])).toBeGreaterThanOrEqual(2);
-			// Native Input starts at column zero; Ctrl+E/Ctrl+U replaces the saved value.
 			keys("\x05", "\x15", "#nope", enter)(dialog);
 			expect(text(dialog)).toContain("#nope");
 			expect(text(dialog)).toContain("Use #RGB or #RRGGBB");

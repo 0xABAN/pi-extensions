@@ -2,7 +2,6 @@ import { stripVTControlCharacters } from "node:util";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { PASTELS, type Playback, type Settings, type Theme } from "./types.ts";
 
-/** Normalize space-separated hex input to #RRGGBB; throw a user-facing validation error. */
 export function parseColors(input: string, mode: Theme["mode"]): string[] {
 	const colors = input.trim().split(/\s+/);
 	if (colors.some((color) => !/^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(color))) {
@@ -17,13 +16,11 @@ export function parseColors(input: string, mode: Theme["mode"]): string[] {
 	);
 }
 
-/** Apply a validated six-digit hex foreground, then restore the terminal's default foreground. */
 export function colorize(text: string, hex: string): string {
 	const rgb = [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
 	return `\x1b[38;2;${rgb.join(";")}m${text}\x1b[39m`;
 }
 
-// Metadata is untrusted terminal input: remove escape sequences, controls, and bidi overrides.
 function clean(text: string): string {
 	return stripVTControlCharacters(text)
 		.replace(/\s+/g, " ")
@@ -36,10 +33,6 @@ function time(ms: number): string {
 	return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-/**
- * Render one indented line within the available terminal-cell width, with no I/O.
- * now is epoch milliseconds. Only playing snapshots advance; paused/offline progress stays frozen.
- */
 export function renderLine(playback: Playback, settings: Settings, width: number, now = Date.now()): string {
 	if (width <= 0) return "";
 	if (width < 2) return " ";
@@ -59,7 +52,6 @@ export function renderLine(playback: Playback, settings: Settings, width: number
 		if (settings.layout === "full") {
 			const elapsed = track.progressMs + (status === "playing" ? Math.max(0, now - playback.sampledAt) : 0);
 			suffix = `  ${time(Math.min(elapsed, track.durationMs))} / ${time(track.durationMs)}`;
-			// Preserve a useful title first: drop the clock if too cramped, otherwise omit the artist.
 			const titleWidth = available - visibleWidth(prefix + suffix);
 			if (titleWidth < 8) suffix = "";
 			else if (visibleWidth(label) > titleWidth) label = title;
@@ -68,7 +60,6 @@ export function renderLine(playback: Playback, settings: Settings, width: number
 		text = prefix + truncateToWidth(label, Math.max(0, available - visibleWidth(prefix + suffix)), "…") + suffix;
 	}
 
-	// Derive the frame from time, not repaint count, so refreshes don't reset the rainbow.
 	const colors = settings.theme.colors.length ? settings.theme.colors : PASTELS;
 	const index = settings.theme.mode === "solid" ? 0 : Math.floor(now / 90) % colors.length;
 	return ` ${colorize(truncateToWidth(text, available, "…"), colors[index])}`;

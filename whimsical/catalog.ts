@@ -1,5 +1,4 @@
 export const messages = [
-	// Short
 	"Schlepping...",
 	"Combobulating...",
 	"Doing...",
@@ -247,7 +246,6 @@ export const messages = [
 	"Ringling...",
 	"Kingling...",
 
-	// Long
 	"Consulting the void...",
 	"Asking the electrons...",
 	"Bribing the compiler...",
@@ -458,7 +456,6 @@ export const messages = [
 ];
 
 export const SYMBOLS = [
-	// stars / sparkles
 	"★",
 	"☆",
 	"✦",
@@ -496,7 +493,6 @@ export const SYMBOLS = [
 	"⋆",
 	"⁕",
 	"⁎",
-	// circles / orbs
 	"●",
 	"○",
 	"◎",
@@ -514,7 +510,6 @@ export const SYMBOLS = [
 	"❦",
 	"❧",
 	"☙",
-	// diamonds / squares
 	"◆",
 	"◇",
 	"◈",
@@ -530,7 +525,6 @@ export const SYMBOLS = [
 	"◻",
 	"◾",
 	"◽",
-	// triangles / arrows
 	"▲",
 	"△",
 	"▼",
@@ -543,7 +537,6 @@ export const SYMBOLS = [
 	"▸",
 	"▴",
 	"▾",
-	// suits / misc
 	"♠",
 	"♣",
 	"♥",

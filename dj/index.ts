@@ -25,10 +25,6 @@ const ARGUMENTS = [
 	"placement toggle",
 ];
 
-/**
- * Register DJ's commands and TUI lifecycle. This layer owns the widget and timers;
- * Spotify/state own cross-session I/O. Optional collaborators allow isolated tests.
- */
 export default function dj(
 	pi: ExtensionAPI,
 	store = createStore(join(getAgentDir(), "dj"), join(homedir(), ".agent-dj")),
@@ -44,11 +40,9 @@ export default function dj(
 	let paintTimer: ReturnType<typeof setInterval> | undefined;
 	let repaint: (() => void) | undefined;
 
-	// A save may finish after stop/restart; its result must not update the replacement UI.
 	let generation = 0;
 	let disposed = false;
 
-	/** Restart only the repaint clock needed by the current layout/preview; never fetch. */
 	function paint() {
 		clearInterval(paintTimer);
 
@@ -74,7 +68,6 @@ export default function dj(
 		paint();
 	}
 
-	/** Retire this run before allowing pending I/O to complete. Saved preferences survive. */
 	function stop() {
 		generation++;
 		run?.abort.abort();
@@ -89,7 +82,6 @@ export default function dj(
 		stop();
 		if (ctx.mode !== "tui" || !enabled) return;
 
-		// Object identity rejects late results even if another run has already started.
 		const current = { ctx, abort: new AbortController() };
 		run = current;
 
@@ -106,7 +98,6 @@ export default function dj(
 			return;
 		}
 
-		// Schedule after completion rather than on an interval: slow requests cannot overlap.
 		async function poll() {
 			try {
 				const next = await spotify.poll(current.abort.signal);
@@ -124,7 +115,6 @@ export default function dj(
 		void poll();
 	}
 
-	/** Persist the selected fields, then refresh only the UI that initiated the save. */
 	async function save(patch: Partial<Settings>, ctx: ExtensionCommandContext) {
 		if (disposed) return;
 
@@ -138,7 +128,6 @@ export default function dj(
 		ctx.ui.notify("DJ preference saved", "info");
 	}
 
-	/** Pause this session's polling while the cancellable browser flow replaces its grant. */
 	async function login(ctx: ExtensionCommandContext) {
 		let savedId = "";
 		try {
@@ -174,7 +163,6 @@ export default function dj(
 										? "rundll32.exe"
 										: "xdg-open";
 							const args = process.platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];
-							// Browser launching is best-effort; the displayed URL remains a manual fallback.
 							await pi.exec(command, args, { timeout: 5000, signal }).catch(() => {});
 						},
 						signal,
@@ -189,7 +177,6 @@ export default function dj(
 			if (!current.signal.aborted)
 				ctx.ui.notify(result ? `DJ: ${result.message}` : "Spotify connected", result ? "error" : "info");
 		} finally {
-			// Shutdown clears auth; an old dialog must not restart polling in a closed session.
 			if (auth === current) {
 				auth = undefined;
 				await start(ctx);

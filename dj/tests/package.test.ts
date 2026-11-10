@@ -15,7 +15,6 @@ test("the public DJ package includes its runtime without tests, media, or local 
 	expect(manifest.pi.image).toStartWith("https://");
 	expect(manifest.dependencies["proper-lockfile"]).toBeDefined();
 
-	// Inspect npm's actual allowlist output without publishing or contacting Spotify.
 	const [packed] = JSON.parse(
 		execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
 			cwd: root,

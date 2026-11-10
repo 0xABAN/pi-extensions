@@ -1,10 +1,3 @@
-/**
- * Build, Plan, and Learn share one mode controller and tool checkpoint.
- * Shift+Tab cycles modes. Plan and Learn share one read-only tool set, and each
- * adds its rules as a prompt section plus a short note on every turn. Plan asks
- * for approval through the plan tool. Learn teaches without doing the task.
- */
-
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { LEARN_MODE_PROMPT } from "./learn.ts";
@@ -72,7 +65,6 @@ export default function modesExtension(pi: ExtensionAPI): void {
 	function setMode(nextMode: AgentMode, ctx: ExtensionContext): void {
 		if (nextMode === mode) return;
 
-		// Carry the same Build checkpoint through Plan ↔ Learn transitions.
 		if (mode === "build") buildTools = pi.getActiveTools();
 		mode = nextMode;
 		applyModeTools();
@@ -81,7 +73,6 @@ export default function modesExtension(pi: ExtensionAPI): void {
 	}
 
 	function changeMode(nextMode: AgentMode, ctx: ExtensionContext): void {
-		// A running turn already has its instructions and may have tools in flight.
 		if (!ctx.isIdle()) {
 			ctx.ui.notify("Wait for the current turn to finish or cancel it before changing modes.", "warning");
 			return;
@@ -112,7 +103,6 @@ export default function modesExtension(pi: ExtensionAPI): void {
 		handler: async (ctx) => changeMode(mode === "build" ? "plan" : mode === "plan" ? "learn" : "build", ctx),
 	});
 
-	// Exposure alone is not a permission boundary: also block nested/inactive calls.
 	pi.on("tool_call", async (event, _ctx) => {
 		if (mode === "build") return;
 
@@ -137,7 +127,6 @@ export default function modesExtension(pi: ExtensionAPI): void {
 		}
 	});
 
-	// Each mode keeps only its own notes; Build keeps none.
 	pi.on("context", async (event) => ({
 		messages: event.messages.filter((m) => {
 			const { customType } = m as AgentMessage & { customType?: string };
@@ -146,7 +135,6 @@ export default function modesExtension(pi: ExtensionAPI): void {
 	}));
 
 	pi.on("before_agent_start", async (event, ctx) => {
-		// Status strings contain ANSI colors; refresh after a theme selection.
 		if (ctx.hasUI) updateStatus(ctx);
 
 		if (mode === "build") return;
@@ -165,7 +153,6 @@ export default function modesExtension(pi: ExtensionAPI): void {
 		buildTools = pi.getActiveTools();
 		restoreState(ctx);
 
-		// Explicit startup flags override saved state; Learn wins if both are set.
 		if (event.reason === "startup") {
 			if (pi.getFlag("learn") === true) setMode("learn", ctx);
 			else if (pi.getFlag("plan") === true) setMode("plan", ctx);

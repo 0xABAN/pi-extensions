@@ -16,7 +16,6 @@ const overlay = {
 type Choice = SelectItem & { theme: Theme };
 const sameTheme = (a: Theme, b: Theme) => a.mode === b.mode && a.colors.join() === b.colors.join();
 
-/** Frame only DJ dialogs; pad every row so the underlying UI cannot show through. */
 function frame(lines: string[], width: number): string[] {
 	const black = "\x1b[48;2;0;0;0m";
 	const border = (text: string) => colorize(text, "#FFFFFF");
@@ -26,11 +25,7 @@ function frame(lines: string[], width: number): string[] {
 		border(`╭${"─".repeat(width - 2)}╮`),
 		...lines.map((line) => `${border("│")} ${truncateToWidth(line, width - 4, "", true)} ${border("│")}`),
 		border(`╰${"─".repeat(width - 2)}╯`),
-	].map(
-		(line) =>
-			// Truncation and child styling can reset ANSI attributes; restore our background after them.
-			`${black}${line.replace(/\x1b\[(?:0|49)m/g, (reset) => reset + black)}\x1b[49m`,
-	);
+	].map((line) => `${black}${line.replace(/\x1b\[(?:0|49)m/g, (reset) => reset + black)}\x1b[49m`);
 }
 
 function listTheme(theme: PiTheme) {
@@ -43,11 +38,6 @@ function listTheme(theme: PiTheme) {
 	};
 }
 
-/**
- * Preview mode → palette → optional hex input without mutating or saving settings.
- * Return a patch only for a final selection; cancellation returns undefined.
- * onPreview(undefined) always clears the temporary widget theme, even if a dialog fails.
- */
 export async function pickTheme(
 	ctx: ExtensionCommandContext,
 	settings: Settings,
@@ -60,7 +50,6 @@ export async function pickTheme(
 		onPreview(theme);
 	}
 
-	// A fixed sample keeps configuration usable when Spotify is idle or the widget is disabled.
 	function sample(width: number): string {
 		const now = Date.now();
 		return renderLine(
@@ -75,7 +64,6 @@ export async function pickTheme(
 		);
 	}
 
-	/** Each visit owns a fresh overlay and timer; Pi disposes them when selection/back closes it. */
 	function choose(title: string, choices: Choice[], selected: string): Promise<Choice | undefined> {
 		return ctx.ui.custom<Choice | undefined>((tui, theme, _keys, done) => {
 			const list = new SelectList(choices, 8, listTheme(theme));
@@ -90,7 +78,6 @@ export async function pickTheme(
 			list.onSelectionChange = highlight;
 			list.onSelect = (item) => done(choices.find((choice) => choice.value === item.value));
 			list.onCancel = () => done(undefined);
-			// setSelectedIndex precedes the callback, so preview the initial highlight explicitly.
 			highlight(list.getSelectedItem()!);
 			const timer = setInterval(() => {
 				if (preview.mode === "animated") tui.requestRender();
@@ -125,7 +112,6 @@ export async function pickTheme(
 		}, overlay);
 	}
 
-	/** Keep invalid drafts editable; only valid input changes the preview or completes the dialog. */
 	function custom(mode: Theme["mode"], colors: string[]): Promise<Theme | undefined> {
 		return ctx.ui.custom<Theme | undefined>((tui, theme, _keys, done) => {
 			const input = new Input();
@@ -148,7 +134,6 @@ export async function pickTheme(
 				if (preview.mode === "animated") tui.requestRender();
 			}, 90);
 			return {
-				// Forward focus to Input so the terminal cursor and IME candidate window follow it.
 				get focused() {
 					return input.focused;
 				},
@@ -177,9 +162,7 @@ export async function pickTheme(
 					if (input.getValue() !== previous) error = "";
 					try {
 						show({ mode, colors: parseColors(input.getValue(), mode) });
-					} catch {
-						/* An incomplete edit keeps the last valid preview. */
-					}
+					} catch {}
 					tui.requestRender();
 				},
 				invalidate() {
@@ -193,7 +176,6 @@ export async function pickTheme(
 	}
 
 	try {
-		// Back from a palette returns here; cancel at this root exits without a settings patch.
 		while (true) {
 			const modeChoice = await choose(
 				"DJ theme",
@@ -230,7 +212,6 @@ export async function pickTheme(
 				choice.description = choice.theme.colors.join(" ");
 			}
 
-			// Back from Custom reopens this palette, rather than reusing its disposed component.
 			while (true) {
 				const choice = await choose(mode === "animated" ? "Animated palettes" : "Solid colors", choices, selected);
 				if (!choice) break;
@@ -250,7 +231,6 @@ export async function pickTheme(
 	}
 }
 
-/** Show examples with the active layout first; the caller owns persistence of the selection. */
 export async function pickLayout(ctx: ExtensionCommandContext, current: Layout): Promise<Layout | undefined> {
 	const layouts: Layout[] = [
 		current,

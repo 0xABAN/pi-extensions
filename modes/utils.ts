@@ -1,7 +1,3 @@
-/**
- * Pure utility functions for agent modes.
- */
-
 export type AgentMode = "build" | "plan" | "learn";
 
 export const READ_ONLY_TOOLS = new Set([
@@ -18,7 +14,6 @@ export const READ_ONLY_TOOLS = new Set([
 	"intercom",
 ]);
 
-// Destructive commands blocked in plan and learn mode
 const DESTRUCTIVE_PATTERNS = [
 	/\brm\b/i,
 	/\brmdir\b/i,
@@ -55,7 +50,6 @@ const DESTRUCTIVE_PATTERNS = [
 	/\b(vim?|nano|emacs|code|subl)\b/i,
 ];
 
-// Safe read-only commands allowed in plan and learn mode
 const SAFE_PATTERNS = [
 	/^\s*cd\b/,
 	/^\s*cat\b/,

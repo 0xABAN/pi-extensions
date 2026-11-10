@@ -233,7 +233,6 @@ test("aborted late refreshes cannot write credentials or cached playback", async
 	await expect(createSpotify(store, { fetch, now: () => epoch }).poll(controller.signal)).rejects.toThrow();
 	expect(store.readCredentials()).toEqual(original);
 	expect(store.readCache()).toBeUndefined();
-	// The aborted operation released the lock.
 	await store.withLock(async () => {});
 });
 
@@ -350,7 +349,6 @@ test("network and login deadlines abort requests, close loopback listeners, and 
 				"candidate",
 				(raw) => {
 					redirect = new URL(raw).searchParams.get("redirect_uri")!;
-					// An opener that never resolves must not defeat the login timeout.
 					return new Promise(() => {});
 				},
 				signal(),
