@@ -27,6 +27,7 @@ import {
 import {
 	isMessage,
 	isMessageReceipt,
+	isRecord,
 	isSessionId,
 	isSessionRegistration,
 	messageDeliveryFingerprint,
@@ -144,10 +145,6 @@ function isProcessAlive(pid: number): boolean {
 	} catch (error) {
 		return isRecord(error) && error.code === "EPERM";
 	}
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isPendingAskRecord(value: unknown): value is PendingAskRecord {
