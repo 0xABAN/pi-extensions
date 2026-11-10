@@ -6,10 +6,8 @@ import type {
 	Model,
 	SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { debug } from "./debug.js";
 import { digestMessage } from "./message-digests.js";
 import type { AssistantStep, QueryContext } from "./query-state.js";
-import { sessionTag } from "./sessions.js";
 import { type SdkUsage, updateUsage } from "./usage.js";
 
 function piToolNameFor(name: string, customToolNameToPi: Map<string, string>): string | undefined {
@@ -49,12 +47,8 @@ function mapToolArgs(toolName: string, args: Record<string, unknown> | undefined
 	return result;
 }
 
-function recordUsage(output: AssistantMessage, usage: SdkUsage, model: Model<any>, piSessionId: string | null): void {
-	const { cachePct, reasoning } = updateUsage(output, usage, model);
-	const reasoningText = reasoning == null ? "" : ` reasoning=${reasoning}`;
-	debug(
-		`usage: in=${output.usage.input} out=${output.usage.output} cacheRead=${output.usage.cacheRead} cacheWrite=${output.usage.cacheWrite} total=${output.usage.totalTokens}${reasoningText} cachePct=${cachePct}% model=${model.id} ${sessionTag(piSessionId)}`,
-	);
+function recordUsage(output: AssistantMessage, usage: SdkUsage, model: Model<any>): void {
+	updateUsage(output, usage, model);
 }
 
 function mapStopReason(reason: string | undefined): "stop" | "length" | "toolUse" {
@@ -107,15 +101,9 @@ export function pushTextBlock(c: QueryContext, text: string): void {
 
 export function claimCurrentPiStream(
 	stream: AssistantMessageEventStream,
-	label: string,
 	c: QueryContext,
 	options: SimpleStreamOptions | undefined,
 ): void {
-	if (c.currentPiStream && !completedStreams.has(c.currentPiStream as object)) {
-		debug(
-			`WARNING: currentPiStream overwritten before terminal event (${label}); activeQuery=${Boolean(c.activeQuery)} pendingHandlers=${c.pendingToolCalls.size}`,
-		);
-	}
 	c.currentPiStream = stream;
 	c.currentOnResponse = options?.onResponse;
 }
@@ -134,7 +122,6 @@ export function recordAssistantEmission(c: QueryContext): void {
 	const id = c.turnStreamMessageId ?? c.lastAssistantMessageId;
 	if (!id) {
 		c.recording.gap();
-		debug("recording gap: emitted assistant has no completed SDK message id");
 		return;
 	}
 	let step = c.assistantSteps.get(id);
@@ -171,10 +158,7 @@ function completeAssistantRecording(c: QueryContext, step: AssistantStep): void 
 			step.emitted.digest
 	) {
 		c.recording.completeAssistant(step.emitted.index, last.uuid);
-	} else
-		debug(
-			`recording gap: emitted assistant is not fully covered by completed SDK messages (${step.emitted.ids.join(",")})`,
-		);
+	}
 }
 
 function incorporate(c: QueryContext, uuid: string): boolean {
@@ -192,8 +176,7 @@ export function tapRecording(message: SDKMessage, names: Map<string, string>, c:
 			["content_block_start", "content_block_delta"].includes(message.event.type))
 	) {
 		c.recording.assistantObserved();
-		if (c.turnOpener && incorporate(c, c.turnOpener))
-			debug(`recording: turn opener ${c.turnOpener} was never replayed; its first output acknowledges it`);
+		if (c.turnOpener) incorporate(c, c.turnOpener);
 		c.turnOpener = undefined;
 	}
 	if (message.type === "result") c.turnOpener = c.pendingSteerUuids.values().next().value;
@@ -241,9 +224,6 @@ export function tapRecording(message: SDKMessage, names: Map<string, string>, c:
 
 export function finalizeCurrentStream(c: QueryContext): void {
 	if (!c.currentPiStream || !c.turnOutput) return;
-	debug(
-		`provider: finalizeCurrentStream called, turnOutput=${JSON.stringify({ stopReason: c.turnOutput!.stopReason, error: c.turnOutput!.errorMessage })}`,
-	);
 	if (!c.turnStarted) ensureTurnStarted(c);
 	if (c.turnOutput.stopReason === "error") {
 		endCurrentPiStream(c, { type: "error", reason: "error", error: c.turnOutput });
@@ -265,14 +245,14 @@ export function processStreamEvent(
 	const event = (message as SDKMessage & { event: any }).event;
 
 	if (event?.type === "message_start") {
-		if (c.turnStreamOpen) dropAbandonedStreamBlocks(c, `restreamed as ${event.message?.id}`);
+		if (c.turnStreamOpen) dropAbandonedStreamBlocks(c);
 		c.turnToolCallIds = [];
 		c.turnStreamMessageId = event.message?.id;
 		if (c.turnStreamMessageId && !c.turnAssistantIds.includes(c.turnStreamMessageId))
 			c.turnAssistantIds.push(c.turnStreamMessageId);
 		c.turnStreamOpen = true;
 		c.turnStreamBlockStart = c.turnBlocks.length;
-		if (event.message?.usage) recordUsage(c.turnOutput, event.message.usage, model, c.piSessionId);
+		if (event.message?.usage) recordUsage(c.turnOutput, event.message.usage, model);
 		return;
 	}
 
@@ -291,9 +271,6 @@ export function processStreamEvent(
 		} else if (event.content_block?.type === "tool_use") {
 			const piName = piToolNameFor(event.content_block.name, customToolNameToPi);
 			if (!piName) {
-				debug(
-					`processStreamEvent: skipping tool_use for unserved tool ${event.content_block.name} [${event.content_block.id}] — CC rejects it and retries`,
-				);
 				return;
 			}
 			c.turnToolCallIds.push(event.content_block.id);
@@ -310,8 +287,6 @@ export function processStreamEvent(
 				contentIndex: c.turnBlocks.length - 1,
 				partial: c.turnMessage,
 			});
-		} else {
-			debug("processStreamEvent: unhandled content_block_start type", event.content_block?.type);
 		}
 		return;
 	}
@@ -347,8 +322,6 @@ export function processStreamEvent(
 			});
 		} else if (event.delta?.type === "signature_delta" && block.type === "thinking") {
 			block.thinkingSignature = (block.thinkingSignature ?? "") + event.delta.signature;
-		} else {
-			debug("processStreamEvent: unhandled content_block_delta type", event.delta?.type);
 		}
 		return;
 	}
@@ -381,9 +354,6 @@ export function processStreamEvent(
 				);
 			if (finished) block.arguments = { ...finished.arguments };
 			else {
-				debug(
-					`WARNING: Claude Code's finished tool_use ${block.id} did not arrive before content_block_stop; keeping the streamed arguments`,
-				);
 				block.arguments = mapToolArgs(block.name, parsePartialJson(block.partialJson, block.arguments));
 			}
 			delete block.partialJson;
@@ -399,12 +369,12 @@ export function processStreamEvent(
 
 	if (event?.type === "message_delta") {
 		c.turnOutput.stopReason = mapStopReason(event.delta?.stop_reason);
-		if (event.usage) recordUsage(c.turnOutput, event.usage, model, c.piSessionId);
+		if (event.usage) recordUsage(c.turnOutput, event.usage, model);
 		return;
 	}
 
 	if (event?.type === "message_stop") {
-		dropUnfinishedStreamBlocks(c, `message_stop for ${c.turnStreamMessageId}`);
+		dropUnfinishedStreamBlocks(c);
 		c.turnStreamOpen = false;
 	}
 
@@ -412,31 +382,23 @@ export function processStreamEvent(
 		endToolUseTurn(c);
 		return;
 	}
-
-	if (event?.type !== "message_stop" && event?.type !== "ping") {
-		debug("processStreamEvent: unhandled event type", event?.type);
-	}
 }
 
-function dropUnfinishedStreamBlocks(c: QueryContext, why: string): void {
-	const dropped: string[] = [];
+function dropUnfinishedStreamBlocks(c: QueryContext): void {
+	let dropped = 0;
 	for (let i = c.turnBlocks.length - 1; i >= c.turnStreamBlockStart; i--) {
 		if (c.turnBlocks[i].index === undefined) continue;
-		dropped.push(`${c.turnBlocks[i].type}${c.turnBlocks[i].id ? `[${c.turnBlocks[i].id}]` : ""}`);
+		dropped++;
 		c.turnBlocks.splice(i, 1);
 	}
-	if (!dropped.length) return;
-	debug(`dropUnfinishedStreamBlocks: ${why}; dropped ${dropped.reverse().join(",")}`);
+	if (!dropped) return;
 	c.turnToolCallIds = c.turnBlocks.filter((b: any) => b.type === "toolCall").map((b: any) => b.id);
 	c.turnSawToolCall = c.turnBlocks.some((b: any) => b.type === "toolCall");
 }
 
-function dropAbandonedStreamBlocks(c: QueryContext, why: string): void {
-	const dropped = c.turnBlocks.splice(c.turnStreamBlockStart);
+function dropAbandonedStreamBlocks(c: QueryContext): void {
+	c.turnBlocks.splice(c.turnStreamBlockStart);
 	c.turnAssistantIds = c.turnAssistantIds.filter((id) => id !== c.turnStreamMessageId);
-	debug(
-		`dropAbandonedStreamBlocks: ${why}; dropped ${dropped.length} blocks from ${c.turnStreamMessageId} types=${dropped.map((b: any) => b.type).join(",")}`,
-	);
 	c.turnToolCallIds = [];
 	c.turnSawToolCall = c.turnBlocks.some((b: any) => b.type === "toolCall");
 	c.turnStreamOpen = false;
@@ -451,21 +413,17 @@ export function processAssistantMessage(
 	const assistantMsg = (message as any).message;
 	if (!assistantMsg?.content) return;
 	if (assistantMsg.model === "<synthetic>") {
-		if (c.turnSawStreamEvent && c.turnStreamOpen) dropAbandonedStreamBlocks(c, "synthetic failure report");
-		debug(
-			`processAssistantMessage: <synthetic> message, keeping ${assistantMsg.content.length} block(s) off the stream`,
-		);
+		if (c.turnSawStreamEvent && c.turnStreamOpen) dropAbandonedStreamBlocks(c);
 		for (const block of assistantMsg.content) {
 			if (block.type === "text" && block.text) c.turnBlocks.push({ type: "text", text: block.text });
-			else debug("processAssistantMessage: unhandled <synthetic> block type", block.type);
 		}
-		if (assistantMsg.usage && c.turnOutput) recordUsage(c.turnOutput, assistantMsg.usage, model, c.piSessionId);
+		if (assistantMsg.usage && c.turnOutput) recordUsage(c.turnOutput, assistantMsg.usage, model);
 		return;
 	}
 	const id = assistantMsg.id;
 	if (c.turnSawStreamEvent && (!id || id !== c.turnFallbackMessageId)) {
 		if (!id || !c.turnStreamMessageId || id === c.turnStreamMessageId) return;
-		if (c.turnStreamOpen) dropAbandonedStreamBlocks(c, `non-streaming fallback ${id}`);
+		if (c.turnStreamOpen) dropAbandonedStreamBlocks(c);
 		c.turnFallbackMessageId = id;
 	}
 	if (id !== c.turnStreamMessageId) {
@@ -473,9 +431,6 @@ export function processAssistantMessage(
 		if (id && !c.turnAssistantIds.includes(id)) c.turnAssistantIds.push(id);
 		c.turnToolCallIds = [];
 	}
-	debug(
-		`processAssistantMessage fallback: ${assistantMsg.content.length} blocks, types=${assistantMsg.content.map((b: any) => b.type).join(",")}`,
-	);
 	for (const block of assistantMsg.content) {
 		if (block.type === "text" && block.text) {
 			pushTextBlock(c, block.text);
@@ -504,9 +459,6 @@ export function processAssistantMessage(
 		} else if (block.type === "tool_use") {
 			const piName = piToolNameFor(block.name, customToolNameToPi);
 			if (!piName) {
-				debug(
-					`processAssistantMessage: skipping tool_use for unserved tool ${block.name} [${block.id}] — CC rejects it and retries`,
-				);
 				continue;
 			}
 			ensureTurnStarted(c);
@@ -527,11 +479,9 @@ export function processAssistantMessage(
 				toolCall: toolBlock as any,
 				partial: c.turnMessage,
 			});
-		} else {
-			debug("processAssistantMessage: unhandled block type", block.type);
 		}
 	}
-	if (assistantMsg.usage && c.turnOutput) recordUsage(c.turnOutput, assistantMsg.usage, model, c.piSessionId);
+	if (assistantMsg.usage && c.turnOutput) recordUsage(c.turnOutput, assistantMsg.usage, model);
 
 	if (c.turnSawToolCall && c.currentPiStream && c.turnOutput) endToolUseTurn(c);
 }

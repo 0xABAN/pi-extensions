@@ -1,6 +1,5 @@
 import type { EffortLevel, SDKMessage, ThinkingConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { Model, ThinkingLevel } from "@earendil-works/pi-ai";
-import { DEBUG, debug } from "./debug.js";
 
 const CC_CHILD_ENV = {
 	ENABLE_CLAUDEAI_MCP_SERVERS: "0",
@@ -87,19 +86,6 @@ export function errorMessage(err: unknown): string {
 		} catch {}
 	}
 	return String(err);
-}
-
-export function logServedContextWindow(label: string, message: SDKMessage, model: Model<any>): void {
-	if (!DEBUG) return;
-	const modelUsage = (message as any).modelUsage as
-		| Record<string, { contextWindow?: number; maxOutputTokens?: number }>
-		| undefined;
-	if (!modelUsage) return;
-	for (const [k, v] of Object.entries(modelUsage)) {
-		debug(
-			`${label}: served contextWindow=${v.contextWindow ?? "?"} maxOutputTokens=${v.maxOutputTokens ?? "?"} servedModel=${k} registered=${model.contextWindow}`,
-		);
-	}
 }
 
 const VALID_EFFORTS = new Set<string>(["low", "medium", "high", "xhigh", "max"]);

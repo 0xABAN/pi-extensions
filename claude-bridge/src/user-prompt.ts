@@ -1,7 +1,6 @@
 import type { Base64ImageSource, ContentBlockParam } from "@anthropic-ai/sdk/resources";
 import type { Context, ImageContent, TextContent, UserMessage } from "@earendil-works/pi-ai";
 import { messageContentToText } from "./convert.js";
-import { debug } from "./debug.js";
 
 export function turnStart(messages: Context["messages"]): number {
 	let i = messages.length;
@@ -37,10 +36,8 @@ export function extractUserPromptBlocks(messages: Context["messages"]): ContentB
 				blocks.push({ type: "text", text: block.text });
 			} else if (block.type === "image") {
 				if (!block.data || !block.mimeType) {
-					debug(`image block missing data or mimeType, skipping: keys=${Object.keys(block).join(",")}`);
 					continue;
 				}
-				debug(`image block: mimeType=${block.mimeType}, data length=${block.data.length}`);
 				hasImage = true;
 				blocks.push({
 					type: "image",
@@ -53,9 +50,6 @@ export function extractUserPromptBlocks(messages: Context["messages"]): ContentB
 			}
 		}
 	}
-	debug(
-		`extractUserPromptBlocks: ${turn.length} msgs in turn, ${blocks.length} blocks, types=${blocks.map((b) => b.type).join(",")}`,
-	);
 	return hasImage ? blocks : null;
 }
 

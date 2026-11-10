@@ -6,15 +6,7 @@ import {
 	type Model,
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import {
-	ccChildEnv,
-	effortForReasoning,
-	errorMessage,
-	logServedContextWindow,
-	resultErrorText,
-	thinkingForReasoning,
-} from "./cc-child.js";
-import { debug, makeCliDebugOptions } from "./debug.js";
+import { ccChildEnv, effortForReasoning, errorMessage, resultErrorText, thinkingForReasoning } from "./cc-child.js";
 import { claudeCodeModelId } from "./models.js";
 import { newAssistantOutput } from "./query-state.js";
 import { currentCwd } from "./sessions.js";
@@ -55,9 +47,6 @@ async function runIsolatedSummary(
 		const cliModel = claudeCodeModelId(model);
 		const effort = effortForReasoning(model, options?.reasoning);
 		const thinking = thinkingForReasoning(model, options?.reasoning);
-		debug(
-			`compact summary: spawn model=${cliModel} registeredModel=${model.id} effort=${effort ?? "default"}${thinking ? " thinking=disabled" : ""} promptLen=${promptText.length}`,
-		);
 
 		sdkQuery = query({
 			prompt: promptText,
@@ -75,7 +64,6 @@ async function runIsolatedSummary(
 				maxTurns: 1,
 				...(effort ? { effort } : {}),
 				...(thinking ? { thinking } : {}),
-				...makeCliDebugOptions("compact-summary"),
 			},
 		});
 
@@ -87,13 +75,8 @@ async function runIsolatedSummary(
 		let assistantText = "";
 		let finalText = "";
 		let errorText: string | undefined;
-		let firstEventLogged = false;
 
 		for await (const message of sdkQuery) {
-			if (!firstEventLogged) {
-				debug(`compact summary: first event type=${message.type}`);
-				firstEventLogged = true;
-			}
 			if (wasAborted) break;
 
 			if (message.type === "assistant") {
@@ -101,7 +84,6 @@ async function runIsolatedSummary(
 					if (block.type === "text" && typeof block.text === "string") assistantText += block.text;
 				}
 			} else if (message.type === "result") {
-				logServedContextWindow("compact summary", message, model);
 				errorText = resultErrorText(message);
 				if (!errorText && message.subtype === "success") finalText = message.result || assistantText;
 			}
@@ -109,7 +91,6 @@ async function runIsolatedSummary(
 
 		if (wasAborted) {
 			const output = newAssistantOutput(model, "", "aborted", "Operation aborted");
-			debug("compact summary: aborted");
 			endStream(stream, { type: "error", reason: "aborted", error: output });
 			return;
 		}
@@ -117,16 +98,13 @@ async function runIsolatedSummary(
 		const text = finalText || assistantText;
 		if (errorText || !text.trim()) {
 			const msg = errorText ?? "Claude Code summary returned empty text";
-			debug(`compact summary: error ${msg}`);
 			endStream(stream, { type: "error", reason: "error", error: newAssistantOutput(model, "", "error", msg) });
 			return;
 		}
 
-		debug(`compact summary: done textLen=${text.length}`);
 		endStream(stream, { type: "done", reason: "stop", message: newAssistantOutput(model, text, "stop") });
 	} catch (err) {
 		const msg = errorMessage(err);
-		debug("runIsolatedSummary threw; pushing terminal error", err);
 		endStream(stream, { type: "error", reason: "error", error: newAssistantOutput(model, "", "error", msg) });
 	} finally {
 		options?.signal?.removeEventListener("abort", onAbort);

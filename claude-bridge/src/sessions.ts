@@ -2,7 +2,6 @@ import type { Context } from "@earendil-works/pi-ai";
 import { createSession, getSessionPath } from "cc-session-io";
 import { readFileSync, realpathSync, statSync } from "fs";
 import { collectCarriedAttachments } from "./attachments.js";
-import { DEBUG, debug } from "./debug.js";
 import { digestMessages } from "./message-digests.js";
 import { notify } from "./notify.js";
 import { activeQueryContexts } from "./query-state.js";
@@ -33,9 +32,7 @@ export function currentCwd(): string {
 export function sessionStateFor(piSessionId: string | null | undefined): SessionState | null {
 	if (piSessionId == null) return null;
 	if (!loadedSessionStates.has(piSessionId)) {
-		const stored = loadSessionState(piSessionId, (message) =>
-			debug("session_state_rejected", { piSessionId, message }),
-		);
+		const stored = loadSessionState(piSessionId);
 		loadedSessionStates.add(piSessionId);
 		if (stored) sharedSessions.set(piSessionId, stored);
 	}
@@ -56,7 +53,6 @@ export function inheritSessionState(parentFile: string, piSessionId: string): vo
 	const parent = sessionStateFor(header.id);
 	if (!parent) return;
 	setSessionStateFor(piSessionId, { ...parent, ...copyRecording(parent), dirtyTail: true });
-	debug(`session_start:fork: inherited ${parent.ccSessionId} from piSession=${header.id} ${sessionTag(piSessionId)}`);
 }
 
 export function setSessionStateFor(piSessionId: string, state: SessionState | null): void {
@@ -67,14 +63,9 @@ export function setSessionStateFor(piSessionId: string, state: SessionState | nu
 
 export const historyRewrittenBySession = new Set<string>();
 
-export function markRebuildForSession(piSession: string | null, event: string): void {
+export function markRebuildForSession(piSession: string | null): void {
 	const state = piSession != null ? sharedSessions.get(piSession) : undefined;
-	if (!state) {
-		debug(`${event}: history rewritten, no session to mark yet ${sessionTag(piSession)}`);
-	} else {
-		state.dirtyTail = true;
-		debug(`${event}: marking dirtyTail on session ${state.ccSessionId.slice(0, 8)} ${sessionTag(piSession)}`);
-	}
+	if (state) state.dirtyTail = true;
 	if (piSession) historyRewrittenBySession.add(piSession);
 	armStaleContexts();
 }
@@ -117,21 +108,9 @@ function prefixRecording(recorded: Recording, count: number): Recording {
 	};
 }
 
-function verifyWrittenSession(
-	jsonlPath: string,
-	expectedSessionId: string,
-	expectedRecordCount: number,
-	cwd: string,
-): void {
+function verifyWrittenSession(jsonlPath: string, expectedSessionId: string, expectedRecordCount: number): void {
 	const warnings = _verifyWrittenSession(jsonlPath, expectedSessionId, expectedRecordCount);
 	for (const msg of warnings) {
-		debug("session_verify_fail", {
-			msg,
-			jsonlPath,
-			cwd,
-			realpath: safeRealpath(cwd),
-			claudeConfigDir: process.env.CLAUDE_CONFIG_DIR ?? null,
-		});
 		notify(`claude-bridge: Claude Code session file issue: ${msg}`, "warning");
 	}
 }
@@ -144,26 +123,6 @@ function safeRealpath(p: string): string {
 	}
 }
 
-function debugSessionPaths(label: string, cwd: string, jsonlPath: string): void {
-	if (!DEBUG) return;
-	const realCwd = safeRealpath(cwd);
-	let fileSize: number | null = null;
-	let fileExists = false;
-	try {
-		const st = statSync(jsonlPath);
-		fileExists = true;
-		fileSize = st.size;
-	} catch {}
-	debug(`${label}: cwd=${cwd}`);
-	if (realCwd !== cwd)
-		debug(`${label}: realpath(cwd)=${realCwd} (DIFFERS — symlink-resolved path is what CC SDK uses)`);
-	debug(`${label}: jsonlPath=${jsonlPath}`);
-	debug(`${label}: fileExists=${fileExists}${fileSize != null ? ` size=${fileSize}` : ""}`);
-	debug(
-		`${label}: env.CLAUDE_CONFIG_DIR=${process.env.CLAUDE_CONFIG_DIR ?? "(unset)"} HOME=${process.env.HOME ?? "(unset)"}`,
-	);
-}
-
 export function syncSharedSession(
 	messages: Context["messages"],
 	cwd: string,
@@ -173,20 +132,16 @@ export function syncSharedSession(
 	promptDigest: string,
 ): SyncResult {
 	let state = sessionStateFor(piSessionId);
-	const before = state;
 	const history = nonSystemMessages(messages);
 	const priors = history.slice(0, turnStart(history));
 	const compared = state
 		? compareHistory(digestMessages(priors), state)
 		: { commonPrefix: 0, cutCount: 0, equal: false };
-	let missingFile = false;
 	if (state) {
 		try {
 			statSync(getSessionPath(state.ccSessionId, state.cwd, process.env.CLAUDE_CONFIG_DIR));
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-			missingFile = true;
-			debug(`sync: missing transcript ${state.ccSessionId} in recorded cwd=${state.cwd}; importing pi history`);
 			setSessionStateFor(piSessionId!, null);
 			deleteSessionState(piSessionId!);
 			state = null;
@@ -194,7 +149,6 @@ export function syncSharedSession(
 	}
 	const cwdChanged = Boolean(state && safeRealpath(state.cwd) !== safeRealpath(cwd));
 	const promptChanged = Boolean(state && state.promptDigest !== promptDigest);
-	if (promptChanged) debug(`sync: system prompt append changed; importing pi history ${sessionTag(piSessionId)}`);
 	const row =
 		piSessionId == null
 			? 0
@@ -213,31 +167,7 @@ export function syncSharedSession(
 								: compared.cutCount === priors.length
 									? 6
 									: 7;
-	const reason =
-		piSessionId == null
-			? "unattributed-history"
-			: missingFile
-				? "missing-transcript"
-				: !state
-					? "no-state"
-					: state.model !== modelId
-						? "model-changed"
-						: promptChanged
-							? "prompt-changed"
-							: cwdChanged
-								? "cwd-changed"
-								: row === 4
-									? "equal-digests"
-									: state.dirtyTail && compared.equal
-										? "dirty-tail"
-										: "history-difference";
-	const decision = (path: string, after: string) => {
-		debug(
-			`syncResult: path=${path} sessionId=${after} from=${before?.ccSessionId ?? "none"} priors=${priors.length} commonPrefix=${compared.commonPrefix} cutCount=${compared.cutCount} row=${row} reason=${reason} ${sessionTag(piSessionId)}`,
-		);
-	};
 	if (row === 4) {
-		decision("reuse", state!.ccSessionId);
 		return {
 			sessionId: state!.ccSessionId,
 			targetSessionId: state!.ccSessionId,
@@ -255,7 +185,6 @@ export function syncSharedSession(
 		const cut = resolveRecordingCut(transcript, state!, compared.cutCount);
 		recorded = prefixRecording(state!, compared.cutCount);
 		if (row === 6) {
-			decision("fork", targetSessionId);
 			return { sessionId: state!.ccSessionId, targetSessionId, created: true, forkAt: cut.uuid, recorded, state };
 		}
 		const rest = priors.slice(compared.cutCount);
@@ -285,9 +214,7 @@ export function syncSharedSession(
 		session.save();
 		records = session.records.length;
 	}
-	if (records) verifyWrittenSession(session.jsonlPath, targetSessionId, records, cwd);
-	decision(row === 7 ? "prefix-write" : records ? "rebuild" : "clean-start", targetSessionId);
-	debugSessionPaths(targetSessionId.slice(0, 8), cwd, session.jsonlPath);
+	if (records) verifyWrittenSession(session.jsonlPath, targetSessionId, records);
 	return { sessionId: records ? targetSessionId : null, targetSessionId, created: true, recorded, state };
 }
 

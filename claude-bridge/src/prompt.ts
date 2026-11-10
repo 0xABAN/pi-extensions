@@ -1,5 +1,4 @@
 import { contentText, type SystemMessage } from "@earendil-works/pi-ai";
-import { debugLogPath } from "./debug.js";
 import { MCP_TOOL_PREFIX } from "./mcp-server.js";
 
 const BUILT_IN_SECTIONS = new Set([
@@ -64,7 +63,7 @@ function assertSendable(parts: PromptPart[]): void {
 			"  pi's harness, or the phrase pair its subscription gate rejects, as a third-party app: it fails",
 			"  with 400 or is billed as extra usage.",
 			...findings.map((finding) => `  Found: ${finding}.`),
-			`  Reword or remove that text. CLAUDE_BRIDGE_DEBUG=1 writes the full prompt to ${debugLogPath()}.`,
+			"  Reword or remove that text.",
 		].join("\n"),
 	);
 }

@@ -19,12 +19,7 @@ function statePath(piSessionId: string): string {
 	return join(sessionsDir(), stateFileName(piSessionId));
 }
 
-function reject(onReject: (message: string) => void, reason: string): null {
-	onReject(`Rejected persisted Claude session state: ${reason}`);
-	return null;
-}
-
-export function loadSessionState(piSessionId: string, onReject: (message: string) => void): SessionState | null {
+export function loadSessionState(piSessionId: string): SessionState | null {
 	let text: string;
 	try {
 		text = readFileSync(statePath(piSessionId), "utf8");
@@ -37,23 +32,22 @@ export function loadSessionState(piSessionId: string, onReject: (message: string
 	try {
 		value = JSON.parse(text);
 	} catch (error) {
-		if (error instanceof SyntaxError) return reject(onReject, "invalid JSON");
+		if (error instanceof SyntaxError) return null;
 		throw error;
 	}
-	if (value === null || typeof value !== "object" || Array.isArray(value))
-		return reject(onReject, "expected an object");
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
 	const stored = value as Record<string, unknown>;
-	if (!("version" in stored)) return reject(onReject, "missing version");
-	if (stored.version !== FORMAT_VERSION) return reject(onReject, `unsupported version; expected ${FORMAT_VERSION}`);
+	if (!("version" in stored)) return null;
+	if (stored.version !== FORMAT_VERSION) return null;
 	for (const key of ["ccSessionId", "cwd", "model", "promptDigest", "digests", "uuids", "cuttable"] as const) {
-		if (!(key in stored)) return reject(onReject, `missing ${key}`);
+		if (!(key in stored)) return null;
 	}
 	for (const key of ["ccSessionId", "cwd", "model", "promptDigest"] as const) {
-		if (typeof stored[key] !== "string") return reject(onReject, `${key} must be a string`);
-		if (stored[key] === "") return reject(onReject, `${key} must not be empty`);
+		if (typeof stored[key] !== "string") return null;
+		if (stored[key] === "") return null;
 	}
 	if (!Array.isArray(stored.digests) || !Array.isArray(stored.uuids) || !Array.isArray(stored.cuttable)) {
-		return reject(onReject, "digests, uuids, and cuttable must be arrays");
+		return null;
 	}
 	try {
 		validateRecording({
@@ -62,7 +56,7 @@ export function loadSessionState(piSessionId: string, onReject: (message: string
 			cuttable: stored.cuttable as boolean[],
 		});
 	} catch (error) {
-		if (error instanceof InvalidRecordingError) return reject(onReject, error.message);
+		if (error instanceof InvalidRecordingError) return null;
 		throw error;
 	}
 	return {

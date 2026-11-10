@@ -21,15 +21,12 @@ export default function claudeBridge(pi: ExtensionAPI) {
 		await closeSessionQueries(ctx.sessionManager.getSessionId());
 	});
 
-	pi.on("session_compact", (event, ctx) => {
-		markRebuildForSession(
-			ctx.sessionManager.getSessionId(),
-			`session_compact:${event.reason}:willRetry=${event.willRetry}`,
-		);
+	pi.on("session_compact", (_event, ctx) => {
+		markRebuildForSession(ctx.sessionManager.getSessionId());
 	});
 
 	pi.on("session_tree", (_event, ctx) => {
-		markRebuildForSession(ctx.sessionManager.getSessionId(), "session_tree");
+		markRebuildForSession(ctx.sessionManager.getSessionId());
 	});
 
 	pi.on("tool_call", (event, ctx) => {

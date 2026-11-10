@@ -12,8 +12,6 @@ Claude Code loads only user settings. Project `.claude/settings*.json`, `CLAUDE.
 
 The bridge resumes the Claude Code session while Pi's history matches what it recorded, and rebuilds it after compaction, tree navigation, edits, model changes or changed instructions. Session pointers live in `claude-bridge/sessions/` in Pi's agent folder.
 
-`CLAUDE_BRIDGE_DEBUG=1` logs provider calls and sync decisions to `claude-bridge.log` in the agent folder, and each Claude Code process's own log to `cc-cli-logs/`.
-
 An exported `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` redirects Claude Code, and every turn fails with that gateway's auth error.
 
 Based on [pi-claude-bridge](https://github.com/elidickinson/pi-claude-bridge) · [MIT](LICENSE)
